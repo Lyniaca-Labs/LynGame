@@ -1,0 +1,69 @@
+- nodejs backend for saving and stuff, live server / port local frontend
+- bat file to run it
+- ability to save from URL online like (SaveUrl: localhost:7777/save) or another
+- Scene[] -> Entities[] -> Children[]
+- Z index layering on different canvases
+- documentation
+- graphics framework first then game framework on top of that, then game engine gui
+- good design pattern
+- custom save file
+- physics
+- components
+- events
+- styling
+- debug / performance metrics
+- resuable assets
+- spritesheets
+- tilemap
+- "textures" -> premade images clipped as sprites at runtime
+- code blocks -> compiled into source code
+- everything is evaled in the engine
+- on compile, everything is just added to an index.html import source map, comments removed
+- texture blocks (pixelation, noise, color mapping) -> turned into textures
+- inverse kinematics
+- repeating shape texture
+- global tic / frame system with dt
+- prefabs / premade components (rect, circle)
+- typescript parser
+- following / math utils
+- audio and pixel art / animation maker
+- extensions
+- particle system
+- collisions
+- pathfinding
+- a bunch of premade icon pack
+- visual scripting system
+- gui helper and system
+- z level y offset
+- custom save file (then used and compiled)
+- good error handling and debug mode
+- loading screen with default loader for the engine (pixel art logo)
+- class MyPrefab extends lg.entity. (lg.entity is an alias container of the base graphics framework object)
+
+class Entity {
+	this.x
+	this.y
+	this.otherdrawingdata
+}
+
+class LgEntity extends Entity {
+	this.data = "all passed data"
+	// so this is simply just skin and game data built on top of a graphics entity but still has separation of data
+}
+
+class MyPrefab extends LgEntity {
+	// user made prefab thats compiled that extends the game entity
+	super(mydata)
+}
+
+// OR
+
+class MyPrefab {
+	constructor() {
+		this.gameData = new LgEntity
+	}	
+}
+
+
+// NOTE: will need to have a special prefix for all internal stuff like _x and _y so it doesn't desync.
+// all public ones like x and y can not have an underscore

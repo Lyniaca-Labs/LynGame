@@ -1,0 +1,219 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: monospace;
+  background: #1a1a1a;
+  color: #eee;
+}
+
+body {
+  display: flex;
+}
+
+#sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  padding: 12px;
+  background: #222;
+  border-right: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#sidebar h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #0f0;
+}
+
+#project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.project-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #2a2a2a;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+
+.project-row span {
+  cursor: pointer;
+}
+
+.project-row span:hover {
+  color: #0f0;
+}
+
+.project-row button {
+  background: #400;
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+#new-project-form {
+  display: flex;
+  gap: 4px;
+}
+
+#new-project-form input {
+  flex: 1;
+  background: #111;
+  border: 1px solid #333;
+  color: #eee;
+  padding: 4px;
+}
+
+#status {
+  font-size: 11px;
+  color: #888;
+  margin-top: auto;
+}
+
+#game-frame {
+  flex: 1;
+  border: none;
+  height: 100vh;
+}
+
+#editor-panel.hidden,
+#editor-toolbar.hidden,
+#code-editor.hidden {
+  display: none;
+}
+
+#editor-panel {
+  margin-top: 8px;
+  border-top: 1px solid #333;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#folder-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+#folder-tabs .tab {
+  flex: 1;
+  background: #2a2a2a;
+  color: #ccc;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+#folder-tabs .tab.active {
+  background: #0f0;
+  color: #000;
+}
+
+#file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.file-row {
+  display: flex;
+  justify-content: space-between;
+  background: #2a2a2a;
+  padding: 4px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.file-row.active {
+  outline: 1px solid #0f0;
+}
+
+.file-row span {
+  cursor: pointer;
+}
+
+.file-row button {
+  background: #400;
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+#new-file-form {
+  display: flex;
+  gap: 4px;
+}
+
+#new-file-form input {
+  flex: 1;
+  background: #111;
+  border: 1px solid #333;
+  color: #eee;
+  padding: 4px;
+  font-size: 12px;
+}
+
+#main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+#editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #222;
+  border-bottom: 1px solid #333;
+  font-size: 12px;
+}
+
+#editor-toolbar button {
+  background: #0f0;
+  color: #000;
+  border: none;
+  padding: 3px 10px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+#run-btn {
+  margin-left: auto;
+  background: #06f !important;
+  color: #fff !important;
+}
+
+#code-editor {
+  flex: 0 0 40%;
+  background: #111;
+  color: #0f0;
+  border: none;
+  outline: none;
+  font-family: monospace;
+  font-size: 13px;
+  padding: 10px;
+  resize: none;
+}
+
+#game-frame {
+  flex: 1;
+  border: none;
+}
