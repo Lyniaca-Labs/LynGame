@@ -18,10 +18,10 @@ export class Gravity extends Component {
   }
 
   onTick(entity, engine, dt) {
-    if (engine.time > 3000) {
+    if (engine.time > 5000) {
       engine.removeEntity(entity.id);
     }
-    
+
     const transform = entity.getComponent("Transform");
     if (!transform || this.grounded) return;
 

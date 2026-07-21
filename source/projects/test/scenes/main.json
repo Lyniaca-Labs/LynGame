@@ -14,13 +14,26 @@
           "height": 100,
           "color": "#00ff00"
         },
-        "Gravity": {
-          "force": 500,
-          "velocityY": 0,
-          "grounded": false
+        "Movement": {
+          "maxSpeed": 800,
+          "acceleration": 800,
+          "friction": 800,
+          "gravity": 0,
+          "gravityDirection": {
+            "x": 0,
+            "y": 1
+          },
+          "drag": 0,
+          "bounce": 0.3,
+          "mass": 1,
+          "velocity": {
+            "x": 0,
+            "y": 0
+          }
         }
       },
       "scripts": [
+        "DoorScript",
         "LogScript",
         "InputScript"
       ]

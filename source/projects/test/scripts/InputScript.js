@@ -1,17 +1,17 @@
-import { Transform } from "@components/Transform.js";
-
-const keys = {};
-window.addEventListener("keydown", (e) => (keys[e.key] = true));
-window.addEventListener("keyup", (e) => (keys[e.key] = false));
-
-const SPEED = 200; // px/sec
-
 export function InputScript(entity, engine, dt) {
-  const transform = entity.getComponent(Transform);
-  if (!transform) return;
+  const movement = entity.getComponent("Movement");
+  if (!movement) return;
 
-  if (keys["ArrowLeft"]) transform.x -= SPEED * dt;
-  if (keys["ArrowRight"]) transform.x += SPEED * dt;
-  if (keys["ArrowUp"]) transform.y -= SPEED * dt;
-  if (keys["ArrowDown"]) transform.y += SPEED * dt;
+  let dx = 0, dy = 0;
+  if (engine.input.isKeyDown("KeyW")) dy -= 1;
+  if (engine.input.isKeyDown("KeyS")) dy += 1;
+  if (engine.input.isKeyDown("KeyA")) dx -= 1;
+  if (engine.input.isKeyDown("KeyD")) dx += 1;
+
+  const len = Math.hypot(dx, dy);
+  if (len > 0) {
+    movement.setVelocity((dx / len) * movement.maxSpeed, (dy / len) * movement.maxSpeed);
+  } else {
+    movement.stop();
+  }
 }

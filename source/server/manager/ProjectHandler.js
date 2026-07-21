@@ -64,57 +64,61 @@ export default class ProjectHandler {
   static buildMain(projectName) {
     const projectConfigPath = ProjectHandler.getProjectFile(projectName);
     const config = JSON.parse(fs.readFileSync(projectConfigPath, "utf-8"));
-
-    if (!config.startScene) {
-      throw new Error(`project.lg for "${projectName}" has no startScene set`);
-    }
-
-    const scene = ProjectHandler.getScene(projectName, config.startScene);
     const manifest = ProjectHandler.scanComponents(projectName);
 
-    const usedComponents = new Set();
-    const usedScripts = new Set();
+    const scenesDir = path.join(__dirname, "../../projects", projectName, "scenes");
+    const sceneFiles = fs.readdirSync(scenesDir).filter((f) => f.endsWith(".json"));
 
-    for (const entity of scene.entities || []) {
-      for (const compName of Object.keys(entity.components || {})) {
-        usedComponents.add(compName);
+    const allComponents = new Set();
+    const allScripts = new Set();
+    const sceneFunctions = [];
+
+    for (const file of sceneFiles) {
+      const sceneName = path.basename(file, ".json");
+      const scene = JSON.parse(fs.readFileSync(path.join(scenesDir, file), "utf-8"));
+
+      for (const entity of scene.entities || []) {
+        for (const compName of Object.keys(entity.components || {})) allComponents.add(compName);
+        for (const scriptName of entity.scripts || []) allScripts.add(scriptName);
       }
-      for (const scriptName of entity.scripts || []) {
-        usedScripts.add(scriptName);
-      }
+
+      const entityCode = (scene.entities || []).map((entity) => {
+        const compLines = Object.entries(entity.components || {})
+          .map(([name, data]) => `    entity_${entity.id}.addComponent(${name}, ${JSON.stringify(data)});`)
+          .join("\n");
+        const scriptLines = (entity.scripts || [])
+          .map((name) => `    entity_${entity.id}.attachScript(${name});`)
+          .join("\n");
+        return `    const entity_${entity.id} = engine.createEntity("${entity.id}");\n${compLines}\n${scriptLines}`;
+      }).join("\n\n");
+
+      sceneFunctions.push(`function scene_${sceneName}(engine) {\n${entityCode}\n}`);
     }
 
-    const componentImports = [...usedComponents].map((name) => {
+    const componentImports = [...allComponents].map((name) => {
       const entry = manifest[name];
       if (!entry) throw new Error(`Component "${name}" not found in engine or project`);
-      const importPath = entry.source === "engine"
-        ? `../engine/components/${entry.filename}`
-        : `./components/${entry.filename}`;
+      const importPath = entry.source === "engine" ? `../engine/components/${entry.filename}` : `./components/${entry.filename}`;
       return `import { ${name} } from "${importPath}";`;
     }).join("\n");
 
-    const scriptImports = [...usedScripts]
+    const scriptImports = [...allScripts]
       .map((name) => `import { ${name} } from "./scripts/${name}.js";`)
       .join("\n");
 
-    const entityCode = (scene.entities || []).map((entity) => {
-      const compLines = Object.entries(entity.components || {})
-        .map(([name, data]) => `  entity_${entity.id}.addComponent(${name}, ${JSON.stringify(data)});`)
-        .join("\n");
-
-      const scriptLines = (entity.scripts || [])
-        .map((name) => `  entity_${entity.id}.attachScript(${name});`)
-        .join("\n");
-
-      return `  const entity_${entity.id} = engine.createEntity("${entity.id}");\n${compLines}\n${scriptLines}`;
-    }).join("\n\n");
+    const sceneRegistrations = sceneFiles
+      .map((f) => path.basename(f, ".json"))
+      .map((name) => `  engine.registerScene("${name}", scene_${name});`)
+      .join("\n");
 
     return `${componentImports}
 ${scriptImports}
 
-export function init(engine) {
-${entityCode}
+${sceneFunctions.join("\n\n")}
 
+export function init(engine) {
+${sceneRegistrations}
+  engine.loadScene("${config.startScene}");
   engine.start();
 }
 `;

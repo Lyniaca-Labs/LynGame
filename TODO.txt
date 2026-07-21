@@ -1,4 +1,3 @@
-1. Have globally accessable scene switches and script calls
 2. Better GUI -> maybe react switch
 3. More components
 4. Prefabs (basically just entity: {prefab: "name"}) then the prefab acts as a base class and all stuff after just overrides
@@ -6,3 +5,6 @@
 6. Sprite renderer and asset handler
 7. Try to connect VSCode to the engine for editing scripts and files
 8. Extensions -> sprite creator, texture creator, tilemap creator, audio creator
+
+DONE: 
+1. Have globally accessable scene switches and script calls

@@ -7,4 +7,3 @@ export class Component {
   onDestroy(entity, engine) { }
 }
 
-export const DEFAULT_COMPONENTS = {};

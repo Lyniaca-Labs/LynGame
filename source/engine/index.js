@@ -1,6 +1,7 @@
 import { Layer } from "./types/Layer.js";
 import { Entity } from "./types/Entity.js";
-import { DEFAULT_COMPONENTS } from "./types/Component.js";
+import { Input } from "./modules/Input.js";
+import { DEFAULT_COMPONENTS } from "./types/DefaultComponents.js";
 import { Transform } from "./components/Transform.js";
 import { SpriteRenderer } from "./components/SpriteRenderer.js";
 
@@ -10,9 +11,13 @@ export class GameEngine {
     this.layers = [];
     this.entities = [];
     this.components = {};
+    this.scenes = {};
+    this.currentScene = null;
     this.running = false;
 
     this.startTime = Date.now();
+
+    this.input = new Input(gameContainer);
 
     window.addEventListener("resize", this._handleResize.bind(this));
 
@@ -28,6 +33,28 @@ export class GameEngine {
 
   get time() {
     return Date.now() - this.startTime;
+  }
+
+  // --- scenes ---
+
+  loadScene(name) {
+    if (!this.scenes || !this.scenes[name]) {
+      console.error(`Scene "${name}" not found`);
+      return;
+    }
+
+    // tear down current entities properly (fires onDestroy)
+    for (const entity of [...this.entities]) {
+      this.removeEntity(entity.id);
+    }
+
+    this.currentScene = name;
+    this.scenes[name](this);
+  }
+
+  registerScene(name, initFn) {
+    if (!this.scenes) this.scenes = {};
+    this.scenes[name] = initFn;
   }
 
   // --- layers ---
@@ -66,6 +93,7 @@ export class GameEngine {
 
   createEntity(id) {
     const entity = new Entity(id);
+    entity.engine = this;
     this.entities.push(entity);
     return entity;
   }
@@ -80,14 +108,6 @@ export class GameEngine {
   getEntity(id) {
     return this.entities.find((e) => e.id === id);
   }
-
-  createEntity(id) {
-    const entity = new Entity(id);
-    entity.engine = this;
-    this.entities.push(entity);
-    return entity;
-  }
-
 
   // --- lifecycle ---
 
@@ -111,6 +131,9 @@ export class GameEngine {
     this._update(dt);
     this._render();
 
+    // clear one-frame input state — must run AFTER update+render read it
+    this.input._endFrame();
+
     requestAnimationFrame((t) => this._loop(t));
   }
 
@@ -132,15 +155,11 @@ export class GameEngine {
 
     for (const entity of this.entities) {
       const transform = entity.getComponent(Transform);
-      const sprite = entity.getComponent(SpriteRenderer);
-      if (!transform || !sprite) continue;
+      if (!transform) continue;
 
-      gameLayer.ctx.save();
-      gameLayer.ctx.translate(transform.x, transform.y);
-      gameLayer.ctx.rotate((transform.rotation * Math.PI) / 180);
-      gameLayer.ctx.fillStyle = sprite.color;
-      gameLayer.ctx.fillRect(0, 0, sprite.width, sprite.height);
-      gameLayer.ctx.restore();
+      for (const component of entity.components.values()) {
+        component.render?.(gameLayer.ctx, transform);
+      }
     }
   }
 }
