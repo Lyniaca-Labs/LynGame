@@ -56,6 +56,13 @@ export class Movement extends Component {
     const transform = entity.getComponent(Transform);
     if (!transform) return;
 
+    // gravity is a continuous force, not a one-off impulse — route it through
+    // _force so it's integrated on the same branch that skips friction
+    if (this.gravity !== 0) {
+      this._force.x += this.gravityDirection.x * this.gravity * this.mass;
+      this._force.y += this.gravityDirection.y * this.gravity * this.mass;
+    }
+
     if (this._force.x !== 0 || this._force.y !== 0) {
       this.velocity.x += (this._force.x / this.mass) * dt;
       this.velocity.y += (this._force.y / this.mass) * dt;
@@ -63,11 +70,6 @@ export class Movement extends Component {
       this._force.y = 0;
     } else {
       this._applyFriction(dt);
-    }
-
-    if (this.gravity !== 0) {
-      this.velocity.x += this.gravityDirection.x * this.gravity * dt;
-      this.velocity.y += this.gravityDirection.y * this.gravity * dt;
     }
 
     if (this.drag > 0) {

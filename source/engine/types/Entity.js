@@ -4,7 +4,12 @@ export class Entity {
     this.components = new Map();
     this.scripts = [];
     this.engine = null;
+
+    this.state = {}; // for storing arbitrary state, e.g. for scripts to communicate with each other
+
+    this.prefabName = null; // set by PrefabRegistry when spawned from a prefab
   }
+
 
   addComponent(ComponentClass, data = {}) {
     const instance = new ComponentClass(data);
@@ -40,11 +45,14 @@ export class Entity {
     return this;
   }
 
-  // Called by GameEngine.removeEntity — runs onDestroy for every component
   destroy(engine) {
     for (const instance of this.components.values()) {
       instance.onDestroy?.(this, engine);
     }
+    // for (const child of Object.values(this.children)) {
+    //   engine.removeEntity(child.id);
+    // }
+    // this.parent?.removeChild(this);
   }
 
   _resolveClass(componentRef) {

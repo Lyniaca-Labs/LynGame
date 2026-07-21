@@ -14,7 +14,6 @@ export default class ProjectHandler {
     return projectPath;
   }
 
-  // ProjectHandler.js
   static scanComponents(projectName) {
     const engineComponentsDir = path.join(__dirname, "../../engine/components");
     const projectComponentsDir = path.join(__dirname, "../../projects", projectName, "components");
@@ -52,13 +51,53 @@ export default class ProjectHandler {
     return JSON.parse(fs.readFileSync(scenePath, "utf-8"));
   }
 
-  // Decide whether a component ships with the engine or lives in the project
   static resolveComponentPath(componentName) {
     const engineFile = path.join(engineComponentsDir, `${componentName}.js`);
     if (fs.existsSync(engineFile)) {
       return `../engine/components/${componentName}.js`;
     }
     return `./components/${componentName}.js`;
+  }
+
+  static scanAssets(projectName) {
+    const assetsDir = path.join(__dirname, "../../projects", projectName, "assets");
+    const manifest = {}; // key -> { relativePath, type }
+
+    if (!fs.existsSync(assetsDir)) return manifest;
+
+    const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
+    const AUDIO_EXT = new Set([".mp3", ".wav", ".ogg", ".m4a"]);
+
+    function walk(dir, relPrefix) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+
+        if (entry.isDirectory()) {
+          walk(fullPath, relPrefix ? `${relPrefix}/${entry.name}` : entry.name);
+          continue;
+        }
+
+        const ext = path.extname(entry.name).toLowerCase();
+        const nameNoExt = entry.name.slice(0, -ext.length);
+        const relPath = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
+        const key = relPrefix ? `${relPrefix}/${nameNoExt}` : nameNoExt;
+
+        if (manifest[key]) {
+          throw new Error(
+            `Duplicate asset key "${key}": "${manifest[key].relativePath}" and "${relPath}" both resolve to it`
+          );
+        }
+
+        let type = "other";
+        if (IMAGE_EXT.has(ext)) type = "image";
+        else if (AUDIO_EXT.has(ext)) type = "audio";
+
+        manifest[key] = { relativePath: relPath, type };
+      }
+    }
+
+    walk(assetsDir, "");
+    return manifest;
   }
 
   static buildMain(projectName) {
@@ -69,30 +108,78 @@ export default class ProjectHandler {
     const scenesDir = path.join(__dirname, "../../projects", projectName, "scenes");
     const sceneFiles = fs.readdirSync(scenesDir).filter((f) => f.endsWith(".json"));
 
+    const prefabsDir = path.join(__dirname, "../../projects", projectName, "prefabs");
+    const prefabFiles = fs.existsSync(prefabsDir)
+      ? fs.readdirSync(prefabsDir).filter((f) => f.endsWith(".json"))
+      : [];
+
     const allComponents = new Set();
     const allScripts = new Set();
-    const sceneFunctions = [];
 
+    // Emits creation code for one plain (non-prefab-referencing) entity node.
+    function renderEntity(node, varName, idExpr, indent = "    ") {
+      for (const compName of Object.keys(node.components || {})) allComponents.add(compName);
+      for (const scriptName of node.scripts || []) allScripts.add(scriptName);
+
+      const lines = [`${indent}const ${varName} = engine.createEntity(${idExpr});`];
+      for (const [compName, data] of Object.entries(node.components || {})) {
+        lines.push(`${indent}${varName}.addComponent(${compName}, ${JSON.stringify(data)});`);
+      }
+      for (const scriptName of node.scripts || []) {
+        lines.push(`${indent}${varName}.attachScript(${scriptName});`);
+      }
+      return lines;
+    }
+
+    // --- scenes ---
+    const sceneFunctions = [];
     for (const file of sceneFiles) {
       const sceneName = path.basename(file, ".json");
       const scene = JSON.parse(fs.readFileSync(path.join(scenesDir, file), "utf-8"));
 
+      const bodyLines = [];
       for (const entity of scene.entities || []) {
-        for (const compName of Object.keys(entity.components || {})) allComponents.add(compName);
-        for (const scriptName of entity.scripts || []) allScripts.add(scriptName);
+        if (entity.prefab) {
+          const varName = `entity_${entity.id}`;
+          bodyLines.push(
+            `    const ${varName} = engine.prefabs.instantiate("${entity.prefab}", ${JSON.stringify(entity.overrides || {})}, "${entity.id}");`
+          );
+        } else {
+          bodyLines.push(...renderEntity(entity, `entity_${entity.id}`, `"${entity.id}"`));
+        }
       }
 
-      const entityCode = (scene.entities || []).map((entity) => {
-        const compLines = Object.entries(entity.components || {})
-          .map(([name, data]) => `    entity_${entity.id}.addComponent(${name}, ${JSON.stringify(data)});`)
-          .join("\n");
-        const scriptLines = (entity.scripts || [])
-          .map((name) => `    entity_${entity.id}.attachScript(${name});`)
-          .join("\n");
-        return `    const entity_${entity.id} = engine.createEntity("${entity.id}");\n${compLines}\n${scriptLines}`;
-      }).join("\n\n");
+      sceneFunctions.push(`function scene_${sceneName}(engine) {\n${bodyLines.join("\n")}\n}`);
+    }
 
-      sceneFunctions.push(`function scene_${sceneName}(engine) {\n${entityCode}\n}`);
+    // --- prefabs ---
+    const prefabFunctions = [];
+    const prefabRegistrations = [];
+    for (const file of prefabFiles) {
+      const prefabName = path.basename(file, ".json");
+      const prefab = JSON.parse(fs.readFileSync(path.join(prefabsDir, file), "utf-8"));
+
+      for (const compName of Object.keys(prefab.components || {})) allComponents.add(compName);
+      for (const scriptName of prefab.scripts || []) allScripts.add(scriptName);
+
+      const rootLines = [
+        `  const entity = engine.createEntity(id ?? engine._generateId("${prefabName}"));`,
+        `  entity.prefabName = "${prefabName}";`,
+      ];
+      for (const [compName, data] of Object.entries(prefab.components || {})) {
+        rootLines.push(
+          `  entity.addComponent(${compName}, { ...${JSON.stringify(data)}, ...(overrides.${compName} || {}) });`
+        );
+      }
+      for (const scriptName of prefab.scripts || []) {
+        rootLines.push(`  entity.attachScript(${scriptName});`);
+      }
+      rootLines.push(`  return entity;`);
+
+      prefabFunctions.push(
+        `function prefab_${prefabName}(engine, overrides = {}, id = null) {\n${rootLines.join("\n")}\n}`
+      );
+      prefabRegistrations.push(`  engine.prefabs.register("${prefabName}", prefab_${prefabName});`);
     }
 
     const componentImports = [...allComponents].map((name) => {
@@ -111,12 +198,21 @@ export default class ProjectHandler {
       .map((name) => `  engine.registerScene("${name}", scene_${name});`)
       .join("\n");
 
+
+    const assetManifest = ProjectHandler.scanAssets(projectName);
+
     return `${componentImports}
+
+
 ${scriptImports}
+
+${prefabFunctions.join("\n\n")}
 
 ${sceneFunctions.join("\n\n")}
 
-export function init(engine) {
+export async function init(engine) {
+  await engine.assets.load(${JSON.stringify(assetManifest)}, "./assets");
+${prefabRegistrations.join("\n")}
 ${sceneRegistrations}
   engine.loadScene("${config.startScene}");
   engine.start();
@@ -128,7 +224,7 @@ ${sceneRegistrations}
     return JSON.stringify({
       name: projectName,
       startScene: "main",
-      assets: [], // {key: "assetName", path: "path/to/asset.png"}
+      assets: [],
     }, null, 2);
   }
 }

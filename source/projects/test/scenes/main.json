@@ -18,7 +18,7 @@
           "maxSpeed": 800,
           "acceleration": 800,
           "friction": 800,
-          "gravity": 0,
+          "gravity": 980,
           "gravityDirection": {
             "x": 0,
             "y": 1
@@ -36,6 +36,23 @@
         "DoorScript",
         "LogScript",
         "InputScript"
+      ]
+    },
+    {
+      "id": "enemy1",
+      "prefab": "Enemy",
+      "overrides": {
+        "Transform": {
+          "x": 200,
+          "y": 150
+        }
+      }
+    },
+    {
+      "id": "spawner",
+      "components": {},
+      "scripts": [
+        "spawnEnemies"
       ]
     }
   ]

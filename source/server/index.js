@@ -35,7 +35,7 @@ app.post("/api/projects/:project", (req, res) => {
     return res.status(400).json({ success: false, error: "Project already exists" });
   }
 
-  for (const folder of ["assets", "components", "scripts", "scenes"]) {
+  for (const folder of ["assets", "components", "scripts", "scenes", "prefabs"]) {
     fs.mkdirSync(path.join(dir, folder), { recursive: true });
   }
 

@@ -1,12 +1,15 @@
 import { Layer } from "./types/Layer.js";
 import { Entity } from "./types/Entity.js";
 import { Input } from "./modules/Input.js";
+import { PerformanceMonitor } from "./modules/PerformanceMonitor.js";
 import { DEFAULT_COMPONENTS } from "./types/DefaultComponents.js";
 import { Transform } from "./components/Transform.js";
 import { SpriteRenderer } from "./components/SpriteRenderer.js";
+import { PrefabRegistry } from "./modules/PrefabRegistry.js";
+import AssetLoader from "./modules/AssetLoader.js";
 
 export class GameEngine {
-  constructor(gameContainer) {
+  constructor(gameContainer, options = {}) {
     this.gameContainer = gameContainer;
     this.layers = [];
     this.entities = [];
@@ -14,10 +17,15 @@ export class GameEngine {
     this.scenes = {};
     this.currentScene = null;
     this.running = false;
+    this.state = {}; // globally accessible state
+
+    this.prefabs = new PrefabRegistry(this);
+    this.assets = new AssetLoader();
 
     this.startTime = Date.now();
 
     this.input = new Input(gameContainer);
+    this.perf = new PerformanceMonitor(this, options.perf);
 
     window.addEventListener("resize", this._handleResize.bind(this));
 
@@ -26,7 +34,7 @@ export class GameEngine {
     }
 
     // default layer every game gets out of the box
-    this.newLayer("game", 0);
+    this.newLayer("main", 0);
 
     this._handleResize();
   }
@@ -91,11 +99,23 @@ export class GameEngine {
 
   // --- entities ---
 
+
   createEntity(id) {
-    const entity = new Entity(id);
+    const finalId = id ?? this._generateId("entity");
+    if (this.getEntity(finalId)) {
+      console.error(`Entity id "${finalId}" already exists`);
+      return null;
+    }
+    const entity = new Entity(finalId);
     entity.engine = this;
     this.entities.push(entity);
     return entity;
+  }
+
+  _generateId(prefix) {
+    this._idCounters ??= {};
+    this._idCounters[prefix] = (this._idCounters[prefix] ?? 0) + 1;
+    return `${prefix}_${this._idCounters[prefix]}`;
   }
 
   removeEntity(id) {
@@ -125,11 +145,18 @@ export class GameEngine {
   _loop(time) {
     if (!this.running) return;
 
-    const dt = (time - this._lastTime) / 1000;
+    const dt = Math.min((time - this._lastTime) / 1000, 1 / 30);
     this._lastTime = time;
 
+    this.perf.beginFrame(dt);
+
     this._update(dt);
+    this.perf.markUpdate();
+
     this._render();
+    this.perf.markRender();
+
+    this.perf.endFrame(this.entities.length);
 
     // clear one-frame input state — must run AFTER update+render read it
     this.input._endFrame();
@@ -139,17 +166,19 @@ export class GameEngine {
 
   _update(dt) {
     for (const entity of this.entities) {
-      for (const component of entity.components.values()) {
-        component.onTick?.(entity, this, dt);
-      }
+      // scripts decide intent (input, AI, forces) FIRST
       for (const script of entity.scripts) {
         script(entity, this, dt);
+      }
+      // components integrate that intent into physics/state SECOND
+      for (const component of entity.components.values()) {
+        component.onTick?.(entity, this, dt);
       }
     }
   }
 
   _render() {
-    const gameLayer = this.getLayer("game");
+    const gameLayer = this.getLayer("main");
     if (!gameLayer) return;
     gameLayer.clear();
 
@@ -158,7 +187,7 @@ export class GameEngine {
       if (!transform) continue;
 
       for (const component of entity.components.values()) {
-        component.render?.(gameLayer.ctx, transform);
+        component.render?.(gameLayer.ctx, transform, entity);
       }
     }
   }
