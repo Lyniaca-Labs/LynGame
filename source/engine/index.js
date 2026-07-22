@@ -19,6 +19,8 @@ export class GameEngine {
     this.running = false;
     this.state = {}; // globally accessible state
 
+    this.devMode = options.devMode ?? true;
+
     this.prefabs = new PrefabRegistry(this);
     this.assets = new AssetLoader();
 
@@ -184,8 +186,12 @@ export class GameEngine {
 
     for (const entity of this.entities) {
       const transform = entity.getComponent(Transform);
-      if (!transform) continue;
+      if (!transform) {
+        // if (this.devMode) console.warn(`Entity id "${entity.id}" is missing Transform component, cannot render`);
+        continue;
+      }
 
+      // all rendering based components
       for (const component of entity.components.values()) {
         component.render?.(gameLayer.ctx, transform, entity);
       }

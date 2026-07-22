@@ -59,6 +59,50 @@ export function buildProject(projectName) {
 </head>
 <body>
   <div id="game-container"></div>
+  <script>
+    (function () {
+      function send(level, args) {
+        try {
+          window.parent.postMessage(
+            {
+              source: "game-console",
+              level: level,
+              args: args.map(function (a) {
+                if (a instanceof Error) return a.stack || a.message;
+                if (typeof a === "object") {
+                  try { return JSON.stringify(a); } catch (e) { return String(a); }
+                }
+                return String(a);
+              }),
+              timestamp: Date.now(),
+            },
+            "*"
+          );
+        } catch (e) {
+          // no parent, or parent gone — nothing to do
+        }
+      }
+    
+      ["log", "info", "warn", "error"].forEach(function (level) {
+        var original = console[level] ? console[level].bind(console) : function () {};
+        console[level] = function () {
+          send(level, Array.prototype.slice.call(arguments));
+          original.apply(console, arguments);
+        };
+      });
+    
+      window.addEventListener("error", function (e) {
+        send("error", [e.message + " (" + e.filename + ":" + e.lineno + ")"]);
+      });
+    
+      window.addEventListener("unhandledrejection", function (e) {
+        send("error", [
+          "Unhandled promise rejection: " +
+            (e.reason && e.reason.message ? e.reason.message : e.reason),
+        ]);
+      });
+    })();
+  </script>
   <script type="module">
     import { GameEngine } from "./engine/index.js";
 

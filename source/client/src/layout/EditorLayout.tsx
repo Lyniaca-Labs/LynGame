@@ -8,6 +8,7 @@ import {
 
 import { useProject } from "../context/ProjectContext";
 import { SceneEditorProvider, useSceneEditor } from "../context/SceneEditorContext";
+import { GameConsoleProvider } from "../context/GameConsoleContext";
 import { projectsApi } from "../api";
 
 import { Button } from "../ui/Button";
@@ -20,13 +21,12 @@ import { Inspector } from "./sections";
 import { SettingsModal } from "../components/SettingsModal";
 import { ProjectSettingsModal } from "../components/ProjectSettingsModal";
 import { ProjectSelector } from "../components/ProjectSelector";
-import { GameView } from "../components/GameView";
+import { GameView } from "./sections/GameView";
+import { OutputPanel } from "./sections/OutputPanel";
 
 export function EditorLayout() {
   return (
-    <SceneEditorProvider>
-      <EditorLayoutContent />
-    </SceneEditorProvider>
+    <EditorLayoutContent />
   );
 }
 
@@ -108,16 +108,12 @@ function EditorLayoutContent() {
           </Container>
         </div>
 
-        <Resizable axis="x" handle="start" defaultSize={256}>
+        <Resizable axis="x" handle="start" defaultSize={300}>
           <Inspector />
         </Resizable>
       </div>
 
-      <Resizable axis="y" handle="start" defaultSize={160}>
-        <Container title="Console">
-          <PlaceholderPanel label="Console" />
-        </Container>
-      </Resizable>
+      <OutputPanel />
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
@@ -130,13 +126,5 @@ function EditorLayoutContent() {
         />
       )}
     </main>
-  );
-}
-
-function PlaceholderPanel({ label }: { label: string }) {
-  return (
-    <div className="flex h-full items-center justify-center text-xs text-[var(--color-text-faint)]">
-      {label}
-    </div>
   );
 }

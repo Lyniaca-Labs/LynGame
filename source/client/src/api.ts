@@ -107,7 +107,7 @@ export interface ProjectEditorData extends ApiResult {
 
 // ---- Folder file listing / editing ----
 
-export type EditableFolder = "scenes" | "components" | "scripts";
+export type EditableFolder = "scenes" | "components" | "scripts" | "prefabs" | "assets";
 
 export interface FileListResponse extends ApiResult {
   files: string[];
@@ -120,6 +120,26 @@ export interface FileContentResponse extends ApiResult {
 export interface OpenScriptResponse extends ApiResult {
   openedWith?: string;
 }
+
+// ---- Prefabs ----
+// Prefabs don't have their own dedicated endpoints like scenes do — they're
+// stored as plain JSON files under the generic "prefabs" folder, so we build
+// get/save on top of the generic readFile/writeFile.
+
+export interface PrefabData {
+  components: Record<string, Record<string, unknown>>;
+  scripts: string[];
+}
+
+export const prefabsApi = {
+  get: async (project: string, prefab: string): Promise<PrefabData> => {
+    const res = await projectsApi.readFile(project, "prefabs", `${prefab}.json`);
+    return JSON.parse(res.content) as PrefabData;
+  },
+  save: async (project: string, prefab: string, data: PrefabData): Promise<ApiResult> => {
+    return projectsApi.writeFile(project, "prefabs", `${prefab}.json`, JSON.stringify(data, null, 2));
+  },
+};
 
 const enc = encodeURIComponent;
 

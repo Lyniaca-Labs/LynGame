@@ -1,14 +1,16 @@
-import { ReactNode } from "react";
+// Inspector.tsx — full file
+
+import { ReactNode, useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Container } from "../../ui/Container";
-import { Select,SelectOption } from "../../ui/Select";
+import { Select, SelectOption } from "../../ui/Select";
 import { useSceneEditor } from "../../context/SceneEditorContext";
 import { useProject } from "../../context/ProjectContext";
-import { Entity, ComponentDefinition, ComponentFieldDefinition } from "../../api";
+import { Entity, ComponentDefinition, ComponentFieldDefinition, PrefabData } from "../../api";
 
 type FieldType = ComponentFieldDefinition["type"];
 
-const stripExt = (name: string) => name.replace(/\.(js|ts)$/i, "");
+const stripExt = (name: string) => name.replace(/\.(js|ts|json)$/i, "");
 
 export function Inspector() {
   const {
@@ -16,9 +18,14 @@ export function Inspector() {
     scene,
     loading,
     error,
+    renameEntity,
     updateComponentField,
     addComponent,
     removeComponent,
+    setEntityPrefab,
+    updateOverrideField,
+    resetOverrideComponent,
+    prefabCache,
     addScript,
     removeScript,
   } = useSceneEditor();
@@ -67,24 +74,29 @@ export function Inspector() {
     );
   }
 
-  if (entity.prefab) {
-    return (
-      <Container title={`Inspector — ${entity.id}`}>
-        <PlaceholderPanel
-          label={`Prefab instance (${entity.prefab}) — override editing isn't supported yet`}
-        />
-      </Container>
-    );
-  }
+  const existingIds = new Set(scene?.entities.map((e) => e.id) ?? []);
+  existingIds.delete(entity.id);
+
+  const prefabOptions: SelectOption[] = (projectData?.prefabs ?? []).map((p) => {
+    const name = stripExt(p);
+    return { value: name, label: name };
+  });
 
   return (
     <InspectorEntity
       entity={entity}
+      existingIds={existingIds}
       componentRegistry={projectData?.components ?? {}}
       scriptRegistry={projectData?.scripts ?? []}
+      prefabOptions={prefabOptions}
+      prefabDef={entity.prefab ? prefabCache[entity.prefab] : undefined}
+      onRename={(newId) => renameEntity(entity.id, newId)}
+      onSetPrefab={(prefabName) => setEntityPrefab(entity.id, prefabName)}
       onFieldChange={updateComponentField}
       onAddComponent={addComponent}
       onRemoveComponent={removeComponent}
+      onOverrideFieldChange={updateOverrideField}
+      onResetOverride={resetOverrideComponent}
       onAddScript={addScript}
       onRemoveScript={removeScript}
     />
@@ -93,20 +105,34 @@ export function Inspector() {
 
 function InspectorEntity({
   entity,
+  existingIds,
   componentRegistry,
   scriptRegistry,
+  prefabOptions,
+  prefabDef,
+  onRename,
+  onSetPrefab,
   onFieldChange,
   onAddComponent,
   onRemoveComponent,
+  onOverrideFieldChange,
+  onResetOverride,
   onAddScript,
   onRemoveScript,
 }: {
   entity: Entity;
+  existingIds: Set<string>;
   componentRegistry: Record<string, ComponentDefinition>;
   scriptRegistry: string[];
+  prefabOptions: SelectOption[];
+  prefabDef: PrefabData | undefined;
+  onRename: (newId: string) => void;
+  onSetPrefab: (prefabName: string | null) => void;
   onFieldChange: (entityId: string, componentName: string, field: string, value: unknown) => void;
   onAddComponent: (entityId: string, componentName: string) => void;
   onRemoveComponent: (entityId: string, componentName: string) => void;
+  onOverrideFieldChange: (entityId: string, componentName: string, field: string, value: unknown) => void;
+  onResetOverride: (entityId: string, componentName: string) => void;
   onAddScript: (entityId: string, scriptName: string) => void;
   onRemoveScript: (entityId: string, index: number) => void;
 }) {
@@ -125,34 +151,74 @@ function InspectorEntity({
   return (
     <Container title={`Inspector — ${entity.id}`} bodyClassName="overflow-y-auto p-2">
       <div className="space-y-4">
-        <Section title="Components">
-          <div className="space-y-2">
-            {Object.entries(entity.components ?? {}).map(([componentName, fields]) => (
-              <ComponentPanel
-                key={componentName}
-                entityId={entity.id}
-                componentName={componentName}
-                schema={componentRegistry[componentName]}
-                values={fields as Record<string, unknown>}
-                onFieldChange={onFieldChange}
-                onRemove={() => onRemoveComponent(entity.id, componentName)}
-              />
-            ))}
-            {Object.keys(entity.components ?? {}).length === 0 && (
-              <div className="text-xs italic text-[var(--color-text-faint)]">No components</div>
-            )}
-          </div>
-          {componentOptions.length > 0 && (
-            <div className="mt-2">
-              <Select
-                options={componentOptions}
-                onChange={(v: string) => onAddComponent(entity.id, v)}
-                placeholder="Add component…"
-                emptyMessage="No components available"
-              />
+        <EntityIdField entityId={entity.id} existingIds={existingIds} onRename={onRename} />
+
+        <Section title="Prefab">
+          {entity.prefab ? (
+            <div className="flex items-center justify-between rounded border border-[var(--color-border)] px-2 py-1 text-xs">
+              <span className="text-[var(--color-text)]">{entity.prefab}</span>
+              <button
+                type="button"
+                onClick={() => onSetPrefab(null)}
+                className="text-[var(--color-text-faint)] hover:text-[var(--color-danger)]"
+                aria-label="Detach from prefab"
+                title="Detach from prefab"
+              >
+                <Trash2 size={12} />
+              </button>
             </div>
+          ) : prefabOptions.length > 0 ? (
+            <Select
+              options={prefabOptions}
+              onChange={(v: string) => onSetPrefab(v)}
+              placeholder="Attach a prefab…"
+              emptyMessage="No prefabs available"
+            />
+          ) : (
+            <div className="text-xs italic text-[var(--color-text-faint)]">No prefabs available</div>
           )}
         </Section>
+
+        {entity.prefab ? (
+          <Section title="Overrides">
+            <OverridesSection
+              entity={entity}
+              prefabDef={prefabDef}
+              componentRegistry={componentRegistry}
+              onOverrideFieldChange={onOverrideFieldChange}
+              onResetOverride={onResetOverride}
+            />
+          </Section>
+        ) : (
+          <Section title="Components">
+            <div className="space-y-2">
+              {Object.entries(entity.components ?? {}).map(([componentName, fields]) => (
+                <ComponentPanel
+                  key={componentName}
+                  entityId={entity.id}
+                  componentName={componentName}
+                  schema={componentRegistry[componentName]}
+                  values={fields as Record<string, unknown>}
+                  onFieldChange={onFieldChange}
+                  onRemove={() => onRemoveComponent(entity.id, componentName)}
+                />
+              ))}
+              {Object.keys(entity.components ?? {}).length === 0 && (
+                <div className="text-xs italic text-[var(--color-text-faint)]">No components</div>
+              )}
+            </div>
+            {componentOptions.length > 0 && (
+              <div className="mt-2">
+                <Select
+                  options={componentOptions}
+                  onChange={(v: string) => onAddComponent(entity.id, v)}
+                  placeholder="Add component…"
+                  emptyMessage="No components available"
+                />
+              </div>
+            )}
+          </Section>
+        )}
 
         <Section title="Scripts">
           <div className="space-y-1">
@@ -189,6 +255,171 @@ function InspectorEntity({
         </Section>
       </div>
     </Container>
+  );
+}
+
+function EntityIdField({
+  entityId,
+  existingIds,
+  onRename,
+}: {
+  entityId: string;
+  existingIds: Set<string>;
+  onRename: (newId: string) => void;
+}) {
+  const [value, setValue] = useState(entityId);
+
+  // Keep the field in sync if the selected entity changes out from under it
+  // (e.g. selecting a different entity in the Explorer).
+  useEffect(() => setValue(entityId), [entityId]);
+
+  const trimmed = value.trim();
+  const isDuplicate = trimmed !== entityId && existingIds.has(trimmed);
+  const isEmpty = trimmed.length === 0;
+
+  const commit = () => {
+    if (isEmpty || isDuplicate || trimmed === entityId) {
+      setValue(entityId);
+      return;
+    }
+    onRename(trimmed);
+  };
+
+  return (
+    <div>
+      <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-faint)]">
+        Entity ID
+      </div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          if (e.key === "Escape") setValue(entityId);
+        }}
+        className={`w-full rounded border bg-transparent px-1.5 py-1 text-xs text-[var(--color-text)] ${isDuplicate ? "border-[var(--color-danger)]" : "border-[var(--color-border)]"
+          }`}
+      />
+      {isDuplicate && (
+        <div className="mt-0.5 text-[10px] text-[var(--color-danger)]">
+          An entity with this ID already exists.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OverridesSection({
+  entity,
+  prefabDef,
+  componentRegistry,
+  onOverrideFieldChange,
+  onResetOverride,
+}: {
+  entity: Entity;
+  prefabDef: PrefabData | undefined;
+  componentRegistry: Record<string, ComponentDefinition>;
+  onOverrideFieldChange: (entityId: string, componentName: string, field: string, value: unknown) => void;
+  onResetOverride: (entityId: string, componentName: string) => void;
+}) {
+  if (!prefabDef) {
+    return <div className="text-xs italic text-[var(--color-text-faint)]">Loading prefab…</div>;
+  }
+
+  const componentNames = Object.keys(prefabDef.components);
+
+  if (componentNames.length === 0) {
+    return <div className="text-xs italic text-[var(--color-text-faint)]">Prefab has no components</div>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {componentNames.map((componentName) => {
+        const defaults = prefabDef.components[componentName];
+        const overrideValues = entity.overrides?.[componentName];
+        const merged = { ...defaults, ...overrideValues };
+        const hasOverride = Boolean(overrideValues && Object.keys(overrideValues).length > 0);
+
+        return (
+          <OverrideComponentPanel
+            key={componentName}
+            entityId={entity.id}
+            componentName={componentName}
+            schema={componentRegistry[componentName]}
+            values={merged}
+            hasOverride={hasOverride}
+            onFieldChange={onOverrideFieldChange}
+            onReset={() => onResetOverride(entity.id, componentName)}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function OverrideComponentPanel({
+  entityId,
+  componentName,
+  schema,
+  values,
+  hasOverride,
+  onFieldChange,
+  onReset,
+}: {
+  entityId: string;
+  componentName: string;
+  schema?: ComponentDefinition;
+  values: Record<string, unknown>;
+  hasOverride: boolean;
+  onFieldChange: (entityId: string, componentName: string, field: string, value: unknown) => void;
+  onReset: () => void;
+}) {
+  const fieldDefs: ComponentFieldDefinition[] =
+    schema?.fields ??
+    Object.keys(values).map((key) => ({
+      key,
+      type: inferType(values[key]),
+      defaultValue: values[key],
+    }));
+
+  return (
+    <div className="rounded border border-[var(--color-border)] p-2">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text)]">
+          {componentName}
+          {hasOverride && (
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent-secondary)]"
+              title="Overridden"
+            />
+          )}
+        </span>
+        {hasOverride && (
+          <button
+            type="button"
+            onClick={onReset}
+            className="text-[var(--color-text-faint)] hover:text-[var(--color-danger)]"
+            aria-label={`Reset ${componentName} to prefab default`}
+            title="Reset to prefab default"
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        {fieldDefs.map((def) => (
+          <SchemaField
+            key={def.key}
+            label={def.key}
+            type={def.type}
+            value={values[def.key] ?? def.defaultValue}
+            onChange={(v) => onFieldChange(entityId, componentName, def.key, v)}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 

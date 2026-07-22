@@ -124,7 +124,7 @@ app.get("/output/*splat", (_req, res) => {
 
 // --- Generic project file editing (scenes / components / scripts) ---
 
-const EDITABLE_FOLDERS = ["scenes", "components", "scripts"];
+const EDITABLE_FOLDERS = ["scenes", "components", "scripts", "prefabs", "assets"];
 
 function safeProjectFilePath(project, folder, filename) {
   if (!EDITABLE_FOLDERS.includes(folder)) {

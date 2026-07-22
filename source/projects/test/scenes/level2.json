@@ -26,23 +26,18 @@
       ]
     },
     {
-      "id": "entity2",
+      "id": "testentity",
       "components": {
         "Transform": {
-          "x": 100,
-          "y": 100,
+          "x": 0,
+          "y": 0,
           "rotation": 0
         },
         "ShapeRenderer": {
           "shape": "rect",
           "width": 32,
           "height": 32,
-          "color": "#683b3b"
-        },
-        "Gravity": {
-          "force": 500,
-          "velocityY": 0,
-          "grounded": false
+          "color": "#fff"
         }
       }
     }

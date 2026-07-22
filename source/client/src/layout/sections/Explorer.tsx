@@ -1,3 +1,5 @@
+// Explorer.tsx — full file
+
 import { useEffect, useState } from "react";
 import { Container } from "../../ui/Container";
 import { Tabs } from "../../ui/Tabs";
@@ -27,11 +29,13 @@ export function Explorer() {
 
 function ExplorerFiles() {
   const { projectData, currentProject } = useProject();
-  const { openScene, openEntity } = useSceneEditor();
+  const { target, scene: liveScene, openScene, openEntity, addEntity, deleteEntity } = useSceneEditor();
 
   // Lazily-populated cache of each scene's entities, so scene nodes can
   // show them as children in the tree without eagerly loading everything
-  // up front on every render.
+  // up front on every render. For whichever scene is currently open in the
+  // Inspector, we read live data from SceneEditorContext instead (below),
+  // so edits made there — renames, adds, deletes — show up immediately.
   const [sceneEntities, setSceneEntities] = useState<Record<string, Entity[]>>({});
 
   useEffect(() => {
@@ -55,7 +59,6 @@ function ExplorerFiles() {
           // until this succeeds (e.g. on next project reload).
         });
     });
-
 
     return () => {
       cancelled = true;
@@ -102,7 +105,8 @@ function ExplorerFiles() {
       label: "Scenes",
       children: projectData.scenes.map((sceneFile) => {
         const sceneId = sceneFile.replace(".json", "");
-        const entities = sceneEntities[sceneId];
+        const isActiveScene = target?.sceneId === sceneId && liveScene?.name === sceneId;
+        const entities = isActiveScene ? liveScene.entities : sceneEntities[sceneId];
 
         return {
           id: sceneFile,
@@ -136,6 +140,45 @@ function ExplorerFiles() {
   ];
 
   const getActions = (node: TreeNode): MenuAction[] => {
+    // Entity node, id shape is "sceneFile.json::entityId"
+    if (node.id.includes("::")) {
+      const [sceneFile, entityId] = node.id.split("::");
+      const sceneId = sceneFile.replace(".json", "");
+      const isActiveScene = target?.sceneId === sceneId;
+
+      const actions: MenuAction[] = [
+        // Renaming an entity needs the id-uniqueness check that lives in
+        // the Inspector, so route there rather than duplicating it here.
+        { label: "Rename", icon: Pencil, onClick: () => openEntity(sceneId, entityId) },
+      ];
+      if (isActiveScene) {
+        actions.push({
+          label: "Delete",
+          icon: Trash2,
+          danger: true,
+          onClick: () => deleteEntity(entityId),
+        });
+      }
+      return actions;
+    }
+
+    // Scene node
+    if (projectData.scenes.includes(node.id)) {
+      const sceneId = node.id.replace(".json", "");
+      const isActiveScene = target?.sceneId === sceneId;
+
+      const actions: MenuAction[] = [];
+      if (isActiveScene) {
+        actions.push({ label: "New Entity", icon: Plus, onClick: () => addEntity() });
+      }
+      actions.push(
+        { label: "Rename", icon: Pencil, onClick: () => console.log("rename", node.id) },
+        { label: "Delete", icon: Trash2, danger: true, onClick: () => console.log("delete", node.id) }
+      );
+      return actions;
+    }
+
+    // Everything else (prefabs, scripts, components sections/leaves)
     const base: MenuAction[] = [
       { label: "Rename", icon: Pencil, onClick: () => console.log("rename", node.id) },
       { label: "Delete", icon: Trash2, danger: true, onClick: () => console.log("delete", node.id) },
