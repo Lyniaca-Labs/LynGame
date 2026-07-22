@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import { Container } from "../../ui/Container";
 import { Tabs } from "../../ui/Tabs";
+import { Modal } from "../../ui/Modal";
 import { useProject } from "../../context/ProjectContext";
 import { useSceneEditor } from "../../context/SceneEditorContext";
 import { Plus, Pencil, Trash2, Star } from "lucide-react";
 import { FolderTree, TreeNode, TreeNodeBadge } from "../../ui/FolderTree";
 import { MenuAction } from "../../ui/ActionsMenu";
 import { projectsApi, Entity } from "../../api";
+import { CodeFileEditor } from "../../components/CodeFileEditor";
 
 export function Explorer() {
   return (
@@ -27,6 +29,12 @@ export function Explorer() {
   );
 }
 
+// Which code file (if any) is currently open in the editor modal.
+interface OpenCodeFile {
+  folder: "scripts" | "components";
+  filename: string;
+}
+
 function ExplorerFiles() {
   const { projectData, currentProject } = useProject();
   const { target, scene: liveScene, openScene, openEntity, addEntity, deleteEntity } = useSceneEditor();
@@ -37,6 +45,9 @@ function ExplorerFiles() {
   // Inspector, we read live data from SceneEditorContext instead (below),
   // so edits made there — renames, adds, deletes — show up immediately.
   const [sceneEntities, setSceneEntities] = useState<Record<string, Entity[]>>({});
+
+  // The script/component file currently open in the CodeFileEditor modal.
+  const [openCodeFile, setOpenCodeFile] = useState<OpenCodeFile | null>(null);
 
   useEffect(() => {
     if (!projectData || !currentProject) return;
@@ -126,16 +137,32 @@ function ExplorerFiles() {
       label: "Prefabs",
       children: projectData.prefabs.map((p) => ({ id: p, label: p })),
     },
-    // TODO: codemirror editor for these or vscode open
     {
       id: "scripts",
       label: "Scripts",
-      children: projectData.scripts.map((s) => ({ id: s, label: s })),
+      children: projectData.scripts.map((s) => ({
+        id: s,
+        label: s,
+        onClick: () => setOpenCodeFile({ folder: "scripts", filename: s }),
+      })),
     },
     {
       id: "components",
       label: "Components",
-      children: Object.keys(projectData.components).map((c) => ({ id: c, label: c })),
+      children: Object.entries(projectData.components)
+        .filter(([, def]) => def.source !== "engine")
+        .map(([c, def]) => {
+          const filename = def.filename ?? `${c}.js`;
+
+          return {
+            id: c,
+            label: c,
+            onClick: () => setOpenCodeFile({
+              folder: "components",
+              filename,
+            }),
+          };
+        }),
     },
   ];
 
@@ -178,7 +205,33 @@ function ExplorerFiles() {
       return actions;
     }
 
-    // Everything else (prefabs, scripts, components sections/leaves)
+    // Script node — id is the raw filename (e.g. "LogScript.js")
+    if (projectData.scripts.includes(node.id)) {
+      return [
+        {
+          label: "Open in Editor",
+          icon: Pencil,
+          onClick: () => setOpenCodeFile({ folder: "scripts", filename: node.id }),
+        },
+        { label: "Delete", icon: Trash2, danger: true, onClick: () => console.log("delete", node.id) },
+      ];
+    }
+
+    // Component node — id is the component name (e.g. "Movement")
+    if (Object.keys(projectData.components).includes(node.id)) {
+      const filename = projectData.components[node.id]?.filename ?? `${node.id}.js`;
+       
+      return [
+        {
+          label: "Open in Editor",
+          icon: Pencil,
+          onClick: () => setOpenCodeFile({ folder: "components", filename }),
+        },
+        { label: "Delete", icon: Trash2, danger: true, onClick: () => console.log("delete", node.id) },
+      ];
+    }
+
+    // Everything else (prefabs, section headers)
     const base: MenuAction[] = [
       { label: "Rename", icon: Pencil, onClick: () => console.log("rename", node.id) },
       { label: "Delete", icon: Trash2, danger: true, onClick: () => console.log("delete", node.id) },
@@ -197,6 +250,27 @@ function ExplorerFiles() {
       {sections.map((section) => (
         <FolderTree key={section.id} node={section} getActions={getActions} defaultOpen />
       ))}
+
+      <Modal
+        open={openCodeFile !== null}
+        onClose={() => setOpenCodeFile(null)}
+        title={openCodeFile?.filename}
+        className="max-w-3xl"
+      >
+        {/* Modal's content area has fixed px-4 py-3 padding and no height
+            of its own; CodeFileEditor needs a sized parent since CodeMirror
+            is set to height="100%". Cancel that padding with negative
+            margins and give this wrapper an explicit height instead. */}
+        {openCodeFile && currentProject && (
+          <div className="-m-3 -mx-4 h-[70vh]">
+            <CodeFileEditor
+              project={currentProject}
+              folder={openCodeFile.folder}
+              filename={openCodeFile.filename}
+            />
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

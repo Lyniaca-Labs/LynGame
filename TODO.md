@@ -16,11 +16,18 @@ LATER
 - [ ] Game framework built on graphics framework
   - [ ] init funciton loading animation (as LynGame)
 - [ ] Engine GUI/editor on top of game framework
-  - [ ] ability to add components and scripts to entities
+  - [x] ability to add components and scripts to entities
   - [ ] keyboard shortcuts
   - [ ] ability to load a preview of an entity from editor (same with scene)
   - [ ] ability to pause the game
+  - [ ] code editor
+  - [ ] can edit prefabs
   - [ ] export project to zip (with a node live server. Can use node or python, or powershell (ps1) to run)
+  - [ ] deleting, creating, renaming scripts and components
+  - [ ] get codemirror code editor to fit screen better
+  - [ ] codemirror code editor should be based on selected theme
+  - [ ] get open in vscode working
+
 - [ ] Good overall architecture/design pattern
   - [ ] turn server into typescript, keep all project files and engine files javascript
 - [ ] Scene hierarchy (`Scene[] -> Entity[] -> Children[]`)
@@ -46,7 +53,7 @@ LATER
 - [x] Styling/theme config
 - [ ] VSCode integration
 - [ ] Pause when editor window is blurred
-- [ ] auto focus viewport on run
+- [x] auto focus viewport on run
 - [ ] Loading screen with default engine loader/logo
 - [ ] Debug mode
 - [ ] Error handling

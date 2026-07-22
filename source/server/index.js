@@ -50,6 +50,7 @@ app.put("/api/projects/:project/scenes/:scene", (req, res) => {
   } catch (err) { res.status(400).json({ success: false, error: err.message }); }
 });
 
+// TODO: implement
 app.post("/api/projects/:project/open-script", (req, res) => {
   try {
     const { filePath } = safeProjectFilePath(req.params.project, "scripts", req.body.filename);

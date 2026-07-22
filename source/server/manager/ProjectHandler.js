@@ -118,29 +118,75 @@ export default class ProjectHandler {
   static componentSchemas(projectName) {
     const manifest = this.scanComponents(projectName);
     const schemas = {};
+
     for (const [name, entry] of Object.entries(manifest)) {
+      const editable = entry.source !== "engine";
+
       const file = entry.source === "engine"
         ? path.join(__dirname, "../../engine/components", entry.filename)
         : path.join(__dirname, "../../projects", projectName, "components", entry.filename);
+
       const source = fs.readFileSync(file, "utf8");
+
       const constructorStart = source.indexOf("constructor");
       const constructorEnd = source.indexOf(") {", constructorStart);
-      const constructorSource = constructorStart >= 0 && constructorEnd >= 0 ? source.slice(constructorStart, constructorEnd) : "";
+      const constructorSource =
+        constructorStart >= 0 && constructorEnd >= 0
+          ? source.slice(constructorStart, constructorEnd)
+          : "";
+
       const fields = [];
+
       if (constructorSource) {
-        const defaults = constructorSource;
-        const fieldPattern = /([A-Za-z_$][\w$]*)\s*=\s*(\{[^}]*\}|\[[^\]]*\]|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|#[0-9a-fA-F]{3,8}|-?\d+(?:\.\d+)?|true|false|null)/g;
+        const fieldPattern =
+          /([A-Za-z_$][\w$]*)\s*=\s*(\{[^}]*\}|\[[^\]]*\]|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|#[0-9a-fA-F]{3,8}|-?\d+(?:\.\d+)?|true|false|null)/g;
+
         let field;
-        while ((field = fieldPattern.exec(defaults))) {
+        while ((field = fieldPattern.exec(constructorSource))) {
           const raw = field[2].trim();
+
           let value = raw;
-          try { value = JSON.parse(raw.replace(/([A-Za-z_$][\w$]*)\s*:/g, '"$1":').replace(/'/g, '"')); } catch { /* source defaults can be expressions */ }
-          const type = typeof value === "number" ? "number" : typeof value === "boolean" ? "boolean" : (value && typeof value === "object") || raw.startsWith("{") ? "vector" : (typeof value === "string" && /^#[0-9a-f]{3,8}$/i.test(value)) || raw.startsWith("#") ? "color" : "text";
-          fields.push({ key: field[1], type, defaultValue: value });
+          try {
+            value = JSON.parse(
+              raw
+                .replace(/([A-Za-z_$][\w$]*)\s*:/g, '"$1":')
+                .replace(/'/g, '"')
+            );
+          } catch {
+            // Source defaults can be expressions.
+          }
+
+          const type =
+            typeof value === "number"
+              ? "number"
+              : typeof value === "boolean"
+                ? "boolean"
+                : (value && typeof value === "object") || raw.startsWith("{")
+                  ? "vector"
+                  : (typeof value === "string" &&
+                    /^#[0-9a-f]{3,8}$/i.test(value)) ||
+                    raw.startsWith("#")
+                    ? "color"
+                    : "text";
+
+          fields.push({
+            key: field[1],
+            type,
+            defaultValue: value,
+            editable,
+          });
         }
       }
-      schemas[name] = { name, source: entry.source, filename: entry.filename, fields };
+
+      schemas[name] = {
+        name,
+        source: entry.source,
+        filename: entry.filename,
+        editable,
+        fields,
+      };
     }
+
     return schemas;
   }
 

@@ -9,8 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/view": "^6.43.6",
     "@tailwindcss/vite": "latest",
+    "@uiw/react-codemirror": "^4.25.11",
     "@vitejs/plugin-react": "latest",
+    "lucide-react": "^1.25.0",
     "react": "latest",
     "react-dom": "latest",
     "tailwindcss": "latest",
