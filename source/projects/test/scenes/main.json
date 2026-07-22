@@ -5,12 +5,12 @@
       "id": "fallingBox",
       "components": {
         "Transform": {
-          "x": 200,
+          "x": 400,
           "y": 20,
           "rotation": 0
         },
         "SpriteRenderer": {
-          "width": 100,
+          "width": 200,
           "height": 100,
           "color": "#00ff00"
         },

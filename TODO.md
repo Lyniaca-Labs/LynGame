@@ -10,6 +10,11 @@ As the test extension (but also a real extension thats built in). Use https://re
 then compile that into a function and add it to the asset manager.
 After all of that, go into TODO.md and check off the items you completed"
 
+- ability to create scripts and entities
+- should be able to duplicate and move
+- should be able to start typing in script and component lookup
+- should be able to edit prefabs
+
 ## Reported Bugs
 - [ ] When switching scene laggy with spawning script, newly spawned entities will be in wrong scene 
 

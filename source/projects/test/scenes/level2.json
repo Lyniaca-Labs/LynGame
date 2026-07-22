@@ -10,7 +10,7 @@
           "rotation": 0
         },
         "SpriteRenderer": {
-          "width": 100,
+          "width": 150,
           "height": 100,
           "color": "#FF0000"
         },

@@ -100,6 +100,64 @@ export default class ProjectHandler {
     return manifest;
   }
 
+  static scanFiles(projectName, folder) {
+    const root = path.join(__dirname, "../../projects", projectName, folder);
+    if (!fs.existsSync(root)) return [];
+    const result = [];
+    const walk = (dir, prefix = "") => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) walk(path.join(dir, entry.name), relative);
+        else result.push(relative);
+      }
+    };
+    walk(root);
+    return result;
+  }
+
+  static componentSchemas(projectName) {
+    const manifest = this.scanComponents(projectName);
+    const schemas = {};
+    for (const [name, entry] of Object.entries(manifest)) {
+      const file = entry.source === "engine"
+        ? path.join(__dirname, "../../engine/components", entry.filename)
+        : path.join(__dirname, "../../projects", projectName, "components", entry.filename);
+      const source = fs.readFileSync(file, "utf8");
+      const constructorStart = source.indexOf("constructor");
+      const constructorEnd = source.indexOf(") {", constructorStart);
+      const constructorSource = constructorStart >= 0 && constructorEnd >= 0 ? source.slice(constructorStart, constructorEnd) : "";
+      const fields = [];
+      if (constructorSource) {
+        const defaults = constructorSource;
+        const fieldPattern = /([A-Za-z_$][\w$]*)\s*=\s*(\{[^}]*\}|\[[^\]]*\]|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|#[0-9a-fA-F]{3,8}|-?\d+(?:\.\d+)?|true|false|null)/g;
+        let field;
+        while ((field = fieldPattern.exec(defaults))) {
+          const raw = field[2].trim();
+          let value = raw;
+          try { value = JSON.parse(raw.replace(/([A-Za-z_$][\w$]*)\s*:/g, '"$1":').replace(/'/g, '"')); } catch { /* source defaults can be expressions */ }
+          const type = typeof value === "number" ? "number" : typeof value === "boolean" ? "boolean" : (value && typeof value === "object") || raw.startsWith("{") ? "vector" : (typeof value === "string" && /^#[0-9a-f]{3,8}$/i.test(value)) || raw.startsWith("#") ? "color" : "text";
+          fields.push({ key: field[1], type, defaultValue: value });
+        }
+      }
+      schemas[name] = { name, source: entry.source, filename: entry.filename, fields };
+    }
+    return schemas;
+  }
+
+  static editorSnapshot(projectName) {
+    const projectDir = path.join(__dirname, "../../projects", projectName);
+    if (!fs.existsSync(projectDir)) throw new Error("Project not found");
+    const config = JSON.parse(fs.readFileSync(path.join(projectDir, "project.lg"), "utf8"));
+    return {
+      project: { ...config, name: projectName },
+      components: this.componentSchemas(projectName),
+      scenes: this.scanFiles(projectName, "scenes").filter((file) => file.endsWith(".json")),
+      prefabs: this.scanFiles(projectName, "prefabs").filter((file) => file.endsWith(".json")),
+      scripts: this.scanFiles(projectName, "scripts").filter((file) => file.endsWith(".js")),
+      assets: Object.entries(this.scanAssets(projectName)).map(([key, asset]) => ({ key, ...asset })),
+    };
+  }
+
   static buildMain(projectName) {
     const projectConfigPath = ProjectHandler.getProjectFile(projectName);
     const config = JSON.parse(fs.readFileSync(projectConfigPath, "utf-8"));
