@@ -1,18 +1,14 @@
+import { useEffect, useState } from "react";
 import { Container } from "../../ui/Container";
 import { Tabs } from "../../ui/Tabs";
 import { useProject } from "../../context/ProjectContext";
+import { useSceneEditor } from "../../context/SceneEditorContext";
 import { Plus, Pencil, Trash2, Star } from "lucide-react";
 import { FolderTree, TreeNode, TreeNodeBadge } from "../../ui/FolderTree";
 import { MenuAction } from "../../ui/ActionsMenu";
-
-function openInspector(node: TreeNode) {
-  console.log("Open inspector for node:", node);
-  window.dispatchEvent(new CustomEvent("open-inspector", { detail: node }));
-}
+import { projectsApi, Entity } from "../../api";
 
 export function Explorer() {
-  const { projectData } = useProject();
-
   return (
     <Container
       title="Explorer"
@@ -21,35 +17,56 @@ export function Explorer() {
     >
       <Tabs
         tabs={[
-          {
-            id: "files",
-            label: "Files",
-            content: (
-              <ExplorerFiles />
-            ),
-          },
-          {
-            id: "assets",
-            label: "Assets",
-            content: (
-              <ExplorerAssets />
-            ),
-          },
+          { id: "files", label: "Files", content: <ExplorerFiles /> },
+          { id: "assets", label: "Assets", content: <ExplorerAssets /> },
         ]}
       />
     </Container>
   );
 }
 
-
 function ExplorerFiles() {
-  const { projectData } = useProject();
+  const { projectData, currentProject } = useProject();
+  const { openScene, openEntity } = useSceneEditor();
+
+  // Lazily-populated cache of each scene's entities, so scene nodes can
+  // show them as children in the tree without eagerly loading everything
+  // up front on every render.
+  const [sceneEntities, setSceneEntities] = useState<Record<string, Entity[]>>({});
+
+  useEffect(() => {
+    if (!projectData || !currentProject) return;
+
+    let cancelled = false;
+
+    projectData.scenes.forEach((sceneFile) => {
+      const sceneId = sceneFile.replace(".json", "");
+      if (sceneEntities[sceneId]) return;
+
+      projectsApi
+        .getScene(currentProject, sceneId)
+        .then((res) => {
+          if (!cancelled) {
+            setSceneEntities((prev) => ({ ...prev, [sceneId]: res.scene.entities }));
+          }
+        })
+        .catch(() => {
+          // Leave uncached — the scene node just renders without children
+          // until this succeeds (e.g. on next project reload).
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectData, currentProject]);
 
   if (!projectData) {
     return <PlaceholderPanel label="No project loaded" />;
   }
 
-  const StartScene = projectData.project.startScene;
+  const startScene = projectData.project.startScene;
 
   const setStartScene = (sceneId: string) => {
     console.log("set start scene:", sceneId);
@@ -57,7 +74,7 @@ function ExplorerFiles() {
   };
 
   const sceneBadges = (sceneId: string): TreeNodeBadge[] => {
-    const isStart = sceneId.replace(".json", "") === StartScene;
+    const isStart = sceneId.replace(".json", "") === startScene;
     return [
       {
         id: "start-scene",
@@ -82,22 +99,33 @@ function ExplorerFiles() {
     {
       id: "scenes",
       label: "Scenes",
-      children: projectData.scenes.map((s) => ({
-        id: s,
-        label: s.replace(".json", ""),
-        badges: sceneBadges(s),
-        onClick: () => openInspector({ id: s, label: s }),
-      })),
-    },
-    {
-      id: "scripts",
-      label: "Scripts",
-      children: projectData.scripts.map((s) => ({ id: s, label: s })),
+      children: projectData.scenes.map((sceneFile) => {
+        const sceneId = sceneFile.replace(".json", "");
+        const entities = sceneEntities[sceneId];
+
+        return {
+          id: sceneFile,
+          label: sceneId,
+          badges: sceneBadges(sceneFile),
+          onClick: () => openScene(sceneId),
+          children: entities?.map((e) => ({
+            id: `${sceneFile}::${e.id}`,
+            label: e.id,
+            onClick: () => openEntity(sceneId, e.id),
+          })),
+        };
+      }),
     },
     {
       id: "prefabs",
       label: "Prefabs",
       children: projectData.prefabs.map((p) => ({ id: p, label: p })),
+    },
+    // TODO: codemirror editor for these or vscode open
+    {
+      id: "scripts",
+      label: "Scripts",
+      children: projectData.scripts.map((s) => ({ id: s, label: s })),
     },
     {
       id: "components",
@@ -123,25 +151,17 @@ function ExplorerFiles() {
   return (
     <div className="p-1">
       {sections.map((section) => (
-        <FolderTree
-          key={section.id}
-          node={section}
-          getActions={getActions}
-          defaultOpen
-        />
+        <FolderTree key={section.id} node={section} getActions={getActions} defaultOpen />
       ))}
     </div>
   );
 }
 
-
 function ExplorerAssets() {
   const { projectData } = useProject();
 
   if (!projectData) {
-    return (
-      <PlaceholderPanel label="No project loaded" />
-    );
+    return <PlaceholderPanel label="No project loaded" />;
   }
 
   return (
@@ -150,7 +170,6 @@ function ExplorerAssets() {
     </div>
   );
 }
-
 
 function PlaceholderPanel({ label }: { label: string }) {
   return (

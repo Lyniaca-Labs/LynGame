@@ -19,22 +19,7 @@ export interface ComponentDefinition {
   fields: ProjectField[];
 }
 
-export interface ProjectEditorData {
-  success: boolean;
-
-  project: {
-    name: string;
-    startScene: string;
-    assets: unknown[];
-  };
-
-  components: Record<string, ComponentDefinition>;
-
-  scenes: string[];
-  prefabs: string[];
-  scripts: string[];
-  assets: unknown[];
-}
+import type { ProjectEditorData } from "../api";
 
 interface ProjectContextValue {
   currentProject: string | null;

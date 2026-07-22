@@ -16,7 +16,13 @@ LATER
 - [ ] Game framework built on graphics framework
   - [ ] init funciton loading animation (as LynGame)
 - [ ] Engine GUI/editor on top of game framework
+  - [ ] ability to add components and scripts to entities
+  - [ ] keyboard shortcuts
+  - [ ] ability to load a preview of an entity from editor (same with scene)
+  - [ ] ability to pause the game
+  - [ ] export project to zip (with a node live server. Can use node or python, or powershell (ps1) to run)
 - [ ] Good overall architecture/design pattern
+  - [ ] turn server into typescript, keep all project files and engine files javascript
 - [ ] Scene hierarchy (`Scene[] -> Entity[] -> Children[]`)
 - [x] Components system
 - [ ] Events system
