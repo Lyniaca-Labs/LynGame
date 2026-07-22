@@ -59,7 +59,11 @@ export interface BuildResponse extends ApiResult {
 
 export interface Entity {
   id: string;
-  components: Record<string, Record<string, unknown>>;
+  components?: Record<string, Record<string, unknown>>;
+  scripts?: string[];
+  prefab?: string;
+  // used in place of components when the entity is a prefab instance
+  overrides?: Record<string, Record<string, unknown>>;
 }
 
 export interface Scene {
@@ -73,9 +77,17 @@ export interface SceneResponse extends ApiResult {
 
 // ---- Editor snapshot ----
 
+export interface ComponentFieldDefinition {
+  key: string;
+  type: "number" | "text" | "boolean" | "color" | "vector";
+  defaultValue: unknown;
+}
+
 export interface ComponentDefinition {
-  // shape of a component schema/definition — tighten once known
-  [key: string]: unknown;
+  name: string;
+  source: "engine" | "project";
+  filename: string;
+  fields: ComponentFieldDefinition[];
 }
 
 export interface ProjectInfo {

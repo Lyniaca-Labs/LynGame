@@ -12,7 +12,7 @@
         "SpriteRenderer": {
           "width": 100,
           "height": 100,
-          "color": "#FF0000"
+          "color": "#271065"
         },
         "Gravity": {
           "force": 500,
@@ -29,9 +29,20 @@
       "id": "entity2",
       "components": {
         "Transform": {
-          "x": 0,
-          "y": 0,
+          "x": 100,
+          "y": 100,
           "rotation": 0
+        },
+        "ShapeRenderer": {
+          "shape": "rect",
+          "width": 32,
+          "height": 32,
+          "color": "#683b3b"
+        },
+        "Gravity": {
+          "force": 500,
+          "velocityY": 0,
+          "grounded": false
         }
       }
     }

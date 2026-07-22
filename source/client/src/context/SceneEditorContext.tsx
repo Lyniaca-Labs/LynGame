@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { useProject } from "./ProjectContext";
-import { projectsApi, Scene, Entity } from "../api";
+import { projectsApi, Scene, Entity, ComponentDefinition } from "../api";
 
 export type InspectorTarget =
   | { kind: "scene"; sceneId: string }
@@ -26,6 +26,12 @@ interface SceneEditorContextValue {
     field: string,
     value: unknown
   ) => void;
+  addComponent: (entityId: string, componentName: string) => void;
+  removeComponent: (entityId: string, componentName: string) => void;
+
+  addScript: (entityId: string, scriptName: string) => void;
+  removeScript: (entityId: string, index: number) => void;
+
   addEntity: () => void;
   deleteEntity: (entityId: string) => void;
 
@@ -35,7 +41,7 @@ interface SceneEditorContextValue {
 const SceneEditorContext = createContext<SceneEditorContextValue | null>(null);
 
 export function SceneEditorProvider({ children }: { children: ReactNode }) {
-  const { currentProject } = useProject();
+  const { currentProject, projectData } = useProject();
 
   const [target, setTarget] = useState<InspectorTarget>(null);
   const [scene, setScene] = useState<Scene | null>(null);
@@ -90,8 +96,64 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         ...e,
         components: {
           ...e.components,
-          [componentName]: { ...e.components[componentName], [field]: value },
+          [componentName]: { ...e.components?.[componentName], [field]: value },
         },
+      }));
+    },
+    [updateEntity]
+  );
+
+  const addComponent = useCallback(
+    (entityId: string, componentName: string) => {
+      const schema: ComponentDefinition | undefined = projectData?.components?.[componentName];
+      if (!schema) return;
+
+      // Seed the new component with the registry's default values. Vector
+      // defaults are cloned so multiple entities don't end up sharing the
+      // same object reference.
+      const defaults = Object.fromEntries(
+        schema.fields.map((f) => [
+          f.key,
+          f.type === "vector"
+            ? { ...(f.defaultValue as Record<string, number>) }
+            : f.defaultValue,
+        ])
+      );
+
+      updateEntity(entityId, (e) => ({
+        ...e,
+        components: { ...e.components, [componentName]: defaults },
+      }));
+    },
+    [projectData, updateEntity]
+  );
+
+  const removeComponent = useCallback(
+    (entityId: string, componentName: string) => {
+      updateEntity(entityId, (e) => {
+        const rest = { ...e.components };
+        delete rest[componentName];
+        return { ...e, components: rest };
+      });
+    },
+    [updateEntity]
+  );
+
+  const addScript = useCallback(
+    (entityId: string, scriptName: string) => {
+      updateEntity(entityId, (e) => ({
+        ...e,
+        scripts: [...(e.scripts ?? []), scriptName],
+      }));
+    },
+    [updateEntity]
+  );
+
+  const removeScript = useCallback(
+    (entityId: string, index: number) => {
+      updateEntity(entityId, (e) => ({
+        ...e,
+        scripts: (e.scripts ?? []).filter((_, i) => i !== index),
       }));
     },
     [updateEntity]
@@ -144,6 +206,10 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         openEntity,
         clear,
         updateComponentField,
+        addComponent,
+        removeComponent,
+        addScript,
+        removeScript,
         addEntity,
         deleteEntity,
         save,
