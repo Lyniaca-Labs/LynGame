@@ -52,4 +52,6 @@ export const projectsApi = {
   create: (name: string) => api.post<ApiResult>(`api/projects/${encodeURIComponent(name)}`),
   remove: (name: string) => api.del<ApiResult>(`api/projects/${encodeURIComponent(name)}`),
   build: (name: string) => api.post<BuildResponse>(`api/build/${encodeURIComponent(name)}`),
+
+  get: (name: string) => api.get<ApiResult>(`api/projects/${encodeURIComponent(name)}/editor`),
 };

@@ -12,10 +12,12 @@ export const THEMES = [
   "cream-paper",
   "cream-paper-dark",
   "neon-arcade",
+  "wealth",
+  "wealth-dark",
 ];
 
 const STORAGE_KEY = "lyngame-theme";
-const DEFAULT_THEME = "retro-violet";
+const DEFAULT_THEME = "cream-paper-dark";
 
 export function getTheme() {
   const stored = localStorage.getItem(STORAGE_KEY) || DEFAULT_THEME;

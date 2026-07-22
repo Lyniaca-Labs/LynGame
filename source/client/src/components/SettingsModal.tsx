@@ -14,6 +14,8 @@ const THEME_LABELS: Record<string, string> = {
   "cream-paper": "Cream Paper",
   "cream-paper-dark": "Cream Paper Dark",
   "neon-arcade": "Neon Arcade",
+  "wealth": "Wealth",
+  "wealth-dark": "Wealth Dark",
 };
 
 const themeOptions = THEMES.map((t) => ({

@@ -46,30 +46,69 @@ body {
    same set of variables.
    ------------------------------------------------------------ */
 
+/*
+Theme Design Rules:
+
+- Backgrounds should be neutral enough for long editor sessions.
+- Borders must have clear separation from backgrounds without becoming distracting.
+- Text must maintain strong contrast against all surfaces.
+- Accent colors are reserved for interaction, selection, and important states.
+- Elevated surfaces should differ from the base background enough to create depth.
+*/
+
 :root,
+/* Dark purple editor — retro violet */
 [data-theme="retro-violet"] {
-  --color-bg: #13111a;
-  --color-bg-elevated: #1c1926;
-  --color-bg-inset: #0d0b12;
-  --color-border: #2e2a3d;
-  --color-border-strong: #453f5c;
+  --color-bg: #121019;
+  --color-bg-elevated: #1d1928;
+  --color-bg-inset: #090810;
 
-  --color-text: #f0edf7;
-  --color-text-muted: #a49bc0;
-  --color-text-faint: #6f6789;
+  --color-border: #403553;
+  --color-border-strong: #66517f;
 
-  --color-accent: #a855f7;
-  --color-accent-strong: #c084fc;
-  --color-accent-contrast: #13111a;
-  --color-accent-secondary: #f472b6;
+  --color-text: #f3eefc;
+  --color-text-muted: #b3a6ca;
+  --color-text-faint: #786b91;
 
-  --color-success: #4ade80;
-  --color-warning: #fbbf24;
-  --color-danger: #f87171;
+  --color-accent: #b56cff;
+  --color-accent-strong: #d3a0ff;
+  --color-accent-contrast: #121019;
+  --color-accent-secondary: #ef8fc8;
 
-  --color-canvas-grid: #241f33;
+  --color-success: #6fbb7d;
+  --color-warning: #d9a441;
+  --color-danger: #e0655a;
+
+  --color-canvas-grid: #241c31;
 }
 
+
+/* Cool graphite editor — icy blue */
+[data-theme="ice-blue"] {
+  --color-bg: #101417;
+  --color-bg-elevated: #192126;
+  --color-bg-inset: #080b0d;
+
+  --color-border: #304550;
+  --color-border-strong: #496572;
+
+  --color-text: #edf8fb;
+  --color-text-muted: #9bb3bc;
+  --color-text-faint: #6b838c;
+
+  --color-accent: #36cce5;
+  --color-accent-strong: #7ae7f5;
+  --color-accent-contrast: #101417;
+  --color-accent-secondary: #8f92ff;
+
+  --color-success: #6fbb7d;
+  --color-warning: #d9a441;
+  --color-danger: #e0655a;
+
+  --color-canvas-grid: #17252a;
+}
+
+/* Dark graphite with terminal green accents */
 [data-theme="terminal-green"] {
   --color-bg: #0d1117;
   --color-bg-elevated: #151b23;
@@ -93,74 +132,55 @@ body {
   --color-canvas-grid: #131a20;
 }
 
+
+/* Warm dark editor with sunset accents */
 [data-theme="sunset-pixel"] {
-  --color-bg: #111827;
-  --color-bg-elevated: #1a2333;
-  --color-bg-inset: #0b111c;
-  --color-border: #2a3547;
-  --color-border-strong: #3d4a60;
+  --color-bg: #171616;
+  --color-bg-elevated: #222020;
+  --color-bg-inset: #0e0d0d;
 
-  --color-text: #fdf2ec;
-  --color-text-muted: #b7a89e;
-  --color-text-faint: #7c7169;
+  --color-border: #3b3430;
+  --color-border-strong: #594b43;
 
-  --color-accent: #fb923c;
-  --color-accent-strong: #fdba74;
-  --color-accent-contrast: #111827;
-  --color-accent-secondary: #f472b6;
+  --color-text: #f8f0e8;
+  --color-text-muted: #b8aaa0;
+  --color-text-faint: #80736b;
 
-  --color-success: #4ade80;
-  --color-warning: #facc15;
-  --color-danger: #fb7185;
+  --color-accent: #e98a45;
+  --color-accent-strong: #f7b477;
+  --color-accent-contrast: #171616;
+  --color-accent-secondary: #d8799c;
 
-  --color-canvas-grid: #1a2130;
+  --color-success: #6fbb7d;
+  --color-warning: #d9a441;
+  --color-danger: #e0655a;
+
+  --color-canvas-grid: #292321;
 }
 
-[data-theme="ice-blue"] {
-  --color-bg: #0f172a;
-  --color-bg-elevated: #182338;
-  --color-bg-inset: #0a101f;
-  --color-border: #253449;
-  --color-border-strong: #37495f;
-
-  --color-text: #eaf6fb;
-  --color-text-muted: #93a8bb;
-  --color-text-faint: #5e7285;
-
-  --color-accent: #22d3ee;
-  --color-accent-strong: #67e8f9;
-  --color-accent-contrast: #0f172a;
-  --color-accent-secondary: #818cf8;
-
-  --color-success: #4ade80;
-  --color-warning: #fbbf24;
-  --color-danger: #f87171;
-
-  --color-canvas-grid: #16223a;
-}
-
-/* Really dark, crimson pastel-red */
+/* Dark neutral grayscale with subtle crimson structure */
 [data-theme="crimson-noir"] {
-  --color-bg: #120a0d;
-  --color-bg-elevated: #1c1013;
-  --color-bg-inset: #0a0507;
-  --color-border: #2e181c;
-  --color-border-strong: #4a2429;
+  --color-bg: #141414;
+  --color-bg-elevated: #1d1d1d;
+  --color-bg-inset: #0c0c0c;
 
-  --color-text: #f7e9ea;
-  --color-text-muted: #c2a0a5;
-  --color-text-faint: #7d5a5e;
+  --color-border: #3a252a;
+  --color-border-strong: #5a353d;
 
-  --color-accent: #e8a0a8;
-  --color-accent-strong: #f2bcc2;
-  --color-accent-contrast: #1c0b0d;
-  --color-accent-secondary: #d4788a;
+  --color-text: #f5f2f2;
+  --color-text-muted: #aaa3a5;
+  --color-text-faint: #888082;
 
-  --color-success: #4ade80;
-  --color-warning: #fbbf24;
-  --color-danger: #f87171;
+  --color-accent: #d85a68;
+  --color-accent-strong: #ef8290;
+  --color-accent-contrast: #140d0f;
+  --color-accent-secondary: #a84655;
 
-  --color-canvas-grid: #200f13;
+  --color-success: #6fbb7d;
+  --color-warning: #d9a441;
+  --color-danger: #e0655a;
+
+  --color-canvas-grid: #24171b;
 }
 
 /* White / cream, light */
@@ -234,6 +254,60 @@ body {
 
   --color-canvas-grid: #1e1e1e;
 }
+
+/* Luxury wealth theme — warm ivory, gold, and refined neutrals */
+[data-theme="wealth"] {
+  --color-bg: #f4efe6;
+  --color-bg-elevated: #fffaf1;
+  --color-bg-inset: #e9dfd0;
+
+  --color-border: #d8c39d;
+  --color-border-strong: #b99a62;
+
+  --color-text: #211b14;
+  --color-text-muted: #756653;
+  --color-text-faint: #a4937b;
+
+  --color-accent: #b8892d;
+  --color-accent-strong: #d5aa55;
+  --color-accent-contrast: #fffaf1;
+  --color-accent-secondary: #7d5c2b;
+
+  --color-success: #4f8a5b;
+  --color-warning: #b8862c;
+  --color-danger: #a94c45;
+
+  --color-canvas-grid: #e2d6c3;
+}
+
+
+/* Luxury wealth dark — black marble, gold, and champagne */
+/* Luxury wealth dark — graphite, champagne gold, premium neutral */
+[data-theme="wealth-dark"] {
+  --color-bg: #121212;
+  --color-bg-elevated: #1b1b1b;
+  --color-bg-inset: #0a0a0a;
+
+  --color-border: #39342a;
+  --color-border-strong: #5c5038;
+
+  --color-text: #f4f1e8;
+  --color-text-muted: #aaa394;
+  --color-text-faint: #716c61;
+
+  --color-accent: #d4af37;
+  --color-accent-strong: #f1d77a;
+  --color-accent-contrast: #121212;
+  --color-accent-secondary: #9c8450;
+
+  --color-success: #7fa66b;
+  --color-warning: #d4af37;
+  --color-danger: #c96a5b;
+
+  --color-canvas-grid: #202020;
+}
+
+
 /* ------------------------------------------------------------
    Base element styling using semantic tokens
    ------------------------------------------------------------ */

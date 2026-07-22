@@ -97,7 +97,7 @@ export function DropdownMenu({
           <div
             role="menu"
             className={cn(
-              "absolute z-50 mt-1 min-w-[11rem] overflow-visible rounded-[var(--radius-md)]",
+              "absolute z-50 mt-1 min-w-[11rem] overflow-visible rounded-[var(--radius-md)] select-none",
               "border border-[var(--color-border)] bg-[var(--color-bg-elevated)]",
               "py-1 shadow-[var(--shadow-panel)]",
               align === "end" ? "right-0" : "left-0",
