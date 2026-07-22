@@ -1,14 +1,55 @@
-import type { EditorSnapshot, Scene } from "./types";
-const request = async <T>(url: string, options?: RequestInit): Promise<T> => { const res = await fetch(url, options); const data = await res.json(); if (!res.ok || data.success === false) throw new Error(data.error || "Request failed"); return data; };
+const request = async <T>(url: string, options?: RequestInit): Promise<T> => {
+  const response = await fetch(url, options);
+
+  if (!response.ok) {
+    // surface the server's { error: "..." } message when it sends one,
+    // instead of just "status 400"
+    let message = `Request failed with status ${response.status}`;
+    try {
+      const body = await response.clone().json();
+      if (body?.error) message = body.error;
+    } catch {
+      // not JSON, fall back to the generic message
+    }
+    throw new Error(message);
+  }
+
+  return response.json() as Promise<T>;
+};
+
+export const PORT = 3000;
+export const BASE_URL = `http://localhost:${PORT}`;
+
 export const api = {
-  projects: () => request<{ projects: string[] }>("/api/projects"),
-  createProject: (name: string) => request(`/api/projects/${encodeURIComponent(name)}`, { method: "POST" }),
-  deleteProject: (name: string) => request(`/api/projects/${encodeURIComponent(name)}`, { method: "DELETE" }),
-  editor: (project: string) => request<EditorSnapshot>(`/api/projects/${encodeURIComponent(project)}/editor`),
-  scene: (project: string, scene: string) => request<{ scene: Scene }>(`/api/projects/${project}/scenes/${scene}`),
-  saveScene: (project: string, scene: string, value: Scene) => request(`/api/projects/${project}/scenes/${scene}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scene: value }) }),
-  openScript: (project: string, filename: string) => request(`/api/projects/${project}/open-script`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename }) }),
-  readFile: (project: string, folder: string, filename: string) => request<{ content: string }>(`/api/projects/${project}/${folder}/${filename}`),
-  writeFile: (project: string, folder: string, filename: string, content: string) => request(`/api/projects/${project}/${folder}/${filename}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) }),
-  build: (project: string) => request<{ url: string }>(`/api/build/${project}`, { method: "POST" }),
+  get: <T>(url: string) => request<T>(`${BASE_URL}/${url}`),
+  post: <T>(url: string, body?: unknown) =>
+    request<T>(`${BASE_URL}/${url}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
+  del: <T>(url: string) => request<T>(`${BASE_URL}/${url}`, { method: "DELETE" }),
+};
+
+// ---- Typed wrappers for the endpoints the UI actually calls ----
+
+export interface ProjectListResponse {
+  success: boolean;
+  projects: string[];
+}
+
+export interface ApiResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface BuildResponse extends ApiResult {
+  url?: string;
+}
+
+export const projectsApi = {
+  list: () => api.get<ProjectListResponse>("api/projects"),
+  create: (name: string) => api.post<ApiResult>(`api/projects/${encodeURIComponent(name)}`),
+  remove: (name: string) => api.del<ApiResult>(`api/projects/${encodeURIComponent(name)}`),
+  build: (name: string) => api.post<BuildResponse>(`api/build/${encodeURIComponent(name)}`),
 };

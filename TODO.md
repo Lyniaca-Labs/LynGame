@@ -1,27 +1,18 @@
 # Engine Roadmap
 
-## Next
-"Implement a react frontend and update my express backend to work within the react frontend,
-add flexible GUI that is component based. Look at the structure of scenes, components, and scripts
-and make the GUI automatically comform to the structure. Make it look very nice, use tailwind, have a
-very adjustable tailwind config. Implement an extension system to add new functionality to the engine.
-Possibly use 'https://codemirror.net' for the editor with an option to open in vscode.
-As the test extension (but also a real extension thats built in). Use https://reactflow.dev for a texture building system that should load into an asset on runtime / procedural texture generation through asset manager like. project/test/textures/texture.json
-then compile that into a function and add it to the asset manager.
-After all of that, go into TODO.md and check off the items you completed"
 
-- ability to create scripts and entities
-- should be able to duplicate and move
-- should be able to start typing in script and component lookup
-- should be able to edit prefabs
+LATER
+
+- visual node editor / extension basework ( used for textures to)
 
 ## Reported Bugs
 - [ ] When switching scene laggy with spawning script, newly spawned entities will be in wrong scene 
 
-## Highest Priority
+## Highest Priority 
 
 - [ ] Graphics framework first (foundation)
   - [ ] entity children
+  - [ ] event component (calls script on certain event to entity (hold, click, etc))
 - [ ] Game framework built on graphics framework
   - [ ] init funciton loading animation (as LynGame)
 - [ ] Engine GUI/editor on top of game framework
@@ -45,10 +36,11 @@ After all of that, go into TODO.md and check off the items you completed"
 
 ## Editor
 
-- [ ] Better GUI (possibly React)
-- [ ] Styling/theme config
+- [x] Better GUI (possibly React)
+- [x] Styling/theme config
 - [ ] VSCode integration
 - [ ] Pause when editor window is blurred
+- [ ] auto focus viewport on run
 - [ ] Loading screen with default engine loader/logo
 - [ ] Debug mode
 - [ ] Error handling

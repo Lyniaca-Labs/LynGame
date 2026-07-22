@@ -1,35 +1,174 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type React from "react";
-import { Box, ChevronDown, ChevronRight, Circle, Code2, Folder, Gamepad2, Layers3, Play, Save, Search, Settings2, Terminal, Trash2, Wrench, X, Plus } from "lucide-react";
-import CodeMirror from "@uiw/react-codemirror";
-import { javascript } from "@codemirror/lang-javascript";
-import { oneDark } from "@codemirror/theme-one-dark";
-import { api } from "./api";
-import { useEditor } from "./store";
-import type { ComponentSchema, Entity } from "./types";
+// src/App.tsx
+import { Button } from "./ui/Button";
+import { projectsApi } from "./api";
+import { Container } from "./ui/Container";
+import { Resizable } from "./ui/Resizable";
+import { Tabs } from "./ui/Tabs";
+import { useState } from "react";
+import { Play, Save as SaveIcon, Settings as SettingsIcon, FolderCog } from "lucide-react";
+import { SettingsModal } from "./components/SettingsModal";
+import { ProjectSettingsModal } from "./components/ProjectSettingsModal";
+import { ProjectSelector } from "./components/ProjectSelector";
+import { GameView } from "./components/GameView";
 
-const Icon = ({ name }: { name: string }) => name === "scene" ? <Layers3/> : name === "script" ? <Code2/> : name === "asset" ? <Box/> : <Folder/>;
-function Panel({ title, icon, children, className = "" }: { title: string; icon?: React.ReactNode; children: React.ReactNode; className?: string }) { const addEntity = useEditor(s => s.addEntity); const duplicateEntity = useEditor(s => s.duplicateEntity); const removeEntity = useEditor(s => s.removeEntity); const project = useEditor(s => s.project); const snapshot = useEditor(s => s.snapshot); const createScript = async () => { if (!project) return; const name = window.prompt("Script name", "NewScript"); if (!name?.trim()) return; const filename = name.trim().endsWith(".js") ? name.trim() : `${name.trim()}.js`; try { await api.writeFile(project, "scripts", filename, `export function ${filename.replace(/\.js$/, "")}() {\n  // New script\n}\n`); useEditor.setState(s => s.snapshot ? { snapshot: { ...s.snapshot, scripts: [...s.snapshot.scripts, filename] }, logs: [...s.logs, `Created script ${filename}`] } : {}); window.dispatchEvent(new CustomEvent("lyngame-open-script", { detail: filename })); } catch (error) { useEditor.setState(s => ({ logs: [...s.logs, `Script error: ${error instanceof Error ? error.message : "Could not create script"}`] })); } }; const editPrefab = () => { const prefab = window.prompt("Prefab filename", snapshot?.prefabs[0] ?? ""); if (prefab) window.dispatchEvent(new CustomEvent("lyngame-open-prefab", { detail: prefab.endsWith(".json") ? prefab : `${prefab}.json` })); }; return <section className={`panel ${className}`}><div className="panel-title">{icon}{title}{title === "Scene Hierarchy" && <span className="panel-tools"><button title="Create entity" onClick={addEntity}><Plus size={12}/></button><button title="Duplicate entity" onClick={duplicateEntity}><CopyIcon/></button><button title="Remove entity" onClick={removeEntity}><Trash2 size={12}/></button></span>}{title === "Project" && <span className="panel-tools"><button title="Create script" onClick={createScript}><Code2 size={12}/></button><button title="Edit prefab" onClick={editPrefab}><Box size={12}/></button></span>}<span className="panel-actions">•••</span></div>{children}</section>; }
-function CopyIcon() { return <span className="copy-icon">⧉</span>; }
+function App() {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
+  const [currentProject, setCurrentProject] = useState<string | null>(null);
+  const [gameUrl, setGameUrl] = useState<string | null>(null);
+  const [isBuilding, setIsBuilding] = useState(false);
+  const [buildError, setBuildError] = useState<string | null>(null);
 
-function ScriptEditor({ filename, onClose }: { filename: string; onClose: () => void }) {
-  const project = useEditor(s => s.project); const [value, setValue] = useState(""); const [saved, setSaved] = useState(true); const [error, setError] = useState("");
-  useEffect(() => { if (!project) return; setError(""); api.readFile(project, "scripts", filename).then(r => setValue(r.content)).catch(e => setError(e.message)); }, [project, filename]);
-  const save = async () => { if (!project) return; try { await api.writeFile(project, "scripts", filename, value); setSaved(true); } catch (e) { setError(e instanceof Error ? e.message : "Unable to save script"); } };
-  return <div className="script-editor-overlay"><div className="script-editor"><div className="script-editor-title"><Code2 size={15}/><strong>{filename}</strong><span className={saved ? "saved" : "dirty"}>{saved ? "Saved" : "Unsaved"}</span><button className="icon-btn" onClick={onClose}><X size={16}/></button></div>{error && <div className="editor-error">{error}</div>}<div className="script-code"><CodeMirror value={value} height="100%" theme={oneDark} extensions={[javascript({ jsx: true })]} onChange={next => { setValue(next); setSaved(false); }} /></div><div className="script-editor-footer"><span>JavaScript · CodeMirror</span><button className="save-btn" onClick={save}><Save size={13}/>Save</button></div></div></div>;
+  const handleSelectProject = (project: string) => {
+    setCurrentProject(project || null);
+    setGameUrl(null);
+    setBuildError(null);
+  };
+
+  const runGame = async () => {
+    if (!currentProject) return;
+    setIsBuilding(true);
+    setBuildError(null);
+    setGameUrl(null);
+    try {
+      const result = await projectsApi.build(currentProject);
+      if (result.url) {
+        setGameUrl(result.url);
+      } else {
+        setBuildError(result.error ?? "Build did not return a URL");
+      }
+    } catch (err) {
+      setBuildError(err instanceof Error ? err.message : "Build failed");
+    } finally {
+      setIsBuilding(false);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!currentProject) return;
+
+    await projectsApi.remove(currentProject);
+
+    const { projects } = await projectsApi.list();
+    setCurrentProject(projects[0] ?? null);
+
+    setGameUrl(null);
+    setBuildError(null);
+  };
+
+  return (
+    <main className="flex h-screen min-h-screen flex-col gap-3 bg-[var(--color-bg)] p-3 text-[var(--color-text)]">
+      <div className="flex shrink-0 items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-2.5">
+        <div className="flex items-center gap-4">
+          <span className="text-sm font-semibold tracking-wide text-[var(--color-text)]">
+            Editor
+          </span>
+          <ProjectSelector currentProject={currentProject} onSelect={handleSelectProject} />
+        </div>
+        <div className="flex items-center gap-2">
+          <Button onClick={runGame} disabled={!currentProject || isBuilding}>
+            <span className="flex items-center gap-1.5">
+              <Play size={16} />
+              {isBuilding ? "Building…" : "Run"}
+            </span>
+          </Button>
+          <Button>
+            <span className="flex items-center gap-1.5">
+              <SaveIcon size={16} />
+              Save
+            </span>
+          </Button>
+          <Button
+            onClick={() => setProjectSettingsOpen(true)}
+            disabled={!currentProject}
+            aria-label="Project settings"
+          >
+            <FolderCog size={16} />
+          </Button>
+          <Button onClick={() => setSettingsOpen(true)} aria-label="Settings">
+            <SettingsIcon size={16} />
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1">
+        <Resizable axis="x" handle="end" defaultSize={224} min={160} max={480}>
+          <Container
+            title="Explorer"
+            description="Browse project files, scenes, and assets."
+            bodyClassName="p-0"
+          >
+            <Tabs
+              tabs={[
+                { id: "files", label: "Files", content: <PlaceholderPanel label="File tree" /> },
+                { id: "search", label: "Search", content: <PlaceholderPanel label="Search results" /> },
+              ]}
+            />
+          </Container>
+        </Resizable>
+
+        <div className="min-w-0 flex-1">
+          <Container title="Viewport" bodyClassName="p-0">
+            <GameView
+              project={currentProject}
+              gameUrl={gameUrl}
+              isBuilding={isBuilding}
+              error={buildError}
+            />
+          </Container>
+        </div>
+
+        <Resizable axis="x" handle="start" defaultSize={256} min={200} max={480}>
+          <Container
+            title="Inspector"
+            description="Edit properties of the currently selected object."
+            bodyClassName="p-0"
+          >
+            <Tabs
+              tabs={[
+                { id: "properties", label: "Properties", content: <PlaceholderPanel label="Properties" /> },
+                { id: "style", label: "Style", content: <PlaceholderPanel label="Style" /> },
+              ]}
+            />
+          </Container>
+        </Resizable>
+      </div>
+
+      <Resizable axis="y" handle="start" defaultSize={160} min={100} max={400}>
+        <Container
+          title="Console"
+          description="Logs, warnings, and errors emitted while running."
+          bodyClassName="p-0"
+        >
+          <Tabs
+            tabs={[
+              { id: "output", label: "Output", content: <PlaceholderPanel label="Output log" /> },
+              { id: "problems", label: "Problems", content: <PlaceholderPanel label="Problems" /> },
+              { id: "assets", label: "Assets", content: <PlaceholderPanel label="Assets" /> },
+            ]}
+          />
+        </Container>
+      </Resizable>
+
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      {currentProject && (
+        <ProjectSettingsModal
+          open={projectSettingsOpen}
+          onClose={() => setProjectSettingsOpen(false)}
+          projectName={currentProject}
+          onDelete={handleDeleteProject}
+      />
+      )}
+    </main>
+  );
 }
-function PrefabEditor({ filename, onClose }: { filename: string; onClose: () => void }) { const project = useEditor(s => s.project); const [value, setValue] = useState(""); const [saved, setSaved] = useState(true); const [error, setError] = useState(""); useEffect(() => { if (project) api.readFile(project, "prefabs", filename).then(r => setValue(r.content)).catch(e => setError(e.message)); }, [project, filename]); const save = async () => { if (!project) return; try { const parsed = JSON.parse(value); await api.writeFile(project, "prefabs", filename, JSON.stringify(parsed, null, 2)); setSaved(true); } catch (e) { setError(e instanceof Error ? e.message : "Prefab JSON is invalid"); } }; return <div className="script-editor-overlay"><div className="script-editor"><div className="script-editor-title"><Box size={15}/><strong>{filename}</strong><span className={saved ? "saved" : "dirty"}>{saved ? "Saved" : "Unsaved"}</span><button className="icon-btn" onClick={onClose}><X size={16}/></button></div>{error && <div className="editor-error">{error}</div>}<div className="script-code"><CodeMirror value={value} height="100%" theme={oneDark} extensions={[javascript()]} onChange={next => { setValue(next); setSaved(false); }}/></div><div className="script-editor-footer"><span>Prefab JSON · CodeMirror</span><button className="save-btn" onClick={save}><Save size={13}/>Save</button></div></div></div>; }
-function DocumentHost() { const [prefab, setPrefab] = useState<string | null>(null); useEffect(() => { const onPrefab = (e: Event) => setPrefab((e as CustomEvent<string>).detail); window.addEventListener("lyngame-open-prefab", onPrefab); return () => window.removeEventListener("lyngame-open-prefab", onPrefab); }, []); return prefab ? <PrefabEditor filename={prefab} onClose={() => setPrefab(null)}/> : null; }
 
-function ProjectExplorer({ openScript }: { openScript: (file: string) => void }) { const { snapshot, project, openScene } = useEditor(); const [query, setQuery] = useState(""); const [collapsed, setCollapsed] = useState<Record<string, boolean>>({}); if (!snapshot) return <Panel title="Project"><div className="empty">Select a project to begin</div></Panel>; const groups = [{ label: "Scenes", icon: "scene", files: snapshot.scenes }, { label: "Prefabs", icon: "folder", files: snapshot.prefabs }, { label: "Scripts", icon: "script", files: snapshot.scripts }]; return <Panel title="Project" icon={<Folder/>}><div className="project-name"><span className="status-dot"/>{project}<Settings2 size={13}/></div><div className="search"><Search size={14}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Filter assets..."/></div><div className="tree">{groups.map(group => <div key={group.label}><button className="tree-group" onClick={() => setCollapsed(c => ({ ...c, [group.label]: !c[group.label] }))}>{collapsed[group.label] ? <ChevronRight size={14}/> : <ChevronDown size={14}/>}<Icon name={group.icon}/>{group.label}<span>{group.files.length}</span></button>{!collapsed[group.label] && group.files.filter(f => f.toLowerCase().includes(query.toLowerCase())).map(file => <button className="tree-file" key={file} onClick={() => group.label === "Scenes" ? openScene(file) : group.label === "Scripts" ? openScript(file) : undefined}><Icon name={group.icon}/>{file.replace(/\.json$|\.js$/, "")}</button>)}</div>)}</div></Panel>; }
-function Hierarchy() { const { scene, selectedEntity, selectEntity } = useEditor(); return <Panel title="Scene Hierarchy" icon={<Layers3/>}><div className="scene-label"><ChevronDown size={14}/><Folder size={14}/> {scene?.name ?? "No scene"}</div><div className="hierarchy">{scene?.entities.map(entity => <button className={`entity ${selectedEntity === entity.id ? "selected" : ""}`} key={entity.id} onClick={() => selectEntity(entity.id)}><ChevronRight size={14}/><Circle size={10} fill="currentColor"/>{entity.id}<span className="entity-type">{entity.prefab ?? "Entity"}</span></button>)}</div>{!scene && <div className="empty">No scene loaded</div>}</Panel>; }
-function Field({ schema, value, onChange }: { schema: ComponentSchema["fields"][number]; value: any; onChange: (v: any) => void }) { if (schema.type === "boolean") return <label className="field"><span>{schema.key}</span><input type="checkbox" checked={Boolean(value)} onChange={e => onChange(e.target.checked)}/></label>; if (schema.type === "color") return <label className="field"><span>{schema.key}</span><span className="color-input"><input type="color" value={value || "#ffffff"} onChange={e => onChange(e.target.value)}/>{value}</span></label>; if (schema.type === "vector") return <div className="field vector"><span>{schema.key}</span><div><input type="number" value={value?.x ?? 0} onChange={e => onChange({ ...value, x: Number(e.target.value) })}/><input type="number" value={value?.y ?? 0} onChange={e => onChange({ ...value, y: Number(e.target.value) })}/></div></div>; return <label className="field"><span>{schema.key}</span><input type={schema.type === "number" ? "number" : "text"} value={value ?? ""} onChange={e => onChange(schema.type === "number" ? Number(e.target.value) : e.target.value)}/></label>; }
-function SearchPicker({ placeholder, options, value, onChange }: { placeholder: string; options: string[]; value: string; onChange: (value: string) => void }) { const [query, setQuery] = useState(""); const filtered = options.filter(option => option.toLowerCase().includes(query.toLowerCase())); return <div className="search-picker"><input value={query} onChange={e => setQuery(e.target.value)} placeholder={value || placeholder}/>{query && <div className="search-picker-menu">{filtered.slice(0, 12).map(option => <button key={option} onClick={() => { onChange(option); setQuery(""); }}>{option}</button>)}{filtered.length === 0 && <span>No matches</span>}</div>}</div>; }
+function PlaceholderPanel({ label }: { label: string }) {
+  return (
+    <div className="flex h-full items-center justify-center p-3 text-xs text-[var(--color-text-faint)]">
+      {label}
+    </div>
+  );
+}
 
-function Inspector({ openScript }: { openScript: (file: string) => void }) { const { scene, selectedEntity, snapshot, updateEntity } = useEditor(); const entity = scene?.entities.find(e => e.id === selectedEntity); const [collapsed, setCollapsed] = useState<Record<string, boolean>>({}); const [componentToAdd, setComponentToAdd] = useState(""); const [scriptToAdd, setScriptToAdd] = useState(""); if (!entity || !snapshot) return <Panel title="Inspector" icon={<Settings2/>}><div className="empty">Select an entity to inspect</div></Panel>; const components = entity.components ?? {}; const edit = (component: string, key: string, value: unknown) => updateEntity(e => ({ ...e, components: { ...e.components, [component]: { ...(e.components?.[component] ?? {}), [key]: value } } })); const addComponent = () => { const schema = snapshot.components[componentToAdd]; if (!schema) return; const defaults = Object.fromEntries(schema.fields.map(f => [f.key, f.defaultValue])); updateEntity(e => ({ ...e, components: { ...(e.components ?? {}), [componentToAdd]: defaults } })); setComponentToAdd(""); }; const removeComponent = (name: string) => updateEntity(e => { const next = { ...(e.components ?? {}) }; delete next[name]; return { ...e, components: next }; }); const addScript = () => { if (!scriptToAdd || entity.scripts?.includes(scriptToAdd)) return; updateEntity(e => ({ ...e, scripts: [...(e.scripts ?? []), scriptToAdd] })); setScriptToAdd(""); }; const removeScript = (script: string) => updateEntity(e => ({ ...e, scripts: (e.scripts ?? []).filter(s => s !== script) })); return <Panel title="Inspector" icon={<Settings2/>}><div className="inspector-heading"><div className="entity-avatar"><Box/></div><div><strong>{entity.id}</strong><small>{entity.prefab ? `Prefab · ${entity.prefab}` : "Scene Entity"}</small></div></div>{Object.entries(components).map(([name, values]) => { const schema = snapshot.components[name]; const isCollapsed = collapsed[name]; return <div className="component" key={name}><div className="component-title"><button className="collapse-button" onClick={() => setCollapsed(c => ({ ...c, [name]: !c[name] }))}>{isCollapsed ? <ChevronRight size={14}/> : <ChevronDown size={14}/>}</button>{name}<button className="remove-button" title={`Remove ${name}`} onClick={() => removeComponent(name)}><Trash2 size={12}/></button></div>{!isCollapsed && (schema ? schema.fields.map(field => <Field key={field.key} schema={field} value={(values as any)[field.key] ?? field.defaultValue} onChange={v => edit(name, field.key, v)}/>) : <div className="unknown">No schema metadata available</div>)}</div>; })}<div className="add-row"><SearchPicker placeholder="Add component…" options={Object.keys(snapshot.components).filter(name => !components[name])} value={componentToAdd} onChange={setComponentToAdd}/><button onClick={addComponent} disabled={!componentToAdd}><Plus size={13}/></button></div><div className="component scripts"><div className="component-title"><ChevronDown size={14}/>Scripts</div>{(entity.scripts ?? []).map(script => <div className="script-row" key={script}><button onClick={() => openScript(`${script}.js`)}><Code2 size={13}/>{script}</button><button className="remove-button" onClick={() => removeScript(script)}><Trash2 size={12}/></button></div>)}<div className="add-row"><SearchPicker placeholder="Add script…" options={snapshot.scripts.map(file => file.replace(/\.js$/, ""))} value={scriptToAdd} onChange={setScriptToAdd}/><button onClick={addScript} disabled={!scriptToAdd}><Plus size={13}/></button></div></div></Panel>; }
-function CanvasView() { const { view, scene, gameUrl } = useEditor(); return <div className="viewport"><div className="viewport-tabs"><button className={view === "scene" ? "active" : ""} onClick={() => useEditor.setState({ view: "scene" })}><Wrench size={14}/>Scene</button><button className={view === "game" ? "active" : ""} onClick={() => useEditor.setState({ view: "game" })}><Gamepad2 size={14}/>Game</button></div>{view === "game" ? gameUrl ? <iframe title="game" src={gameUrl} className="game-frame"/> : <div className="empty">Run the project to load the game view.</div> : <div className="scene-canvas"><div className="canvas-grid"/>{scene?.entities.map((e, i) => <div className="canvas-entity" key={e.id} style={{ left: `${(e.components?.Transform?.x as number) ?? 80}px`, top: `${(e.components?.Transform?.y as number) ?? i * 70 + 50}px` }}>{e.id}</div>)}</div>}</div>; }
-function BottomPanel() { const { bottomPanel, logs, snapshot } = useEditor(); return <div className="bottom"><div className="bottom-tabs"><button className={bottomPanel === "console" ? "active" : ""} onClick={() => useEditor.setState({ bottomPanel: "console" })}><Terminal size={14}/>Console <span>{logs.length}</span></button><button className={bottomPanel === "assets" ? "active" : ""} onClick={() => useEditor.setState({ bottomPanel: "assets" })}><Box size={14}/>Assets <span>{snapshot?.assets.length ?? 0}</span></button></div>{bottomPanel === "console" ? <div className="logs">{logs.map((log, i) => <div key={i}><span className="log-time">{String(i + 9).padStart(2, "0")}:{String(i * 7).padStart(2, "0")}</span>{log}</div>)}</div> : <div className="asset-grid">{snapshot?.assets.map(asset => <div className="asset-card" key={asset.key}><Box size={20}/><span>{asset.key}</span><small>{asset.type}</small></div>)}</div>}</div>; }
-
-function App() { const { projects, project, openProject, build, save, loading } = useEditor(); const [projectMenu, setProjectMenu] = useState(false); const [script, setScript] = useState<string | null>(null); const [leftWidth, setLeftWidth] = useState(226); const [rightWidth, setRightWidth] = useState(290); const [bottomHeight, setBottomHeight] = useState(158); const [dragging, setDragging] = useState<"left" | "right" | "bottom" | null>(null); useEffect(() => { api.projects().then(r => useEditor.setState({ projects: r.projects })).catch(e => useEditor.setState(s => ({ logs: [...s.logs, `Project error: ${e.message}`] }))); }, []); useEffect(() => { const move = (e: PointerEvent) => { if (dragging === "left") setLeftWidth(Math.max(180, Math.min(360, e.clientX - 32))); if (dragging === "right") setRightWidth(Math.max(220, Math.min(420, window.innerWidth - e.clientX))); if (dragging === "bottom") setBottomHeight(Math.max(100, Math.min(420, window.innerHeight - e.clientY - 24))); }; const up = () => setDragging(null); window.addEventListener("pointermove", move); window.addEventListener("pointerup", up); return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); }; }, [dragging]); const current = project ?? projects[0]; useEffect(() => { if (!project && current) openProject(current); }, [current, project, openProject]); const projectItems = useMemo(() => projects.length ? projects : ["No projects"], [projects]); const refreshProjects = () => api.projects().then(r => useEditor.setState({ projects: r.projects })); const createProject = async () => { const name = window.prompt("New project name"); if (!name?.trim()) return; try { await api.createProject(name.trim()); await refreshProjects(); await openProject(name.trim()); } catch (e) { useEditor.setState(s => ({ logs: [...s.logs, `Project error: ${e instanceof Error ? e.message : "Could not create project"}`] })); } }; const deleteProject = async () => { if (!project || !window.confirm(`Delete project ${project}?`)) return; try { await api.deleteProject(project); useEditor.setState({ project: null, snapshot: null, scene: null, selectedEntity: null }); await refreshProjects(); } catch (e) { useEditor.setState(s => ({ logs: [...s.logs, `Project error: ${e instanceof Error ? e.message : "Could not delete project"}`] })); } }; return <div className="app"><header className="topbar"><div className="brand"><div className="brand-mark">L</div><span>Lyn<span>Game</span></span><small>EDITOR</small></div><div className="project-picker"><button onClick={() => setProjectMenu(!projectMenu)}>{project ?? "Choose project"}<ChevronDown size={14}/></button>{projectMenu && <div className="dropdown"><button onClick={createProject}><Plus size={13}/> New project</button>{projectItems.map(p => <button key={p} onClick={() => { if (p !== "No projects") openProject(p); setProjectMenu(false); }}>{p}</button>)}{project && <button className="danger-menu" onClick={deleteProject}><Trash2 size={13}/> Delete project</button>}</div>}</div><div className="toolbar-center"><button className="icon-btn"><X size={15}/></button><button className="icon-btn"><Play size={15}/></button><span className="mode-pill">EDIT</span></div><div className="top-actions"><button className="save-btn" onClick={save}><Save size={14}/>Save</button><button className="run-btn" onClick={build}><Play size={14} fill="currentColor"/>Run</button><button className="icon-btn"><Settings2 size={16}/></button></div></header><div className="workspace" style={{ gridTemplateColumns: `32px ${leftWidth}px 5px minmax(420px,1fr) 5px ${rightWidth}px`, gridTemplateRows: `minmax(0,1fr)` }}><aside className="left-rail"><div className="rail-active"><Folder/></div><div><Layers3/><Code2/><Box/></div></aside><main className="left-column"><ProjectExplorer openScript={setScript}/><Hierarchy/></main><div className="dock-handle" onPointerDown={() => setDragging("left")}/><main className="center-column"><div className="editor-toolbar"><span>{loading ? "Loading..." : project ? `Workspace / ${project}` : "Welcome"}</span><span className="shortcut">CTRL K  CTRL S</span></div><CanvasView/><div className="bottom-resize dock-handle" onPointerDown={() => setDragging("bottom")}/><div style={{ height: bottomHeight, minHeight: 100 }}><BottomPanel/></div></main><div className="dock-handle" onPointerDown={() => setDragging("right")}/><aside className="right-column"><Inspector openScript={setScript}/></aside></div><footer className="statusbar"><span><span className="status-dot"/> {project ?? "No project"}</span><span>Engine 0.1.0 · Schema-driven editor</span><span>UTF-8</span></footer>{script && <ScriptEditor filename={script} onClose={() => setScript(null)}/>}</div>; }
-function App2() { const { projects, project, openProject, build, save, loading } = useEditor(); const [script, setScript] = useState<string | null>(null); const [left, setLeft] = useState(226); const [right, setRight] = useState(290); const [bottom, setBottom] = useState(158); const [drag, setDrag] = useState<"left" | "right" | "bottom" | null>(null); useEffect(() => { api.projects().then(r => useEditor.setState({ projects: r.projects })).catch(e => useEditor.setState(s => ({ logs: [...s.logs, e.message] }))); }, []); useEffect(() => { const move = (e: PointerEvent) => { if (drag === "left") setLeft(Math.max(180, Math.min(360, e.clientX - 32))); if (drag === "right") setRight(Math.max(220, Math.min(420, innerWidth - e.clientX))); if (drag === "bottom") setBottom(Math.max(100, Math.min(420, innerHeight - e.clientY - 24))); }; const up = () => setDrag(null); addEventListener("pointermove", move); addEventListener("pointerup", up); return () => { removeEventListener("pointermove", move); removeEventListener("pointerup", up); }; }, [drag]); useEffect(() => { const onScript = (e: Event) => setScript((e as CustomEvent<string>).detail); addEventListener("lyngame-open-script", onScript); return () => removeEventListener("lyngame-open-script", onScript); }, []); const current = project ?? projects[0]; useEffect(() => { if (!project && current) openProject(current); }, [current, project, openProject]); const createProject = async () => { const name = prompt("New project name"); if (!name) return; await api.createProject(name); useEditor.setState({ projects: [...projects, name] }); await openProject(name); }; const createScript = async () => { if (!project) return; const name = prompt("Script name", "NewScript"); if (!name) return; const filename = name.endsWith(".js") ? name : `${name}.js`; await api.writeFile(project, "scripts", filename, `export function ${filename.replace(/\.js$/, "")}() {\n}\n`); useEditor.setState(s => s.snapshot ? { snapshot: { ...s.snapshot, scripts: [...s.snapshot.scripts, filename] } } : {}); setScript(filename); }; return <div className="app"><header className="topbar"><div className="brand"><div className="brand-mark">L</div><span>Lyn<span>Game</span></span><small>EDITOR</small></div><div className="project-picker"><button onClick={() => openProject(prompt("Project", project ?? current ?? "") || project || current)}>{project ?? "Choose project"}<ChevronDown size={14}/></button></div><div className="toolbar-center"><span className="mode-pill">EDIT</span></div><div className="top-actions"><button className="save-btn" onClick={save}><Save size={14}/>Save</button><button className="run-btn" onClick={build}><Play size={14}/>Run</button></div></header><div className="workspace" style={{ gridTemplateColumns: `32px ${left}px 5px minmax(420px,1fr) 5px ${right}px` }}><aside className="left-rail"><div className="rail-active"><Folder/></div><div><Layers3/><Code2/><Box/></div></aside><main className="left-column"><div className="panel-tools project-actions"><button onClick={createProject}><Plus size={12}/>Project</button><button onClick={createScript}><Code2 size={12}/>Script</button></div><ProjectExplorer openScript={setScript}/><Hierarchy/></main><div className="dock-handle" onPointerDown={() => setDrag("left")}/><main className="center-column"><div className="editor-toolbar"><span>{loading ? "Loading..." : project ? `Workspace / ${project}` : "Welcome"}</span></div><CanvasView/><div className="bottom-resize dock-handle" onPointerDown={() => setDrag("bottom")}/><div style={{ height: bottom, minHeight: 100 }}><BottomPanel/></div></main><div className="dock-handle" onPointerDown={() => setDrag("right")}/><aside className="right-column"><Inspector openScript={setScript}/></aside></div><footer className="statusbar"><span><span className="status-dot"/> {project ?? "No project"}</span><span>Engine 0.1.0 · Schema-driven editor</span><span>UTF-8</span></footer>{script && <ScriptEditor filename={script} onClose={() => setScript(null)}/>}<DocumentHost/></div>; }
-export default App2;
+export default App;

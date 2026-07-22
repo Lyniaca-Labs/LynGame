@@ -1,9 +1,24 @@
 {
-  "name": "lyngame-editor",
+  "name": "lyngame-client",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
-  "dependencies": { "@vitejs/plugin-react": "latest", "vite": "latest", "typescript": "latest", "react": "latest", "react-dom": "latest", "lucide-react": "latest", "zustand": "latest", "tailwindcss": "latest", "@tailwindcss/vite": "latest", "@uiw/react-codemirror": "latest", "@codemirror/lang-javascript": "latest", "@codemirror/theme-one-dark": "latest" },
-  "devDependencies": { "@types/react": "latest", "@types/react-dom": "latest" }
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "latest",
+    "@vitejs/plugin-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "tailwindcss": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
 }
