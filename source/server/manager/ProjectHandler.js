@@ -62,6 +62,7 @@ export default class ProjectHandler {
   static scanAssets(projectName) {
     const assetsDir = path.join(__dirname, "../../projects", projectName, "assets");
     const manifest = {}; // key -> { relativePath, type }
+    
 
     if (!fs.existsSync(assetsDir)) return manifest;
 
@@ -115,68 +116,40 @@ export default class ProjectHandler {
     return result;
   }
 
+  static async loadComponentClass(projectName, entry) {
+    const file = entry.source === "engine"
+      ? path.join(__dirname, "../../engine/components", entry.filename)
+      : path.join(__dirname, "../../projects", projectName, "components", entry.filename);
+
+    try {
+      const mod = await import(pathToFileURL(file).href);
+      return mod.default ?? mod[entry.className ?? Object.keys(mod)[0]];
+    } catch {
+      return null;
+    }
+  }
+
   static componentSchemas(projectName) {
     const manifest = this.scanComponents(projectName);
     const schemas = {};
 
     for (const [name, entry] of Object.entries(manifest)) {
       const editable = entry.source !== "engine";
-
       const file = entry.source === "engine"
         ? path.join(__dirname, "../../engine/components", entry.filename)
         : path.join(__dirname, "../../projects", projectName, "components", entry.filename);
 
-      const source = fs.readFileSync(file, "utf8");
+      const ComponentClass = this.loadComponentClass(projectName, entry);
+      const declaredSchema = ComponentClass?.schema;
 
-      const constructorStart = source.indexOf("constructor");
-      const constructorEnd = source.indexOf(") {", constructorStart);
-      const constructorSource =
-        constructorStart >= 0 && constructorEnd >= 0
-          ? source.slice(constructorStart, constructorEnd)
-          : "";
-
-      const fields = [];
-
-      if (constructorSource) {
-        const fieldPattern =
-          /([A-Za-z_$][\w$]*)\s*=\s*(\{[^}]*\}|\[[^\]]*\]|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|#[0-9a-fA-F]{3,8}|-?\d+(?:\.\d+)?|true|false|null)/g;
-
-        let field;
-        while ((field = fieldPattern.exec(constructorSource))) {
-          const raw = field[2].trim();
-
-          let value = raw;
-          try {
-            value = JSON.parse(
-              raw
-                .replace(/([A-Za-z_$][\w$]*)\s*:/g, '"$1":')
-                .replace(/'/g, '"')
-            );
-          } catch {
-            // Source defaults can be expressions.
-          }
-
-          const type =
-            typeof value === "number"
-              ? "number"
-              : typeof value === "boolean"
-                ? "boolean"
-                : (value && typeof value === "object") || raw.startsWith("{")
-                  ? "vector"
-                  : (typeof value === "string" &&
-                    /^#[0-9a-f]{3,8}$/i.test(value)) ||
-                    raw.startsWith("#")
-                    ? "color"
-                    : "text";
-
-          fields.push({
-            key: field[1],
-            type,
-            defaultValue: value,
-            editable,
-          });
-        }
-      }
+      const fields = declaredSchema && Object.keys(declaredSchema).length > 0
+        ? Object.entries(declaredSchema).map(([key, def]) => ({
+          key,
+          type: def.type,
+          defaultValue: def.default,
+          editable,
+        }))
+        : this.inferFieldsFromSource(fs.readFileSync(file, "utf8"), editable);
 
       schemas[name] = {
         name,
@@ -188,6 +161,54 @@ export default class ProjectHandler {
     }
 
     return schemas;
+  }
+
+  // Legacy fallback: reverse-engineers field metadata by regex-scanning the
+  // constructor source. Only used for components that haven't declared a
+  // static `schema` yet. Remove once all components are migrated.
+  static inferFieldsFromSource(source, editable) {
+    const constructorStart = source.indexOf("constructor");
+    const constructorEnd = source.indexOf(") {", constructorStart);
+    const constructorSource =
+      constructorStart >= 0 && constructorEnd >= 0
+        ? source.slice(constructorStart, constructorEnd)
+        : "";
+
+    const fields = [];
+    if (!constructorSource) return fields;
+
+    const fieldPattern =
+      /([A-Za-z_$][\w$]*)\s*=\s*(\{[^}]*\}|\[[^\]]*\]|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|#[0-9a-fA-F]{3,8}|-?\d+(?:\.\d+)?|true|false|null)/g;
+
+    let field;
+    while ((field = fieldPattern.exec(constructorSource))) {
+      const raw = field[2].trim();
+
+      let value = raw;
+      try {
+        value = JSON.parse(
+          raw.replace(/([A-Za-z_$][\w$]*)\s*:/g, '"$1":').replace(/'/g, '"')
+        );
+      } catch {
+        // Source defaults can be expressions.
+      }
+
+      const type =
+        typeof value === "number"
+          ? "number"
+          : typeof value === "boolean"
+            ? "boolean"
+            : (value && typeof value === "object") || raw.startsWith("{")
+              ? "vector"
+              : (typeof value === "string" && /^#[0-9a-f]{3,8}$/i.test(value)) ||
+                raw.startsWith("#")
+                ? "color"
+                : "text";
+
+      fields.push({ key: field[1], type, defaultValue: value, editable });
+    }
+
+    return fields;
   }
 
   static editorSnapshot(projectName) {
@@ -248,6 +269,19 @@ export default class ProjectHandler {
           bodyLines.push(
             `    const ${varName} = engine.prefabs.instantiate("${entity.prefab}", ${JSON.stringify(entity.overrides || {})}, "${entity.id}");`
           );
+
+          // Entity-local components/scripts layered on top of the prefab (e.g.
+          // added via the Inspector's "Components" section while a prefab is
+          // attached). These aren't part of the prefab, so instantiate() has no
+          // idea about them — add them explicitly after instantiation.
+          for (const [compName, data] of Object.entries(entity.components || {})) {
+            allComponents.add(compName);
+            bodyLines.push(`    ${varName}.addComponent(${compName}, ${JSON.stringify(data)});`);
+          }
+          for (const scriptName of entity.scripts || []) {
+            allScripts.add(scriptName);
+            bodyLines.push(`    ${varName}.attachScript(${scriptName});`);
+          }
         } else {
           bodyLines.push(...renderEntity(entity, `entity_${entity.id}`, `"${entity.id}"`));
         }
@@ -315,7 +349,7 @@ ${prefabFunctions.join("\n\n")}
 ${sceneFunctions.join("\n\n")}
 
 export async function init(engine) {
-  await engine.assets.load(${JSON.stringify(assetManifest)}, "./assets");
+  await engine.assets.load(${JSON.stringify(assetManifest)}, "./game/assets");
 ${prefabRegistrations.join("\n")}
 ${sceneRegistrations}
   engine.loadScene("${config.startScene}");

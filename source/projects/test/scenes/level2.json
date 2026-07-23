@@ -38,6 +38,11 @@
           "width": 32,
           "height": 32,
           "color": "#fff"
+        },
+        "Gravity": {
+          "force": 500,
+          "velocityY": 0,
+          "grounded": false
         }
       }
     }

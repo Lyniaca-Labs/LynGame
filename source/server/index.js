@@ -89,7 +89,7 @@ app.post("/api/projects/:project", (req, res) => {
           id: "rectangle1",
           components: {
             Transform: { x: 50, y: 50, rotation: 0 },
-            SpriteRenderer: { width: 100, height: 100, color: "#00ff00" }
+            ShapeRenderer: { width: 100, height: 100, color: "#00ff00" }
           }
         }
       ]

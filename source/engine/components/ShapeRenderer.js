@@ -1,6 +1,13 @@
 import { Component } from "../types/Component.js";
 
 export class ShapeRenderer extends Component {
+  static schema = {
+    shape: { type: "string", default: "rect" }, // "rect" or "circle"
+    width: { type: "number", default: 32 },
+    height: { type: "number", default: 32 },
+    color: { type: "string", default: "#fff" },
+  };
+  
   constructor({ shape = "rect", width = 32, height = 32, color = "#fff" } = {}) {
     super();
     this.shape = shape;

@@ -1,6 +1,10 @@
-cd source
-cd engine
-npm start
+@echo off
 
-cd ..
-cd client
+cd source
+cd server
+
+start "" cmd /k "npm start"
+
+timeout /t 3 /nobreak >nul
+
+start "" http://localhost:5664

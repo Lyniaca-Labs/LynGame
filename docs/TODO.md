@@ -13,6 +13,7 @@ LATER
 - [ ] Graphics framework first (foundation)
   - [ ] entity children
   - [ ] event component (calls script on certain event to entity (hold, click, etc))
+  - [ ] ability to turn off antialiasing in config
 - [ ] Game framework built on graphics framework
   - [ ] init funciton loading animation (as LynGame)
 - [ ] Engine GUI/editor on top of game framework
@@ -20,13 +21,17 @@ LATER
   - [ ] keyboard shortcuts
   - [ ] ability to load a preview of an entity from editor (same with scene)
   - [ ] ability to pause the game
-  - [ ] code editor
+  - [x] code editor
   - [ ] can edit prefabs
   - [ ] export project to zip (with a node live server. Can use node or python, or powershell (ps1) to run)
   - [ ] deleting, creating, renaming scripts and components
   - [ ] get codemirror code editor to fit screen better
   - [ ] codemirror code editor should be based on selected theme
   - [ ] get open in vscode working
+  - [ ] should be able to put components on a prefab instance, seperate from overrides
+  - [ ] undo / redo
+  - [ ] visual editor and context menu in scene
+  - [ ] ESLINT in code editor
 
 - [ ] Good overall architecture/design pattern
   - [ ] turn server into typescript, keep all project files and engine files javascript

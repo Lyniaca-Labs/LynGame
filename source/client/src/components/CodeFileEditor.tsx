@@ -1,26 +1,31 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
+import { Compartment } from "@codemirror/state";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { tags as t } from "@lezer/highlight";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
-import { ExternalLink, Save, Loader2 } from "lucide-react";
+import {
+  ExternalLink, Save, Loader2, WrapText, ZoomIn, ZoomOut, Wand2, X
+} from "lucide-react";
+import * as prettier from "prettier/standalone";
+import * as babelPlugin from "prettier/plugins/babel";
+import * as estreePlugin from "prettier/plugins/estree";
+import * as tsPlugin from "prettier/plugins/typescript";
 import { Button } from "../ui/Button";
 import { projectsApi, EditableFolder } from "../api";
 import { cn } from "../ui/cn";
 
-// Only these two folders hold source files worth editing in CodeMirror —
-// prefabs/scenes are JSON data edited through the Inspector, not raw text.
 type CodeFolder = Extract<EditableFolder, "components" | "scripts">;
 
 export interface CodeFileEditorProps {
   project: string;
   folder: CodeFolder;
   filename: string;
-  /** Called after a successful save, with the text that was saved. */
   onSave?: (newText: string) => void;
-  /** Called if the save request fails. */
   onSaveError?: (message: string) => void;
-  /** Show the "Open in VS Code" button. Defaults to true. */
+  onExit?: () => void;
   showOpenInVSCode?: boolean;
   className?: string;
 }
@@ -32,32 +37,78 @@ function languageExtension(filename: string) {
   return javascript({ typescript, jsx });
 }
 
-// Maps the app's existing CSS custom properties onto CodeMirror's theme
-// so the editor matches the rest of the UI instead of shipping its own
-// light/dark palette.
-const editorTheme = EditorView.theme({
-  "&": {
-    backgroundColor: "var(--color-bg-elevated)",
-    color: "var(--color-text)",
-    height: "100%",
-    fontSize: "12px",
-  },
-  ".cm-content": {
-    fontFamily: "var(--font-mono, monospace)",
-    caretColor: "var(--color-text)",
-  },
-  ".cm-gutters": {
-    backgroundColor: "var(--color-bg-elevated)",
-    color: "var(--color-text-faint)",
-    borderRight: "1px solid var(--color-border)",
-  },
-  ".cm-activeLine": { backgroundColor: "var(--color-border)" },
-  ".cm-activeLineGutter": { backgroundColor: "var(--color-border)" },
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-    backgroundColor: "var(--color-accent-secondary)",
-    opacity: 0.25,
-  },
-});
+async function formatSource(filename: string, source: string): Promise<string> {
+  if (filename.endsWith(".json")) {
+    return JSON.stringify(JSON.parse(source), null, 2);
+  }
+  const isTs = filename.endsWith(".ts") || filename.endsWith(".tsx");
+  return prettier.format(source, {
+    parser: isTs ? "typescript" : "babel",
+    plugins: [babelPlugin, estreePlugin, tsPlugin],
+    semi: true,
+    singleQuote: false,
+  });
+}
+
+function isDarkTheme(): boolean {
+  return (document.documentElement.dataset.theme ?? "").includes("dark");
+}
+
+function useIsDarkTheme(): boolean {
+  const [dark, setDark] = useState(isDarkTheme);
+  useEffect(() => {
+    const observer = new MutationObserver(() => setDark(isDarkTheme()));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
+  return dark;
+}
+
+function buildEditorTheme(dark: boolean, fontSize: number) {
+  return EditorView.theme(
+    {
+      "&": {
+        backgroundColor: "var(--color-bg-elevated)",
+        color: "var(--color-text)",
+        height: "100%",
+        fontSize: `${fontSize}px`,
+      },
+      ".cm-content": {
+        fontFamily: "var(--font-mono, monospace)",
+        caretColor: "var(--color-text)",
+      },
+      ".cm-gutters": {
+        backgroundColor: "var(--color-bg-elevated)",
+        color: "var(--color-text-faint)",
+        borderRight: "1px solid var(--color-border)",
+      },
+      ".cm-activeLine": { backgroundColor: "var(--color-border)" },
+      ".cm-activeLineGutter": { backgroundColor: "var(--color-border)" },
+      "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
+        backgroundColor: "var(--color-accent-secondary)",
+        opacity: 0.35,
+      },
+    },
+    { dark }
+  );
+}
+
+const syntaxTheme = HighlightStyle.define([
+  { tag: t.keyword, color: "var(--color-accent)" },
+  { tag: t.string, color: "var(--color-success)" },
+  { tag: t.number, color: "var(--color-warning)" },
+  { tag: t.comment, color: "var(--color-text-faint)", fontStyle: "italic" },
+  { tag: t.function(t.variableName), color: "var(--color-accent-strong)" },
+  { tag: t.variableName, color: "var(--color-text)" },
+  { tag: t.propertyName, color: "var(--color-accent-secondary)" },
+  { tag: t.typeName, color: "var(--color-accent-strong)" },
+  { tag: t.operator, color: "var(--color-text-muted)" },
+  { tag: t.bracket, color: "var(--color-text-muted)" },
+  { tag: t.invalid, color: "var(--color-danger)" },
+]);
+
+const FONT_SIZE_MIN = 10;
+const FONT_SIZE_MAX = 22;
 
 export function CodeFileEditor({
   project,
@@ -65,6 +116,7 @@ export function CodeFileEditor({
   filename,
   onSave,
   onSaveError,
+  onExit,
   showOpenInVSCode = true,
   className,
 }: CodeFileEditorProps) {
@@ -74,6 +126,13 @@ export function CodeFileEditor({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [opening, setOpening] = useState(false);
+  const [formatting, setFormatting] = useState(false);
+  const [wordWrap, setWordWrap] = useState(true);
+  const [fontSize, setFontSize] = useState(12);
+
+  const dark = useIsDarkTheme();
+  const themeCompartment = useRef(new Compartment()).current;
+  const editorTheme = useMemo(() => buildEditorTheme(dark, fontSize), [dark, fontSize]);
 
   const dirty = value !== original;
 
@@ -101,6 +160,17 @@ export function CodeFileEditor({
     };
   }, [project, folder, filename]);
 
+  // Warn on tab close / navigation with unsaved changes.
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
   const handleSave = useCallback(async () => {
     if (!dirty || saving) return;
     setSaving(true);
@@ -118,6 +188,19 @@ export function CodeFileEditor({
     }
   }, [project, folder, filename, value, dirty, saving, onSave, onSaveError]);
 
+  const handleFormat = useCallback(async () => {
+    setFormatting(true);
+    setError(null);
+    try {
+      const formatted = await formatSource(filename, value);
+      setValue(formatted);
+    } catch (err) {
+      setError(`Format failed: ${(err as Error).message}`);
+    } finally {
+      setFormatting(false);
+    }
+  }, [filename, value]);
+
   const handleOpenInVSCode = useCallback(async () => {
     setOpening(true);
     try {
@@ -134,6 +217,10 @@ export function CodeFileEditor({
       e.preventDefault();
       handleSave();
     }
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      handleFormat();
+    }
   };
 
   return (
@@ -144,6 +231,23 @@ export function CodeFileEditor({
           {dirty && <span className="ml-1 text-[var(--color-accent-secondary)]">●</span>}
         </span>
         <div className="flex items-center gap-1.5">
+          <Button onClick={() => setFontSize((s) => Math.max(FONT_SIZE_MIN, s - 1))} title="Decrease font size">
+            <ZoomOut size={12} />
+          </Button>
+          <Button onClick={() => setFontSize((s) => Math.min(FONT_SIZE_MAX, s + 1))} title="Increase font size">
+            <ZoomIn size={12} />
+          </Button>
+          <Button
+            onClick={() => setWordWrap((w) => !w)}
+            title="Toggle word wrap"
+            className={wordWrap ? "text-[var(--color-accent)]" : undefined}
+          >
+            <WrapText size={12} />
+          </Button>
+          <Button onClick={handleFormat} disabled={formatting} title="Format (Ctrl/Cmd+Shift+F)">
+            <Wand2 size={12} />
+            {formatting ? "Formatting…" : "Format"}
+          </Button>
           {showOpenInVSCode && (
             <Button onClick={handleOpenInVSCode} disabled={opening}>
               <ExternalLink size={12} />
@@ -153,6 +257,10 @@ export function CodeFileEditor({
           <Button onClick={handleSave} disabled={!dirty || saving}>
             <Save size={12} />
             {saving ? "Saving…" : "Save"}
+          </Button>
+          {/* Exit */}
+          <Button onClick={onExit} title="Exit">
+            <X size={12} />
           </Button>
         </div>
       </div>
@@ -172,13 +280,22 @@ export function CodeFileEditor({
             value={value}
             height="100%"
             theme={editorTheme}
-            extensions={[languageExtension(filename)]}
+            extensions={[
+              languageExtension(filename),
+              themeCompartment.of(syntaxHighlighting(syntaxTheme)),
+              ...(wordWrap ? [EditorView.lineWrapping] : []),
+            ]}
             onChange={(v) => setValue(v)}
             basicSetup={{
               lineNumbers: true,
               foldGutter: true,
               highlightActiveLine: true,
               highlightActiveLineGutter: true,
+              autocompletion: true,
+              bracketMatching: true,
+              closeBrackets: true,
+              highlightSelectionMatches: true,
+              searchKeymap: true,
             }}
           />
         )}

@@ -90,6 +90,8 @@ export class GameEngine {
     for (const layer of this.layers) {
       layer.canvas.width = width;
       layer.canvas.height = height;
+      // TODO: pass image smoothing setting from engine config
+      layer.ctx.imageSmoothingEnabled = false;
     }
   }
 
@@ -193,7 +195,7 @@ export class GameEngine {
 
       // all rendering based components
       for (const component of entity.components.values()) {
-        component.render?.(gameLayer.ctx, transform, entity);
+        component.render?.(gameLayer.ctx, transform, entity, this);
       }
     }
   }

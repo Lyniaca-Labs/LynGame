@@ -5,14 +5,15 @@
       "id": "fallingBox",
       "components": {
         "Transform": {
-          "x": 400,
+          "x": 300,
           "y": 20,
           "rotation": 0
         },
         "SpriteRenderer": {
           "width": 100,
           "height": 100,
-          "color": "#00ff00"
+          "color": "#00ff00",
+          "sprite": "tree"
         },
         "Movement": {
           "maxSpeed": 800,
@@ -35,7 +36,6 @@
       "scripts": [
         "DoorScript",
         "LogScript",
-        "LogScript",
         "InputScript"
       ]
     },
@@ -44,8 +44,15 @@
       "prefab": "Enemy",
       "overrides": {
         "Transform": {
-          "x": 200,
+          "x": 100,
           "y": 150
+        }
+      },
+      "components": {
+        "SpriteRenderer": {
+          "sprite": "tree",
+          "width": 32,
+          "height": 32
         }
       }
     },

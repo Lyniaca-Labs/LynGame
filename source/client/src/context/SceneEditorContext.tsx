@@ -7,6 +7,7 @@ import { projectsApi, prefabsApi, Scene, Entity, ComponentDefinition, PrefabData
 export type InspectorTarget =
   | { kind: "scene"; sceneId: string }
   | { kind: "entity"; sceneId: string; entityId: string }
+  | { kind: "prefab"; prefabName: string }
   | null;
 
 interface SceneEditorContextValue {
@@ -22,8 +23,14 @@ interface SceneEditorContextValue {
   // lazily as entities using a prefab are inspected.
   prefabCache: Record<string, PrefabData>;
 
+  // Mutable working copy of whichever prefab is currently open in the
+  // Inspector (target.kind === "prefab"). Distinct from prefabCache, which
+  // holds read-only snapshots used to compute entity overrides elsewhere.
+  prefabDraft: PrefabData | null;
+
   openScene: (sceneId: string) => void;
   openEntity: (sceneId: string, entityId: string) => void;
+  openPrefab: (prefabName: string) => void;
   clear: () => void;
 
   renameEntity: (entityId: string, newId: string) => void;
@@ -50,6 +57,13 @@ interface SceneEditorContextValue {
   addScript: (entityId: string, scriptName: string) => void;
   removeScript: (entityId: string, index: number) => void;
 
+  // editing the prefab itself (target.kind === "prefab")
+  updatePrefabComponentField: (componentName: string, field: string, value: unknown) => void;
+  addPrefabComponent: (componentName: string) => void;
+  removePrefabComponent: (componentName: string) => void;
+  addPrefabScript: (scriptName: string) => void;
+  removePrefabScript: (index: number) => void;
+
   addEntity: () => void;
   deleteEntity: (entityId: string) => void;
 
@@ -70,11 +84,12 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
   const [saving, setSaving] = useState(false);
 
   const [prefabCache, setPrefabCache] = useState<Record<string, PrefabData>>({});
+  const [prefabDraft, setPrefabDraft] = useState<PrefabData | null>(null);
 
   // Load the scene whenever the selected scene changes (regardless of
   // whether the target is the scene itself or an entity inside it).
   useEffect(() => {
-    if (!target || !currentProject) {
+    if (!target || target.kind === "prefab" || !currentProject) {
       setScene(null);
       return;
     }
@@ -90,7 +105,42 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
 
     setDirty(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target?.sceneId, currentProject]);
+  }, [target?.kind === "prefab" ? null : target?.sceneId, currentProject]);
+
+  // Load the prefab whenever a prefab becomes the inspector target. This is
+  // a separate working copy from prefabCache so editing it doesn't fight
+  // with the read-only snapshots used to compute overrides elsewhere.
+  const prefabTargetName = target?.kind === "prefab" ? target.prefabName : null;
+
+  useEffect(() => {
+    if (!prefabTargetName || !currentProject) {
+      setPrefabDraft(null);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    let cancelled = false;
+
+    prefabsApi
+      .get(currentProject, prefabTargetName)
+      .then((data) => {
+        if (!cancelled) setPrefabDraft(data);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    setDirty(false);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [prefabTargetName, currentProject]);
 
   // Lazily fetch the prefab definition for whichever entity is currently
   // being inspected, so the Overrides panel has defaults + a field shape
@@ -124,6 +174,10 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
 
   const openEntity = useCallback((sceneId: string, entityId: string) => {
     setTarget({ kind: "entity", sceneId, entityId });
+  }, []);
+
+  const openPrefab = useCallback((prefabName: string) => {
+    setTarget({ kind: "prefab", prefabName });
   }, []);
 
   const clear = useCallback(() => setTarget(null), []);
@@ -270,8 +324,73 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     [updateEntity]
   );
 
+  const updatePrefabDraft = useCallback((updater: (p: PrefabData) => PrefabData) => {
+    setPrefabDraft((prev) => (prev ? updater(prev) : prev));
+    setDirty(true);
+  }, []);
+
+  const updatePrefabComponentField = useCallback(
+    (componentName: string, field: string, value: unknown) => {
+      updatePrefabDraft((p) => ({
+        ...p,
+        components: {
+          ...p.components,
+          [componentName]: { ...p.components[componentName], [field]: value },
+        },
+      }));
+    },
+    [updatePrefabDraft]
+  );
+
+  const addPrefabComponent = useCallback(
+    (componentName: string) => {
+      const schema: ComponentDefinition | undefined = projectData?.components?.[componentName];
+      if (!schema) return;
+
+      const defaults = Object.fromEntries(
+        schema.fields.map((f) => [
+          f.key,
+          f.type === "vector"
+            ? { ...(f.defaultValue as Record<string, number>) }
+            : f.defaultValue,
+        ])
+      );
+
+      updatePrefabDraft((p) => ({
+        ...p,
+        components: { ...p.components, [componentName]: defaults },
+      }));
+    },
+    [projectData, updatePrefabDraft]
+  );
+
+  const removePrefabComponent = useCallback(
+    (componentName: string) => {
+      updatePrefabDraft((p) => {
+        const rest = { ...p.components };
+        delete rest[componentName];
+        return { ...p, components: rest };
+      });
+    },
+    [updatePrefabDraft]
+  );
+
+  const addPrefabScript = useCallback(
+    (scriptName: string) => {
+      updatePrefabDraft((p) => ({ ...p, scripts: [...(p.scripts ?? []), scriptName] }));
+    },
+    [updatePrefabDraft]
+  );
+
+  const removePrefabScript = useCallback(
+    (index: number) => {
+      updatePrefabDraft((p) => ({ ...p, scripts: (p.scripts ?? []).filter((_, i) => i !== index) }));
+    },
+    [updatePrefabDraft]
+  );
+
   const addEntity = useCallback(() => {
-    if (!scene || !target) return;
+    if (!scene || !target || target.kind === "prefab") return;
 
     const existingIds = new Set(scene.entities.map((e) => e.id));
     let n = scene.entities.length + 1;
@@ -299,18 +418,27 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const save = useCallback(async () => {
-    if (!scene || !currentProject || !target) return;
+    if (!currentProject || !target) return;
     setSaving(true);
     setError(null);
     try {
-      await projectsApi.saveScene(currentProject, target.sceneId, scene);
+      if (target.kind === "prefab") {
+        if (!prefabDraft) return;
+        await prefabsApi.save(currentProject, target.prefabName, prefabDraft);
+        // Keep the read-only cache in sync so any entity currently showing
+        // an Overrides panel for this prefab reflects the change right away.
+        setPrefabCache((prev) => ({ ...prev, [target.prefabName]: prefabDraft }));
+      } else {
+        if (!scene) return;
+        await projectsApi.saveScene(currentProject, target.sceneId, scene);
+      }
       setDirty(false);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setSaving(false);
     }
-  }, [scene, currentProject, target]);
+  }, [scene, prefabDraft, currentProject, target]);
 
   return (
     <SceneEditorContext.Provider
@@ -322,8 +450,10 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         dirty,
         saving,
         prefabCache,
+        prefabDraft,
         openScene,
         openEntity,
+        openPrefab,
         clear,
         renameEntity,
         updateComponentField,
@@ -334,6 +464,11 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         resetOverrideComponent,
         addScript,
         removeScript,
+        updatePrefabComponentField,
+        addPrefabComponent,
+        removePrefabComponent,
+        addPrefabScript,
+        removePrefabScript,
         addEntity,
         deleteEntity,
         save,

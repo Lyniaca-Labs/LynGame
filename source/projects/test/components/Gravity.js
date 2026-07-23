@@ -34,6 +34,5 @@ export class Gravity extends Component {
       this.velocityY = 0;
       this.grounded = true;
     }
-
   }
 }

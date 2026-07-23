@@ -1,18 +1,26 @@
 import { Component } from "../types/Component.js";
 
 export class SpriteRenderer extends Component {
-  constructor({ sprite, width = 32, height = 32, color = "#fff" } = {}) {
+  static schema = {
+    sprite: { type: "string", default: "" },
+    width: { type: "number", default: 32 },
+    height: { type: "number", default: 32 },
+  };
+  
+  constructor({ sprite = "", width = 32, height = 32 } = {}) {
     super();
     this.spriteKey = sprite ?? null;
     this.width = width;
     this.height = height;
-    this.color = color;
+    this.color = "#fff";
     this._image = null; // cached lookup, resolved lazily on first render
   }
 
-  render(ctx, transform, entity) {
+  render(ctx, transform, entity, engine) {
+    if(this.spriteKey === "") return; // don't render if sprite key is empty
+    const assetLoader = engine.assets;
     if (this.spriteKey && !this._image) {
-      const img = entity.engine.assets.get(this.spriteKey);
+      const img = assetLoader.get(this.spriteKey);
       if (img) this._image = img;
     }
 

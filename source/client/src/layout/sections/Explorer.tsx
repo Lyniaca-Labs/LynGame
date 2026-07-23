@@ -35,9 +35,14 @@ interface OpenCodeFile {
   filename: string;
 }
 
+// Prefab names are stored/keyed without their file extension throughout
+// SceneEditorContext (entity.prefab, prefabCache, openPrefab) — matches
+// Inspector.tsx's stripExt.
+const stripExt = (name: string) => name.replace(/\.(js|ts|json)$/i, "");
+
 function ExplorerFiles() {
   const { projectData, currentProject } = useProject();
-  const { target, scene: liveScene, openScene, openEntity, addEntity, deleteEntity } = useSceneEditor();
+  const { target, scene: liveScene, openScene, openEntity, openPrefab, addEntity, deleteEntity } = useSceneEditor();
 
   // Lazily-populated cache of each scene's entities, so scene nodes can
   // show them as children in the tree without eagerly loading everything
@@ -48,6 +53,10 @@ function ExplorerFiles() {
 
   // The script/component file currently open in the CodeFileEditor modal.
   const [openCodeFile, setOpenCodeFile] = useState<OpenCodeFile | null>(null);
+
+  // target now has a "prefab" variant with no sceneId, so pull sceneId out
+  // only for the branches that actually have one (scene/entity).
+  const activeSceneId = target && target.kind !== "prefab" ? target.sceneId : undefined;
 
   useEffect(() => {
     if (!projectData || !currentProject) return;
@@ -116,7 +125,7 @@ function ExplorerFiles() {
       label: "Scenes",
       children: projectData.scenes.map((sceneFile) => {
         const sceneId = sceneFile.replace(".json", "");
-        const isActiveScene = target?.sceneId === sceneId && liveScene?.name === sceneId;
+        const isActiveScene = activeSceneId === sceneId && liveScene?.name === sceneId;
         const entities = isActiveScene ? liveScene.entities : sceneEntities[sceneId];
 
         return {
@@ -135,7 +144,11 @@ function ExplorerFiles() {
     {
       id: "prefabs",
       label: "Prefabs",
-      children: projectData.prefabs.map((p) => ({ id: p, label: p })),
+      children: projectData.prefabs.map((p) => ({
+        id: p,
+        label: p,
+        onClick: () => openPrefab(stripExt(p)),
+      })),
     },
     {
       id: "scripts",
@@ -171,7 +184,7 @@ function ExplorerFiles() {
     if (node.id.includes("::")) {
       const [sceneFile, entityId] = node.id.split("::");
       const sceneId = sceneFile.replace(".json", "");
-      const isActiveScene = target?.sceneId === sceneId;
+      const isActiveScene = activeSceneId === sceneId;
 
       const actions: MenuAction[] = [
         // Renaming an entity needs the id-uniqueness check that lives in
@@ -192,7 +205,7 @@ function ExplorerFiles() {
     // Scene node
     if (projectData.scenes.includes(node.id)) {
       const sceneId = node.id.replace(".json", "");
-      const isActiveScene = target?.sceneId === sceneId;
+      const isActiveScene = activeSceneId === sceneId;
 
       const actions: MenuAction[] = [];
       if (isActiveScene) {
@@ -220,7 +233,7 @@ function ExplorerFiles() {
     // Component node — id is the component name (e.g. "Movement")
     if (Object.keys(projectData.components).includes(node.id)) {
       const filename = projectData.components[node.id]?.filename ?? `${node.id}.js`;
-       
+
       return [
         {
           label: "Open in Editor",
@@ -255,20 +268,16 @@ function ExplorerFiles() {
         open={openCodeFile !== null}
         onClose={() => setOpenCodeFile(null)}
         title={openCodeFile?.filename}
-        className="max-w-3xl"
+        size="full"
+        bodyClassName="h-full"
       >
-        {/* Modal's content area has fixed px-4 py-3 padding and no height
-            of its own; CodeFileEditor needs a sized parent since CodeMirror
-            is set to height="100%". Cancel that padding with negative
-            margins and give this wrapper an explicit height instead. */}
         {openCodeFile && currentProject && (
-          <div className="-m-3 -mx-4 h-[70vh]">
-            <CodeFileEditor
-              project={currentProject}
-              folder={openCodeFile.folder}
-              filename={openCodeFile.filename}
-            />
-          </div>
+          <CodeFileEditor
+            project={currentProject}
+            folder={openCodeFile.folder}
+            filename={openCodeFile.filename}
+            onExit={() => setOpenCodeFile(null)}
+          />
         )}
       </Modal>
     </div>

@@ -28,6 +28,12 @@ export function Inspector() {
     prefabCache,
     addScript,
     removeScript,
+    prefabDraft,
+    updatePrefabComponentField,
+    addPrefabComponent,
+    removePrefabComponent,
+    addPrefabScript,
+    removePrefabScript,
   } = useSceneEditor();
   const { projectData } = useProject();
 
@@ -47,10 +53,11 @@ export function Inspector() {
     );
   }
 
-  // target.kind === "entity"
+  const inspectingLabel = target.kind === "prefab" ? target.prefabName : target.entityId;
+
   if (loading) {
     return (
-      <Container title={`Inspector — ${target.entityId}`}>
+      <Container title={`Inspector — ${inspectingLabel}`}>
         <PlaceholderPanel label="Loading…" />
       </Container>
     );
@@ -58,12 +65,37 @@ export function Inspector() {
 
   if (error) {
     return (
-      <Container title={`Inspector — ${target.entityId}`}>
+      <Container title={`Inspector — ${inspectingLabel}`}>
         <PlaceholderPanel label={error} />
       </Container>
     );
   }
 
+  if (target.kind === "prefab") {
+    if (!prefabDraft) {
+      return (
+        <Container title={`Inspector — ${target.prefabName}`}>
+          <PlaceholderPanel label="Prefab not found" />
+        </Container>
+      );
+    }
+
+    return (
+      <InspectorPrefab
+        prefabName={target.prefabName}
+        prefab={prefabDraft}
+        componentRegistry={projectData?.components ?? {}}
+        scriptRegistry={projectData?.scripts ?? []}
+        onFieldChange={updatePrefabComponentField}
+        onAddComponent={addPrefabComponent}
+        onRemoveComponent={removePrefabComponent}
+        onAddScript={addPrefabScript}
+        onRemoveScript={removePrefabScript}
+      />
+    );
+  }
+
+  // target.kind === "entity"
   const entity = scene?.entities.find((e) => e.id === target.entityId);
 
   if (!entity) {
@@ -136,9 +168,15 @@ function InspectorEntity({
   onAddScript: (entityId: string, scriptName: string) => void;
   onRemoveScript: (entityId: string, index: number) => void;
 }) {
+  // Components already covered by the attached prefab go through Overrides
+  // instead — they're excluded here so "Add component" only offers genuinely
+  // new, entity-local components.
+  const prefabComponentNames = new Set(
+    entity.prefab && prefabDef ? Object.keys(prefabDef.components) : []
+  );
   const usedComponents = new Set(Object.keys(entity.components ?? {}));
   const componentOptions: SelectOption[] = Object.keys(componentRegistry)
-    .filter((name) => !usedComponents.has(name))
+    .filter((name) => !usedComponents.has(name) && !prefabComponentNames.has(name))
     .map((name) => ({ value: name, label: name }));
 
   // Scripts can be attached more than once (your sample data has LogScript
@@ -179,7 +217,7 @@ function InspectorEntity({
           )}
         </Section>
 
-        {entity.prefab ? (
+        {entity.prefab && (
           <Section title="Overrides">
             <OverridesSection
               entity={entity}
@@ -189,36 +227,38 @@ function InspectorEntity({
               onResetOverride={onResetOverride}
             />
           </Section>
-        ) : (
-          <Section title="Components">
-            <div className="space-y-2">
-              {Object.entries(entity.components ?? {}).map(([componentName, fields]) => (
-                <ComponentPanel
-                  key={componentName}
-                  entityId={entity.id}
-                  componentName={componentName}
-                  schema={componentRegistry[componentName]}
-                  values={fields as Record<string, unknown>}
-                  onFieldChange={onFieldChange}
-                  onRemove={() => onRemoveComponent(entity.id, componentName)}
-                />
-              ))}
-              {Object.keys(entity.components ?? {}).length === 0 && (
-                <div className="text-xs italic text-[var(--color-text-faint)]">No components</div>
-              )}
-            </div>
-            {componentOptions.length > 0 && (
-              <div className="mt-2">
-                <Select
-                  options={componentOptions}
-                  onChange={(v: string) => onAddComponent(entity.id, v)}
-                  placeholder="Add component…"
-                  emptyMessage="No components available"
-                />
+        )}
+
+        <Section title="Components">
+          <div className="space-y-2">
+            {Object.entries(entity.components ?? {}).map(([componentName, fields]) => (
+              <ComponentPanel
+                key={componentName}
+                entityId={entity.id}
+                componentName={componentName}
+                schema={componentRegistry[componentName]}
+                values={fields as Record<string, unknown>}
+                onFieldChange={onFieldChange}
+                onRemove={() => onRemoveComponent(entity.id, componentName)}
+              />
+            ))}
+            {Object.keys(entity.components ?? {}).length === 0 && (
+              <div className="text-xs italic text-[var(--color-text-faint)]">
+                {entity.prefab ? "No additional components" : "No components"}
               </div>
             )}
-          </Section>
-        )}
+          </div>
+          {componentOptions.length > 0 && (
+            <div className="mt-2">
+              <Select
+                options={componentOptions}
+                onChange={(v: string) => onAddComponent(entity.id, v)}
+                placeholder="Add component…"
+                emptyMessage="No components available"
+              />
+            </div>
+          )}
+        </Section>
 
         <Section title="Scripts">
           <div className="space-y-1">
@@ -247,6 +287,107 @@ function InspectorEntity({
               <Select
                 options={scriptOptions}
                 onChange={(v: string) => onAddScript(entity.id, v)}
+                placeholder="Add script…"
+                emptyMessage="No scripts available"
+              />
+            </div>
+          )}
+        </Section>
+      </div>
+    </Container>
+  );
+}
+
+function InspectorPrefab({
+  prefabName,
+  prefab,
+  componentRegistry,
+  scriptRegistry,
+  onFieldChange,
+  onAddComponent,
+  onRemoveComponent,
+  onAddScript,
+  onRemoveScript,
+}: {
+  prefabName: string;
+  prefab: PrefabData;
+  componentRegistry: Record<string, ComponentDefinition>;
+  scriptRegistry: string[];
+  onFieldChange: (componentName: string, field: string, value: unknown) => void;
+  onAddComponent: (componentName: string) => void;
+  onRemoveComponent: (componentName: string) => void;
+  onAddScript: (scriptName: string) => void;
+  onRemoveScript: (index: number) => void;
+}) {
+  const usedComponents = new Set(Object.keys(prefab.components ?? {}));
+  const componentOptions: SelectOption[] = Object.keys(componentRegistry)
+    .filter((name) => !usedComponents.has(name))
+    .map((name) => ({ value: name, label: name }));
+
+  const scriptOptions: SelectOption[] = scriptRegistry.map((s) => {
+    const name = stripExt(s);
+    return { value: name, label: name };
+  });
+
+  return (
+    <Container title={`Inspector — ${prefabName} (Prefab)`} bodyClassName="overflow-y-auto p-2">
+      <div className="space-y-4">
+        <Section title="Components">
+          <div className="space-y-2">
+            {Object.entries(prefab.components ?? {}).map(([componentName, fields]) => (
+              <ComponentPanel
+                key={componentName}
+                entityId={prefabName}
+                componentName={componentName}
+                schema={componentRegistry[componentName]}
+                values={fields as Record<string, unknown>}
+                onFieldChange={(_entityId, cName, field, value) => onFieldChange(cName, field, value)}
+                onRemove={() => onRemoveComponent(componentName)}
+              />
+            ))}
+            {Object.keys(prefab.components ?? {}).length === 0 && (
+              <div className="text-xs italic text-[var(--color-text-faint)]">No components</div>
+            )}
+          </div>
+          {componentOptions.length > 0 && (
+            <div className="mt-2">
+              <Select
+                options={componentOptions}
+                onChange={(v: string) => onAddComponent(v)}
+                placeholder="Add component…"
+                emptyMessage="No components available"
+              />
+            </div>
+          )}
+        </Section>
+
+        <Section title="Scripts">
+          <div className="space-y-1">
+            {(prefab.scripts ?? []).map((scriptName, i) => (
+              <div
+                key={`${scriptName}-${i}`}
+                className="flex items-center justify-between rounded border border-[var(--color-border)] px-2 py-1 text-xs"
+              >
+                <span className="text-[var(--color-text)]">{scriptName}</span>
+                <button
+                  type="button"
+                  onClick={() => onRemoveScript(i)}
+                  className="text-[var(--color-text-faint)] hover:text-[var(--color-danger)]"
+                  aria-label={`Remove ${scriptName}`}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+            {(prefab.scripts ?? []).length === 0 && (
+              <div className="text-xs italic text-[var(--color-text-faint)]">No scripts</div>
+            )}
+          </div>
+          {scriptOptions.length > 0 && (
+            <div className="mt-2">
+              <Select
+                options={scriptOptions}
+                onChange={(v: string) => onAddScript(v)}
                 placeholder="Add script…"
                 emptyMessage="No scripts available"
               />

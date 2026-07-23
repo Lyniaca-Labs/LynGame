@@ -5,6 +5,9 @@ export class Layer {
     this.canvas.width = width;
     this.canvas.height = height;
     this.ctx = this.canvas.getContext("2d");
+
+    this.ctx.imageSmoothingEnabled = false;
+    // TODO: pass image smoothing setting from engine config
   }
 
   clear() {

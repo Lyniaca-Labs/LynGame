@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "./cn";
 
+// ui/Modal.tsx — add a size prop
 export interface ModalProps {
   open: boolean;
   onClose: () => void;
@@ -11,7 +12,16 @@ export interface ModalProps {
   children?: React.ReactNode;
   footer?: React.ReactNode;
   className?: string;
+  bodyClassName?: string;
+  /** "md" (default, ~28rem) | "lg" (wide) | "full" (near-fullscreen, for editors/canvases) */
+  size?: "md" | "lg" | "full";
 }
+
+const sizeClasses = {
+  md: "max-w-md",
+  lg: "max-w-4xl",
+  full: "h-[90vh] w-[95vw] max-w-[1600px]",
+};
 
 export function Modal({
   open,
@@ -21,10 +31,11 @@ export function Modal({
   children,
   footer,
   className,
+  bodyClassName,
+  size = "md",
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Escape closes.
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(e: KeyboardEvent) {
@@ -34,7 +45,6 @@ export function Modal({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose]);
 
-  // Lock body scroll while open.
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -59,13 +69,14 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={title ? "modal-title" : undefined}
         className={cn(
-          "w-full rounded-[var(--radius-md)] border border-[var(--color-border)]",
+          "flex max-h-[90vh] w-full flex-col rounded-[var(--radius-md)] border border-[var(--color-border)]",
           "bg-[var(--color-bg-elevated)] shadow-[var(--shadow-panel)]",
+          sizeClasses[size],
           className
         )}
       >
         {(title || description) && (
-          <div className="border-b border-[var(--color-border)] px-4 py-3">
+          <div className="shrink-0 border-b border-[var(--color-border)] px-4 py-3">
             {title && (
               <h2
                 id="modal-title"
@@ -82,10 +93,12 @@ export function Modal({
           </div>
         )}
 
-        <div className="px-4 py-3">{children}</div>
+        <div className={cn("min-h-0 flex-1 overflow-auto", bodyClassName ?? "px-4 py-3")}>
+          {children}
+        </div>
 
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] px-4 py-3">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--color-border)] px-4 py-3">
             {footer}
           </div>
         )}
