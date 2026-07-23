@@ -19,7 +19,7 @@ LATER
 - [ ] Engine GUI/editor on top of game framework
   - [x] ability to add components and scripts to entities
   - [x] keyboard shortcuts
-  - [ ] ability to load a preview of an entity from editor (same with scene)
+  - [x] ability to load a preview of an entity from editor (same with scene)
   - [x] ability to pause the game
   - [x] code editor
   - [ ] ability to move entities around, around scenes, duplicate, copy, paste
@@ -36,6 +36,7 @@ LATER
   - [ ] visual editor and context menu in scene
   - [ ] ESLINT in code editor
   - [ ] autosave option in settings
+  - [ ] preview for prefabs
 
 - [ ] Good overall architecture/design pattern
   - [ ] turn server into typescript, keep all project files and engine files javascript

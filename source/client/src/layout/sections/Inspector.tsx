@@ -13,7 +13,11 @@ type FieldType = ComponentFieldDefinition["type"];
 
 const stripExt = (name: string) => name.replace(/\.(js|ts|json)$/i, "");
 
-export function Inspector() {
+type InspectorProps = {
+  onEdit?: () => void;
+};
+
+export function Inspector({ onEdit }: InspectorProps) {
   const {
     target,
     scene,
@@ -37,6 +41,16 @@ export function Inspector() {
     removePrefabScript,
   } = useSceneEditor();
   const { projectData } = useProject();
+
+  // Wrap any mutating handler so `onEdit` fires once, right after the
+  // underlying change is applied — no need to thread `onEdit` through
+  // every component/field prop individually.
+  function withEdit<A extends unknown[]>(fn: (...args: A) => void) {
+    return (...args: A) => {
+      fn(...args);
+      onEdit?.();
+    };
+  }
 
   if (!target) {
     return (
@@ -87,11 +101,11 @@ export function Inspector() {
         prefab={prefabDraft}
         componentRegistry={projectData?.components ?? {}}
         scriptRegistry={projectData?.scripts ?? []}
-        onFieldChange={updatePrefabComponentField}
-        onAddComponent={addPrefabComponent}
-        onRemoveComponent={removePrefabComponent}
-        onAddScript={addPrefabScript}
-        onRemoveScript={removePrefabScript}
+        onFieldChange={withEdit(updatePrefabComponentField)}
+        onAddComponent={withEdit(addPrefabComponent)}
+        onRemoveComponent={withEdit(removePrefabComponent)}
+        onAddScript={withEdit(addPrefabScript)}
+        onRemoveScript={withEdit(removePrefabScript)}
       />
     );
   }
@@ -123,15 +137,15 @@ export function Inspector() {
       scriptRegistry={projectData?.scripts ?? []}
       prefabOptions={prefabOptions}
       prefabDef={entity.prefab ? prefabCache[entity.prefab] : undefined}
-      onRename={(newId) => renameEntity(entity.id, newId)}
-      onSetPrefab={(prefabName) => setEntityPrefab(entity.id, prefabName)}
-      onFieldChange={updateComponentField}
-      onAddComponent={addComponent}
-      onRemoveComponent={removeComponent}
-      onOverrideFieldChange={updateOverrideField}
-      onResetOverride={resetOverrideComponent}
-      onAddScript={addScript}
-      onRemoveScript={removeScript}
+      onRename={withEdit((newId: string) => renameEntity(entity.id, newId))}
+      onSetPrefab={withEdit((prefabName: string | null) => setEntityPrefab(entity.id, prefabName))}
+      onFieldChange={withEdit(updateComponentField)}
+      onAddComponent={withEdit(addComponent)}
+      onRemoveComponent={withEdit(removeComponent)}
+      onOverrideFieldChange={withEdit(updateOverrideField)}
+      onResetOverride={withEdit(resetOverrideComponent)}
+      onAddScript={withEdit(addScript)}
+      onRemoveScript={withEdit(removeScript)}
     />
   );
 }
@@ -191,7 +205,7 @@ function InspectorEntity({
     <Container title={`Inspector — ${entity.id}`} bodyClassName="overflow-y-auto p-2">
       <div className="space-y-4">
         <EntityIdField
-          entityId={entity.id}
+          entity={entity}
           existingIds={existingIds}
           onRename={onRename}
           gameViewRef={window.gameViewRef as React.RefObject<GameViewHandle>}
@@ -406,27 +420,27 @@ function InspectorPrefab({
 }
 
 function EntityIdField({
-  entityId,
+  entity,
   existingIds,
   onRename,
   gameViewRef,
 }: {
-  entityId: string;
+  entity: Entity;
   existingIds: Set<string>;
   onRename: (newId: string) => void;
   gameViewRef: React.RefObject<GameViewHandle>;
 }) {
-  const [value, setValue] = useState(entityId);
+  const [value, setValue] = useState(entity.id);
 
-  useEffect(() => setValue(entityId), [entityId]);
+  useEffect(() => setValue(entity.id), [entity.id]);
 
   const trimmed = value.trim();
-  const isDuplicate = trimmed !== entityId && existingIds.has(trimmed);
+  const isDuplicate = trimmed !== entity.id && existingIds.has(trimmed);
   const isEmpty = trimmed.length === 0;
 
   const commit = () => {
-    if (isEmpty || isDuplicate || trimmed === entityId) {
-      setValue(entityId);
+    if (isEmpty || isDuplicate || trimmed === entity.id) {
+      setValue(entity.id);
       return;
     }
     onRename(trimmed);
@@ -447,7 +461,7 @@ function EntityIdField({
             onBlur={commit}
             onKeyDown={(e) => {
               if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-              if (e.key === "Escape") setValue(entityId);
+              if (e.key === "Escape") setValue(entity.id);
             }}
             className={`w-full rounded border bg-transparent px-1.5 py-1 text-xs text-[var(--color-text)] ${isDuplicate
                 ? "border-[var(--color-danger)]"
@@ -459,7 +473,8 @@ function EntityIdField({
         <div className="w-20 shrink-0 aspect-square">
           <EntityPreview
             className="h-full w-full"
-            entityId={entityId}
+            entityId={entity.id}
+            entity={entity}
             gameViewRef={gameViewRef}
           />
         </div>
@@ -477,10 +492,12 @@ function EntityIdField({
 function EntityPreview({
   className,
   entityId,
+  entity,
   gameViewRef,
 }: {
   className?: string;
   entityId: string;
+  entity: Entity;
   gameViewRef: React.RefObject<GameViewHandle>;
 }) {
   const [preview, setPreview] = useState<string | null>(null);
@@ -489,13 +506,29 @@ function EntityPreview({
   // bump this to force a refetch without changing entityId
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const entityVersion = JSON.stringify(entity); // crude but effective way to detect changes
+
+  // A prefab-only edit (component/script changed on the prefab, not on
+  // this entity directly) won't change `entity`'s own JSON, so listen
+  // for the global "rebuild finished" signal too.
+  useEffect(() => {
+    const handler = () => setRefreshKey((k) => k + 1);
+    window.addEventListener("entity-preview-refresh", handler);
+    return () => window.removeEventListener("entity-preview-refresh", handler);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
+
     setLoading(true);
     setPreview(null);
 
     gameViewRef.current
-      ?.getEntityPreview(entityId, { width: 96, height: 96, background: "#1a1a1a" })
+      ?.getEntityPreview(entityId, {
+        width: 96,
+        height: 96,
+        background: "#1a1a1a",
+      })
       .then((dataUrl) => {
         if (!cancelled) setPreview(dataUrl);
       })
@@ -506,7 +539,7 @@ function EntityPreview({
     return () => {
       cancelled = true;
     };
-  }, [entityId, refreshKey, gameViewRef]);
+  }, [entityId, entityVersion, refreshKey, gameViewRef]);
 
   return (
     <div className={`relative mb-2 flex h-24 w-24 items-center justify-center overflow-hidden rounded border border-[var(--color-border)] bg-[var(--color-bg-elevated)] ${className ?? ""}`}>

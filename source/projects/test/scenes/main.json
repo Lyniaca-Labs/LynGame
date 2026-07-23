@@ -55,7 +55,7 @@
       "components": {
         "SpriteRenderer": {
           "sprite": "tree",
-          "width": 900,
+          "width": 32,
           "height": 32
         }
       },

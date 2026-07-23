@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react"; 
 import {
   Play,
   Pause,
@@ -39,7 +39,14 @@ function EditorLayoutContent() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
 
+  const [buildUrl, setBuildUrl] = useState<string | null>(null);
   const [gameUrl, setGameUrl] = useState<string | null>(null);
+  // Some build endpoints return the same URL on every build (e.g. a
+  // fixed output path), so `buildUrl` alone doesn't reliably change on
+  // each build. This counter always increments, so GameView can force a
+  // preview-iframe reload every time a build actually happens.
+  const [buildVersion, setBuildVersion] = useState(0);
+
   const [isBuilding, setIsBuilding] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
@@ -47,19 +54,29 @@ function EditorLayoutContent() {
   const gameViewRef = useRef<GameViewHandle>(null);
   window.gameViewRef = gameViewRef as React.RefObject<GameViewHandle>;
 
+  // const runGame = () => {
+  //   if (!buildUrl) return;
+
+  //   setGameUrl(null); // force iframe reload
+  //   setBuildUrl(null);
+  //   setBuildError(null);
+
+  //   setIsPaused(false);
+  //   setGameUrl(buildUrl);
+  // };
+
   const runGame = async () => {
-    if (!currentProject) return;
+    if (!currentProject || !buildUrl) return;
 
     setIsBuilding(true);
-    setBuildError(null);
-    setGameUrl(null);
-    setIsPaused(false); // fresh build always starts unpaused
+    // setBuildError(null);
 
     try {
       const result = await projectsApi.build(currentProject);
 
       if (result.url) {
         setGameUrl(result.url);
+        setIsPaused(false);
       } else {
         setBuildError(result.error ?? "Build failed");
       }
@@ -68,6 +85,42 @@ function EditorLayoutContent() {
     } finally {
       setIsBuilding(false);
     }
+  };
+
+  const build = async () => {
+    if (!currentProject) return;
+    setIsBuilding(true);
+
+    try {
+      const result = await projectsApi.build(currentProject);
+
+      if (result.url) {
+        setBuildUrl(result.url);
+        setBuildVersion((v) => v + 1);
+      }
+    } finally {
+      setIsBuilding(false);
+    }
+  };
+
+  useEffect(() => {
+    build();
+  }, [currentProject]);
+
+
+  const handleInspectorEdit = async () => {
+    // await build();
+    // window.dispatchEvent(new Event("entity-preview-refresh"));
+  };
+
+  // Rebuild after a save, then tell every EntityPreview to refetch. A
+  // prefab-only edit doesn't change the selected entity's own JSON, so
+  // EntityPreview can't detect it just by diffing `entity` — it needs
+  // this explicit nudge once the new build is ready.
+  const handleSave = async () => {
+    await save();
+    await build();
+    window.dispatchEvent(new Event("entity-preview-refresh"));
   };
 
   const togglePause = () => {
@@ -86,7 +139,7 @@ function EditorLayoutContent() {
     {
       key: "s",
       ctrl: true,
-      handler: save,
+      handler: handleSave,
       disabled: !dirty || sceneSaving,
     },
     {
@@ -101,6 +154,12 @@ function EditorLayoutContent() {
       handler: togglePause,
       disabled: !gameUrl,
     },
+    {
+      key: "r",
+      ctrl: true,
+      handler: () => window.location.reload(),
+      disabled: false,
+    }
   ]);
 
   return (
@@ -122,7 +181,7 @@ function EditorLayoutContent() {
             {isPaused ? "Resume" : "Pause"}
           </Button>
 
-          <Button onClick={save} disabled={!dirty || sceneSaving}>
+          <Button onClick={handleSave} disabled={!dirty || sceneSaving}>
             <SaveIcon size={16} />
             {sceneSaving ? "Saving..." : dirty ? "Save" : "Saved"}
           </Button>
@@ -148,6 +207,8 @@ function EditorLayoutContent() {
               ref={gameViewRef}
               project={currentProject}
               gameUrl={gameUrl}
+              buildUrl={buildUrl}
+              buildVersion={buildVersion}
               isBuilding={isBuilding}
               error={buildError}
             />
@@ -155,7 +216,7 @@ function EditorLayoutContent() {
         </div>
 
         <Resizable axis="x" handle="start" defaultSize={300}>
-          <Inspector />
+          <Inspector onEdit={handleInspectorEdit} />
         </Resizable>
       </div>
 
