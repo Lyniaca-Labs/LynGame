@@ -232,7 +232,7 @@ function ExplorerFiles() {
         // deleteScene prompts for the scene name itself rather than taking
         // one as an argument (matches its () => void signature in the
         // context), so this re-prompts rather than deleting sceneId directly.
-        { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteScene() }
+        { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteScene(sceneId) }
       );
       return actions;
     }
@@ -246,7 +246,7 @@ function ExplorerFiles() {
           onClick: () => setOpenCodeFile({ folder: "scripts", filename: node.id }),
         },
         // deleteScript prompts for the script name itself, same caveat as above.
-        { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteScript() },
+        { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteScript(node.id) },
       ];
     }
 
@@ -261,7 +261,7 @@ function ExplorerFiles() {
           onClick: () => setOpenCodeFile({ folder: "components", filename }),
         },
         // deleteComponent prompts for the component name itself, same caveat.
-        { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteComponent() },
+        { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteComponent(node.id) },
       ];
     }
 
@@ -273,7 +273,7 @@ function ExplorerFiles() {
       return [
         { label: "Rename", icon: Pencil, onClick: () => console.log("rename", node.id) },
         // deletePrefab prompts for the prefab name itself, same caveat as above.
-        { label: "Delete", icon: Trash2, danger: true, onClick: () => deletePrefab() },
+        { label: "Delete", icon: Trash2, danger: true, onClick: () => deletePrefab(node.id) },
       ];
     }
 

@@ -127,7 +127,7 @@ export interface OpenScriptResponse extends ApiResult {
 // get/save on top of the generic readFile/writeFile.
 
 const withJsExt = (filename: string) => (filename.endsWith(".js") ? filename : `${filename}.js`);
-
+const withJsonExt = (filename: string) => (filename.endsWith(".json") ? filename : `${filename}.json`);
 
 export interface PrefabData {
   components: Record<string, Record<string, unknown>>;
@@ -136,14 +136,14 @@ export interface PrefabData {
 
 export const prefabsApi = {
   get: async (project: string, prefab: string): Promise<PrefabData> => {
-    const res = await projectsApi.readFile(project, "prefabs", `${prefab}.json`);
+    const res = await projectsApi.readFile(project, "prefabs", withJsonExt(prefab));
     return JSON.parse(res.content) as PrefabData;
   },
   save: async (project: string, prefab: string, data: PrefabData): Promise<ApiResult> => {
-    return projectsApi.writeFile(project, "prefabs", `${prefab}.json`, JSON.stringify(data, null, 2));
+    return projectsApi.writeFile(project, "prefabs", withJsonExt(prefab), JSON.stringify(data, null, 2));
   },
   remove: (project: string, prefab: string): Promise<ApiResult> =>
-    projectsApi.deleteFile(project, "prefabs", `${prefab}.json`),
+    projectsApi.deleteFile(project, "prefabs", withJsonExt(prefab)),
 };
 
 // ---- Components ----
@@ -178,7 +178,7 @@ export const scriptsApi = {
 
 export const scenesApi = {
   remove: (project: string, name: string): Promise<ApiResult> =>
-    projectsApi.deleteFile(project, "scenes", `${name}.json`),
+    projectsApi.deleteFile(project, "scenes", withJsonExt(name)),
 };
 
 const enc = encodeURIComponent;

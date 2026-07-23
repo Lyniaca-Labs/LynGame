@@ -80,13 +80,13 @@ interface SceneEditorContextValue {
 
   // to add
   createComponent: () => Promise<void>;
-  deleteComponent: () => Promise<void>;
+  deleteComponent: (name: string) => Promise<void>;
   createScript: () => Promise<void>;
-  deleteScript: () => Promise<void>;
+  deleteScript: (name: string) => Promise<void>;
   createScene: () => Promise<void>;
-  deleteScene: () => Promise<void>;
+  deleteScene: (name: string) => Promise<void>;
   createPrefab: () => Promise<void>;
-  deletePrefab: () => Promise<void>;
+  deletePrefab: (name: string) => Promise<void>;
 }
 
 const SceneEditorContext = createContext<SceneEditorContextValue | null>(null);
@@ -461,7 +461,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
 
   const createComponent = useCallback(async () => {
     if (!currentProject) return;
-    const name = window.prompt("New component name:")?.trim();
+    const name = (await window.prompt("New component name:"))?.trim();
     if (!name) return;
     if (projectData?.components?.[name]) {
       setError(`A component named "${name}" already exists.`);
@@ -477,27 +477,28 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     }
   }, [currentProject, projectData, reloadProject]);
 
-  const deleteComponent = useCallback(async () => {
-    if (!currentProject) return;
-    const name = window.prompt("Component name to delete:")?.trim();
-    if (!name) return;
+  const deleteComponent = useCallback(
+    async (name: string) => {
+      if (!currentProject) return;
 
-    const ok = window.confirm(
-      `Delete component "${name}"? This does not remove it from entities/prefabs that already use it.`
-    );
-    if (!ok) return;
+      const ok = await window.confirm(
+        `Delete component "${name}"? This does not remove it from entities/prefabs that already use it.`
+      );
+      if (!ok) return;
 
-    try {
-      await componentsApi.remove(currentProject, name);
-      await reloadProject();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }, [currentProject, reloadProject]);
+      try {
+        await componentsApi.remove(currentProject, name);
+        await reloadProject();
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    },
+    [currentProject, reloadProject]
+  );
 
   const createScript = useCallback(async () => {
     if (!currentProject) return;
-    const name = window.prompt("New script name:")?.trim();
+    const name = (await window.prompt("New script name:"))?.trim();
     if (!name) return;
 
     try {
@@ -508,93 +509,96 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     }
   }, [currentProject, reloadProject]);
 
-  const deleteScript = useCallback(async () => {
-    if (!currentProject) return;
-    const name = window.prompt("Script name to delete:")?.trim();
-    if (!name) return;
+  const deleteScript = useCallback(
+    async (name: string) => {
+      if (!currentProject) return;
 
-    const ok = window.confirm(
-      `Delete script "${name}"? Entities/prefabs still referencing it by name will be left pointing at a missing file.`
-    );
-    if (!ok) return;
+      const ok = await window.confirm(
+        `Delete script "${name}"? Entities/prefabs still referencing it by name will be left pointing at a missing file.`
+      );
+      if (!ok) return;
 
-    try {
-      await scriptsApi.remove(currentProject, name);
-      await reloadProject();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }, [currentProject, reloadProject]);
+      try {
+        await scriptsApi.remove(currentProject, name);
+        await reloadProject();
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    },
+    [currentProject, reloadProject]
+  );
 
 
   const createScene = useCallback(async () => {
-  if (!currentProject) return;
-  const name = window.prompt("New scene name:")?.trim();
-  if (!name) return;
-
-  try {
-    await projectsApi.saveScene(currentProject, name, { name, entities: [] });
-    await reloadProject();
-    openScene(name);
-  } catch (err) {
-    setError((err as Error).message);
-  }
-}, [currentProject, openScene, reloadProject]);
-
-  const deleteScene = useCallback(async () => {
     if (!currentProject) return;
-    const name = window.prompt("Scene name to delete:")?.trim();
+    const name = (await window.prompt("New scene name:"))?.trim();
     if (!name) return;
 
-    const ok = window.confirm(`Delete scene "${name}"? This cannot be undone.`);
-    if (!ok) return;
-
     try {
-      await scenesApi.remove(currentProject, name);
+      await projectsApi.saveScene(currentProject, name, { name, entities: [] });
       await reloadProject();
-      setTarget((prev) => (prev && prev.kind !== "prefab" && prev.sceneId === name ? null : prev));
+      openScene(name);
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [currentProject, reloadProject]);
+  }, [currentProject, openScene, reloadProject]);
+
+  const deleteScene = useCallback(
+    async (name: string) => {
+      if (!currentProject) return;
+
+      const ok = await window.confirm(`Delete scene "${name}"? This cannot be undone.`);
+      if (!ok) return;
+
+      try {
+        await scenesApi.remove(currentProject, name);
+        await reloadProject();
+        setTarget((prev) => (prev && prev.kind !== "prefab" && prev.sceneId === name ? null : prev));
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    },
+    [currentProject, reloadProject]
+  );
 
   const createPrefab = useCallback(async () => {
-  if (!currentProject) return;
-  const name = window.prompt("New prefab name:")?.trim();
-  if (!name) return;
-
-  try {
-    await prefabsApi.save(currentProject, name, { components: {}, scripts: [] });
-    await reloadProject();
-    openPrefab(name);
-  } catch (err) {
-    setError((err as Error).message);
-  }
-}, [currentProject, openPrefab, reloadProject]);
-
-  const deletePrefab = useCallback(async () => {
     if (!currentProject) return;
-    const name = window.prompt("Prefab name to delete:")?.trim();
+    const name = (await window.prompt("New prefab name:"))?.trim();
     if (!name) return;
 
-    const ok = window.confirm(
-      `Delete prefab "${name}"? Entities referencing it will keep their overrides but lose the base prefab.`
-    );
-    if (!ok) return;
-
     try {
-      await prefabsApi.remove(currentProject, name);
+      await prefabsApi.save(currentProject, name, { components: {}, scripts: [] });
       await reloadProject();
-      setPrefabCache((prev) => {
-        const rest = { ...prev };
-        delete rest[name];
-        return rest;
-      });
-      setTarget((prev) => (prev?.kind === "prefab" && prev.prefabName === name ? null : prev));
+      openPrefab(name);
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [currentProject, reloadProject]);
+  }, [currentProject, openPrefab, reloadProject]);
+
+  const deletePrefab = useCallback(
+    async (name: string) => {
+      if (!currentProject) return;
+
+      const ok = await window.confirm(
+        `Delete prefab "${name}"? Entities referencing it will keep their overrides but lose the base prefab.`
+      );
+      if (!ok) return;
+
+      try {
+        await prefabsApi.remove(currentProject, name);
+        await reloadProject();
+        setPrefabCache((prev) => {
+          const rest = { ...prev };
+          delete rest[name];
+          return rest;
+        });
+        setTarget((prev) => (prev?.kind === "prefab" && prev.prefabName === name ? null : prev));
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    },
+    [currentProject, reloadProject]
+  );
 
   return (
     <SceneEditorContext.Provider
