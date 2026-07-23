@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { BASE_URL } from "../../api";
 import { useGameConsole } from "../../context/GameConsoleContext";
 
@@ -9,14 +9,34 @@ interface GameViewProps {
   error: string | null;
 }
 
-export function GameView({ project, gameUrl, isBuilding, error }: GameViewProps) {
+export interface EntityPreviewOptions {
+  width?: number;
+  height?: number;
+  background?: string | null;
+}
+
+export interface GameViewHandle {
+  pause: () => void;
+  unpause: () => void;
+  getEntityPreview: (id: string, options?: EntityPreviewOptions) => Promise<string | null>;
+}
+
+const PREVIEW_TIMEOUT_MS = 5000;
+
+export const GameView = forwardRef<GameViewHandle, GameViewProps>(function GameView(
+  { project, gameUrl, isBuilding, error },
+  ref
+) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { setIframeWindow, clear } = useGameConsole();
 
-  // focus the iframe every time a fresh build lands, so keyboard input
-  // (WASD, space, etc.) goes straight to the game without an extra click.
-  // Also wipe the previous run's logs so Output starts clean, and drop the
-  // iframe registration when there's no game loaded.
+  // Pending preview requests, keyed by request id, so responses (which
+  // arrive async over postMessage) get routed back to the right caller
+  // even if multiple previews are in flight at once.
+  const pendingPreviews = useRef(
+    new Map<string, { resolve: (v: string | null) => void; timer: ReturnType<typeof setTimeout> }>()
+  );
+
   useEffect(() => {
     if (gameUrl) {
       iframeRef.current?.focus();
@@ -27,9 +47,55 @@ export function GameView({ project, gameUrl, isBuilding, error }: GameViewProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameUrl]);
 
-  // The iframe remounts on every new build (key={gameUrl}), so its
-  // contentWindow is a new object each time — register the fresh one once
-  // it's actually loaded rather than assuming it's stable.
+  // Listen for preview results from the engine. Lives for the component's
+  // whole lifetime (not per-gameUrl) since it's cheap and just routes by
+  // request id; stale requests from a previous build simply won't have a
+  // matching pending entry and are ignored.
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type !== "ENTITY_PREVIEW_RESULT") return;
+      const pending = pendingPreviews.current.get(e.data.requestId);
+      if (!pending) return;
+      clearTimeout(pending.timer);
+      pending.resolve(e.data.dataUrl ?? null);
+      pendingPreviews.current.delete(e.data.requestId);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      pause: () => {
+        iframeRef.current?.contentWindow?.postMessage({ type: "PAUSE" }, "*");
+      },
+      unpause: () => {
+        iframeRef.current?.contentWindow?.postMessage({ type: "UNPAUSE" }, "*");
+      },
+      getEntityPreview: (id, options) => {
+        const win = iframeRef.current?.contentWindow;
+        if (!win) return Promise.resolve(null);
+
+        const requestId = crypto.randomUUID();
+
+        return new Promise<string | null>((resolve) => {
+          // Don't hang forever if the engine never responds (e.g. the
+          // entity id doesn't exist and the game somehow never posts
+          // back, or the iframe reloads mid-request).
+          const timer = setTimeout(() => {
+            pendingPreviews.current.delete(requestId);
+            resolve(null);
+          }, PREVIEW_TIMEOUT_MS);
+
+          pendingPreviews.current.set(requestId, { resolve, timer });
+          win.postMessage({ type: "GET_ENTITY_PREVIEW", requestId, id, options }, "*");
+        });
+      },
+    }),
+    []
+  );
+
   const handleLoad = () => {
     setIframeWindow(iframeRef.current?.contentWindow ?? null);
   };
@@ -58,7 +124,7 @@ export function GameView({ project, gameUrl, isBuilding, error }: GameViewProps)
       onLoad={handleLoad}
     />
   );
-}
+});
 
 function Message({
   children,

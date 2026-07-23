@@ -238,20 +238,29 @@ export default class ProjectHandler {
       ? fs.readdirSync(prefabsDir).filter((f) => f.endsWith(".json"))
       : [];
 
+    const scriptsDir = path.join(__dirname, "../../projects", projectName, "scripts");
+
     const allComponents = new Set();
-    const allScripts = new Set();
+    // scriptName -> Set of human-readable locations referencing it, so a missing
+    // script can be traced back to every entity/prefab that attaches it.
+    const allScripts = new Map();
+
+    function addScriptRef(scriptName, location) {
+      if (!allScripts.has(scriptName)) allScripts.set(scriptName, new Set());
+      allScripts.get(scriptName).add(location);
+    }
 
     // Emits creation code for one plain (non-prefab-referencing) entity node.
-    function renderEntity(node, varName, idExpr, indent = "    ") {
+    function renderEntity(node, varName, idExpr, indent = "    ", location) {
       for (const compName of Object.keys(node.components || {})) allComponents.add(compName);
-      for (const scriptName of node.scripts || []) allScripts.add(scriptName);
+      for (const scriptName of node.scripts || []) addScriptRef(scriptName, location);
 
       const lines = [`${indent}const ${varName} = engine.createEntity(${idExpr});`];
       for (const [compName, data] of Object.entries(node.components || {})) {
-        lines.push(`${indent}${varName}.addComponent(${compName}, ${JSON.stringify(data)});`);
+        lines.push(`${indent}${varName}.addComponent(${compName}_component, ${JSON.stringify(data)});`);
       }
       for (const scriptName of node.scripts || []) {
-        lines.push(`${indent}${varName}.attachScript(${scriptName});`);
+        lines.push(`${indent}${varName}.attachScript(${scriptName}_script);`);
       }
       return lines;
     }
@@ -264,6 +273,8 @@ export default class ProjectHandler {
 
       const bodyLines = [];
       for (const entity of scene.entities || []) {
+        const location = `entity "${entity.id}" in scene "${sceneName}"`;
+
         if (entity.prefab) {
           const varName = `entity_${entity.id}`;
           bodyLines.push(
@@ -276,14 +287,14 @@ export default class ProjectHandler {
           // idea about them — add them explicitly after instantiation.
           for (const [compName, data] of Object.entries(entity.components || {})) {
             allComponents.add(compName);
-            bodyLines.push(`    ${varName}.addComponent(${compName}, ${JSON.stringify(data)});`);
+            bodyLines.push(`    ${varName}.addComponent(${compName}_component, ${JSON.stringify(data)});`);
           }
           for (const scriptName of entity.scripts || []) {
-            allScripts.add(scriptName);
-            bodyLines.push(`    ${varName}.attachScript(${scriptName});`);
+            addScriptRef(scriptName, location);
+            bodyLines.push(`    ${varName}.attachScript(${scriptName}_script);`);
           }
         } else {
-          bodyLines.push(...renderEntity(entity, `entity_${entity.id}`, `"${entity.id}"`));
+          bodyLines.push(...renderEntity(entity, `entity_${entity.id}`, `"${entity.id}"`, "    ", location));
         }
       }
 
@@ -296,9 +307,10 @@ export default class ProjectHandler {
     for (const file of prefabFiles) {
       const prefabName = path.basename(file, ".json");
       const prefab = JSON.parse(fs.readFileSync(path.join(prefabsDir, file), "utf-8"));
+      const location = `prefab "${prefabName}"`;
 
       for (const compName of Object.keys(prefab.components || {})) allComponents.add(compName);
-      for (const scriptName of prefab.scripts || []) allScripts.add(scriptName);
+      for (const scriptName of prefab.scripts || []) addScriptRef(scriptName, location);
 
       const rootLines = [
         `  const entity = engine.createEntity(id ?? engine._generateId("${prefabName}"));`,
@@ -306,11 +318,11 @@ export default class ProjectHandler {
       ];
       for (const [compName, data] of Object.entries(prefab.components || {})) {
         rootLines.push(
-          `  entity.addComponent(${compName}, { ...${JSON.stringify(data)}, ...(overrides.${compName} || {}) });`
+          `  entity.addComponent(${compName}_component, { ...${JSON.stringify(data)}, ...(overrides.${compName} || {}) });`
         );
       }
       for (const scriptName of prefab.scripts || []) {
-        rootLines.push(`  entity.attachScript(${scriptName});`);
+        rootLines.push(`  entity.attachScript(${scriptName}_script);`);
       }
       rootLines.push(`  return entity;`);
 
@@ -320,22 +332,34 @@ export default class ProjectHandler {
       prefabRegistrations.push(`  engine.prefabs.register("${prefabName}", prefab_${prefabName});`);
     }
 
+    // Components import with a suffixed alias (e.g. `Sprite` -> `Sprite_component`)
+    // so a component name can never collide with a script/variable of the same name.
     const componentImports = [...allComponents].map((name) => {
       const entry = manifest[name];
       if (!entry) throw new Error(`Component "${name}" not found in engine or project`);
       const importPath = entry.source === "engine" ? `../engine/components/${entry.filename}` : `./components/${entry.filename}`;
-      return `import { ${name} } from "${importPath}";`;
+      return `import { ${name} as ${name}_component } from "${importPath}";`;
     }).join("\n");
 
-    const scriptImports = [...allScripts]
-      .map((name) => `import { ${name} } from "./scripts/${name}.js";`)
-      .join("\n");
+    // Scripts import with a suffixed alias (e.g. `testScript` -> `testScript_script`).
+    // If the backing file no longer exists on disk (deleted/renamed script that's
+    // still referenced by an entity or prefab), emit a console.error instead of a
+    // broken import, naming every place that still attaches it.
+    const scriptImports = [...allScripts.entries()].map(([name, locations]) => {
+      const scriptPath = path.join(scriptsDir, `${name}.js`);
+      if (!fs.existsSync(scriptPath)) {
+        const where = [...locations].join(", ");
+        return `console.error(${JSON.stringify(
+          `Missing script "${name}" (expected at scripts/${name}.js) — still attached to: ${where}`
+        )});`;
+      }
+      return `import { ${name} as ${name}_script } from "./scripts/${name}.js";`;
+    }).join("\n");
 
     const sceneRegistrations = sceneFiles
       .map((f) => path.basename(f, ".json"))
       .map((name) => `  engine.registerScene("${name}", scene_${name});`)
       .join("\n");
-
 
     const assetManifest = ProjectHandler.scanAssets(projectName);
 

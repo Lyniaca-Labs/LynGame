@@ -6,7 +6,7 @@ export class SpriteRenderer extends Component {
     width: { type: "number", default: 32 },
     height: { type: "number", default: 32 },
   };
-  
+
   constructor({ sprite = "", width = 32, height = 32 } = {}) {
     super();
     this.spriteKey = sprite ?? null;
@@ -29,11 +29,22 @@ export class SpriteRenderer extends Component {
     ctx.rotate((transform.rotation * Math.PI) / 180);
 
     if (this._image) {
-      ctx.drawImage(this._image, 0, 0, this.width, this.height);
+      ctx.drawImage(
+        this._image,
+        -this.width / 2,
+        -this.height / 2,
+        this.width,
+        this.height
+      );
     } else {
-      // no sprite key given, or asset not loaded yet — fall back to a solid rect
-      ctx.fillStyle = this.color;
-      ctx.fillRect(0, 0, this.width, this.height);
+      // TODO: replace with a placeholder image or sprite if the sprite is not found
+      ctx.fillStyle = "black";
+      ctx.fillRect(
+        -this.width / 2,
+        -this.height / 2,
+        this.width,
+        this.height
+      );
     }
 
     ctx.restore();

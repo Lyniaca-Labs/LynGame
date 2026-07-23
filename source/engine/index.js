@@ -17,7 +17,8 @@ export class GameEngine {
     this.scenes = {};
     this.currentScene = null;
     this.running = false;
-    this.state = {}; // globally accessible state
+    this.paused = false;
+    this.state = {};
 
     this.devMode = options.devMode ?? true;
 
@@ -25,6 +26,8 @@ export class GameEngine {
     this.assets = new AssetLoader();
 
     this.startTime = Date.now();
+    this._pausedElapsed = 0;
+    this._pauseStartedAt = null;
 
     this.input = new Input(gameContainer);
     this.perf = new PerformanceMonitor(this, options.perf);
@@ -35,14 +38,46 @@ export class GameEngine {
       this.registerComponent(name, componentClass);
     }
 
-    // default layer every game gets out of the box
     this.newLayer("main", 0);
 
     this._handleResize();
+
+    // expose global hooks the parent editor can call cross-document via
+    // postMessage forwarding (see the message listeners below) or,
+    // when same-origin, directly.
+    window.pauseGame = () => this.pause();
+    window.unPauseGame = () => this.unpause();
+    window.getEntityPreview = (id, opts) => this.getEntityPreview(id, opts);
+
+
+    window.addEventListener("keydown", (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      window.parent.postMessage(
+        { type: "EDITOR_KEYDOWN", key: e.key, ctrl: true, shift: e.shiftKey, alt: e.altKey },
+        "*"
+      );
+    });
+
+    window.addEventListener("message", (event) => {
+      if (event.data?.type === "PAUSE") this.pause();
+      if (event.data?.type === "UNPAUSE") this.unpause();
+
+      if (event.data?.type === "GET_ENTITY_PREVIEW") {
+        const { requestId, id, options } = event.data;
+        const dataUrl = this.getEntityPreview(id, options);
+        window.parent.postMessage(
+          { type: "ENTITY_PREVIEW_RESULT", requestId, dataUrl },
+          "*"
+        );
+      }
+    });
   }
 
   get time() {
-    return Date.now() - this.startTime;
+    const pausedElapsed =
+      this._pausedElapsed + (this.paused ? Date.now() - this._pauseStartedAt : 0);
+    return Date.now() - this.startTime - pausedElapsed;
   }
 
   // --- scenes ---
@@ -52,12 +87,9 @@ export class GameEngine {
       console.error(`Scene "${name}" not found`);
       return;
     }
-
-    // tear down current entities properly (fires onDestroy)
     for (const entity of [...this.entities]) {
       this.removeEntity(entity.id);
     }
-
     this.currentScene = name;
     this.scenes[name](this);
   }
@@ -90,7 +122,6 @@ export class GameEngine {
     for (const layer of this.layers) {
       layer.canvas.width = width;
       layer.canvas.height = height;
-      // TODO: pass image smoothing setting from engine config
       layer.ctx.imageSmoothingEnabled = false;
     }
   }
@@ -102,7 +133,6 @@ export class GameEngine {
   }
 
   // --- entities ---
-
 
   createEntity(id) {
     const finalId = id ?? this._generateId("entity");
@@ -133,6 +163,105 @@ export class GameEngine {
     return this.entities.find((e) => e.id === id);
   }
 
+  // --- previews ---
+
+  /**
+   * Renders a single entity in isolation to an offscreen canvas and
+   * returns a PNG data URL — handy for inspector thumbnails, prefab
+   * icons, etc. This never touches the live "main" layer, so it's safe
+   * to call anytime: mid-frame, while paused, whatever.
+   *
+   * Exposed as window.getEntityPreview(id, options) so the parent editor
+   * can call it via postMessage/RPC without needing a dedicated bridge.
+   *
+   * @param {string} id - entity id
+   * @param {object} [options]
+   * @param {number} [options.width=128]
+   * @param {number} [options.height=128]
+   * @param {string|null} [options.background=null] - fill color, or null for transparent
+   * @returns {string|null} data URL, or null if the entity/transform isn't found
+   */
+  getEntityPreview(id, options = {}) {
+    const { width = 128, height = 128, background = null } = options;
+
+    const entity = this.getEntity(id);
+    if (!entity) return null;
+
+    const transform = entity.getComponent(Transform);
+    if (!transform) return null;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+
+    if (background) {
+      ctx.fillStyle = background;
+      ctx.fillRect(0, 0, width, height);
+    }
+
+    let renderWidth = 0;
+    let renderHeight = 0;
+
+    for (const component of entity.components.values()) {
+      const isSprite = component.constructor.name === "SpriteRenderer";
+      const isShape = component.constructor.name === "ShapeRenderer";
+
+      if (!isSprite && !isShape) continue;
+
+      renderWidth = Math.max(renderWidth, component.width ?? 0);
+      renderHeight = Math.max(renderHeight, component.height ?? 0);
+    }
+
+    if (!renderWidth || !renderHeight) {
+      renderWidth = 32;
+      renderHeight = 32;
+    }
+
+    const scale = Math.min(
+      width / renderWidth,
+      height / renderHeight
+    );
+
+    const previewTransform = Object.assign(
+      Object.create(Object.getPrototypeOf(transform)),
+      transform,
+      {
+        x: width / 2,
+        y: height / 2,
+      }
+    );
+
+    for (const component of entity.components.values()) {
+      if (!component.render) continue;
+
+      const previewComponent = Object.assign(
+        Object.create(Object.getPrototypeOf(component)),
+        component
+      );
+
+      // Resize only the preview copy
+      if (previewComponent.width) {
+        previewComponent.width *= scale;
+      }
+
+      if (previewComponent.height) {
+        previewComponent.height *= scale;
+      }
+
+      previewComponent.render(
+        ctx,
+        previewTransform,
+        entity,
+        this
+      );
+    }
+
+    return canvas.toDataURL("image/png");
+  }
+
   // --- lifecycle ---
 
   start() {
@@ -146,23 +275,44 @@ export class GameEngine {
     this.running = false;
   }
 
+  pause() {
+    if (this.paused) return;
+    this.paused = true;
+    this._pauseStartedAt = Date.now();
+  }
+
+  unpause() {
+    if (!this.paused) return;
+    this.paused = false;
+    this._pausedElapsed += Date.now() - this._pauseStartedAt;
+    this._pauseStartedAt = null;
+    this._lastTime = performance.now();
+  }
+
+  togglePause() {
+    if (this.paused) this.unpause();
+    else this.pause();
+  }
+
   _loop(time) {
     if (!this.running) return;
 
     const dt = Math.min((time - this._lastTime) / 1000, 1 / 30);
     this._lastTime = time;
 
-    this.perf.beginFrame(dt);
+    if (this.paused) {
+      this._render();
+      this.input._endFrame();
+      requestAnimationFrame((t) => this._loop(t));
+      return;
+    }
 
+    this.perf.beginFrame(dt);
     this._update(dt);
     this.perf.markUpdate();
-
     this._render();
     this.perf.markRender();
-
     this.perf.endFrame(this.entities.length);
-
-    // clear one-frame input state — must run AFTER update+render read it
     this.input._endFrame();
 
     requestAnimationFrame((t) => this._loop(t));
@@ -170,11 +320,9 @@ export class GameEngine {
 
   _update(dt) {
     for (const entity of this.entities) {
-      // scripts decide intent (input, AI, forces) FIRST
       for (const script of entity.scripts) {
         script(entity, this, dt);
       }
-      // components integrate that intent into physics/state SECOND
       for (const component of entity.components.values()) {
         component.onTick?.(entity, this, dt);
       }
@@ -188,15 +336,13 @@ export class GameEngine {
 
     for (const entity of this.entities) {
       const transform = entity.getComponent(Transform);
-      if (!transform) {
-        // if (this.devMode) console.warn(`Entity id "${entity.id}" is missing Transform component, cannot render`);
-        continue;
-      }
+      if (!transform) continue;
 
-      // all rendering based components
       for (const component of entity.components.values()) {
         component.render?.(gameLayer.ctx, transform, entity, this);
       }
     }
   }
 }
+
+

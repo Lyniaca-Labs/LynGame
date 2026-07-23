@@ -11,6 +11,7 @@ import React, {
 import { Modal } from "../ui/Modal";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
+import { GameView, GameViewHandle } from "../layout/sections/GameView";
 
 type PromptRequest = {
   id: string;
@@ -35,6 +36,7 @@ declare global {
   interface Window {
     prompt(message?: string, defaultValue?: string): Promise<string | null>;
     confirm(message?: string): Promise<boolean>;
+    gameViewRef: React.RefObject<GameViewHandle> | null;
   }
 }
 

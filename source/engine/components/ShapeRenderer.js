@@ -7,7 +7,7 @@ export class ShapeRenderer extends Component {
     height: { type: "number", default: 32 },
     color: { type: "string", default: "#fff" },
   };
-  
+
   constructor({ shape = "rect", width = 32, height = 32, color = "#fff" } = {}) {
     super();
     this.shape = shape;
@@ -27,7 +27,12 @@ export class ShapeRenderer extends Component {
       ctx.arc(0, 0, this.width / 2, 0, Math.PI * 2);
       ctx.fill();
     } else {
-      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.fillRect(
+        -this.width / 2,
+        -this.height / 2,
+        this.width,
+        this.height
+      );
     }
 
     ctx.restore();

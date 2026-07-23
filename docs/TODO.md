@@ -18,9 +18,9 @@ LATER
   - [ ] init funciton loading animation (as LynGame)
 - [ ] Engine GUI/editor on top of game framework
   - [x] ability to add components and scripts to entities
-  - [ ] keyboard shortcuts
+  - [x] keyboard shortcuts
   - [ ] ability to load a preview of an entity from editor (same with scene)
-  - [ ] ability to pause the game
+  - [x] ability to pause the game
   - [x] code editor
   - [ ] ability to move entities around, around scenes, duplicate, copy, paste
   - [ ] little icons for tabs on explorer
@@ -35,6 +35,7 @@ LATER
   - [ ] undo / redo
   - [ ] visual editor and context menu in scene
   - [ ] ESLINT in code editor
+  - [ ] autosave option in settings
 
 - [ ] Good overall architecture/design pattern
   - [ ] turn server into typescript, keep all project files and engine files javascript

@@ -1,12 +1,13 @@
 // Inspector.tsx — full file
 
 import { ReactNode, useEffect, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Trash2, RefreshCw } from "lucide-react";
 import { Container } from "../../ui/Container";
 import { Select, SelectOption } from "../../ui/Select";
 import { useSceneEditor } from "../../context/SceneEditorContext";
 import { useProject } from "../../context/ProjectContext";
 import { Entity, ComponentDefinition, ComponentFieldDefinition, PrefabData } from "../../api";
+import type { GameViewHandle } from "../sections/GameView";
 
 type FieldType = ComponentFieldDefinition["type"];
 
@@ -189,7 +190,12 @@ function InspectorEntity({
   return (
     <Container title={`Inspector — ${entity.id}`} bodyClassName="overflow-y-auto p-2">
       <div className="space-y-4">
-        <EntityIdField entityId={entity.id} existingIds={existingIds} onRename={onRename} />
+        <EntityIdField
+          entityId={entity.id}
+          existingIds={existingIds}
+          onRename={onRename}
+          gameViewRef={window.gameViewRef as React.RefObject<GameViewHandle>}
+        />
 
         <Section title="Prefab">
           {entity.prefab ? (
@@ -403,15 +409,15 @@ function EntityIdField({
   entityId,
   existingIds,
   onRename,
+  gameViewRef,
 }: {
   entityId: string;
   existingIds: Set<string>;
   onRename: (newId: string) => void;
+  gameViewRef: React.RefObject<GameViewHandle>;
 }) {
   const [value, setValue] = useState(entityId);
 
-  // Keep the field in sync if the selected entity changes out from under it
-  // (e.g. selecting a different entity in the Explorer).
   useEffect(() => setValue(entityId), [entityId]);
 
   const trimmed = value.trim();
@@ -431,23 +437,97 @@ function EntityIdField({
       <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-faint)]">
         Entity ID
       </div>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          if (e.key === "Escape") setValue(entityId);
-        }}
-        className={`w-full rounded border bg-transparent px-1.5 py-1 text-xs text-[var(--color-text)] ${isDuplicate ? "border-[var(--color-danger)]" : "border-[var(--color-border)]"
-          }`}
-      />
+
+      <div className="flex items-start gap-2">
+        <div className="flex-1">
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              if (e.key === "Escape") setValue(entityId);
+            }}
+            className={`w-full rounded border bg-transparent px-1.5 py-1 text-xs text-[var(--color-text)] ${isDuplicate
+                ? "border-[var(--color-danger)]"
+                : "border-[var(--color-border)]"
+              }`}
+          />
+        </div>
+
+        <div className="w-20 shrink-0 aspect-square">
+          <EntityPreview
+            className="h-full w-full"
+            entityId={entityId}
+            gameViewRef={gameViewRef}
+          />
+        </div>
+      </div>
+
       {isDuplicate && (
-        <div className="mt-0.5 text-[10px] text-[var(--color-danger)]">
+        <div className="mt-1 text-[10px] text-[var(--color-danger)]">
           An entity with this ID already exists.
         </div>
       )}
+    </div>
+  );
+}
+
+function EntityPreview({
+  className,
+  entityId,
+  gameViewRef,
+}: {
+  className?: string;
+  entityId: string;
+  gameViewRef: React.RefObject<GameViewHandle>;
+}) {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // bump this to force a refetch without changing entityId
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setPreview(null);
+
+    gameViewRef.current
+      ?.getEntityPreview(entityId, { width: 96, height: 96, background: "#1a1a1a" })
+      .then((dataUrl) => {
+        if (!cancelled) setPreview(dataUrl);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [entityId, refreshKey, gameViewRef]);
+
+  return (
+    <div className={`relative mb-2 flex h-24 w-24 items-center justify-center overflow-hidden rounded border border-[var(--color-border)] bg-[var(--color-bg-elevated)] ${className ?? ""}`}>
+      {loading && (
+        <div className="h-full w-full animate-pulse bg-[var(--color-bg-elevated)]" />
+      )}
+      {!loading && preview && (
+        <img src={preview} alt={entityId} className="h-full w-full object-contain" />
+      )}
+      {!loading && !preview && (
+        <span className="text-[10px] text-[var(--color-text-faint)]">No preview</span>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setRefreshKey((k) => k + 1)}
+        title="Refresh preview"
+        className="absolute right-1 top-1 rounded bg-black/40 p-1 text-[var(--color-text-faint)] hover:text-[var(--color-text)]"
+      >
+        <RefreshCw size={10} />
+      </button>
     </div>
   );
 }

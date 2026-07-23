@@ -152,13 +152,34 @@ export const prefabsApi = {
 
 export const componentsApi = {
   create: (project: string, name: string, source: "project" = "project"): Promise<ApiResult> => {
-    const def: ComponentDefinition = {
-      name,
-      source,
-      filename: withJsExt(name),
-      fields: [],
-    };
-    return projectsApi.writeFile(project, "components", withJsExt(name), JSON.stringify(def, null, 2));
+    return projectsApi.writeFile(
+      project,
+      "components",
+      withJsExt(name),
+      `import { Component } from "@types/Component.js";
+import { Transform } from "@components/Transform.js";
+
+export class ${name} extends Component {
+  static schema = {
+    // width: { type: "number", default: 32 },
+  };
+
+  constructor({ /* width = 32, */ } = {}) {
+    super();
+    // this.width = width;
+  }
+
+  onCreate(entity, engine) {}
+
+  onTick(entity, engine, dt) {
+    const transform = entity.getComponent(Transform);
+    if (!transform) return;
+  }
+
+  onDestroy(entity, engine) {}
+}
+`
+    );
   },
   remove: (project: string, name: string): Promise<ApiResult> =>
     projectsApi.deleteFile(project, "components", withJsExt(name)),
@@ -168,7 +189,12 @@ export const componentsApi = {
 // Plain source files under "scripts" — no JSON wrapper, filename should
 
 export const scriptsApi = {
-  create: (project: string, filename: string, content = `// ${filename}\n`): Promise<ApiResult> =>
+  create: (project: string, filename: string, content = `// ${filename}\n
+export function ${filename}(entity, engine, dt) {
+  // entity is the entity instance, engine is the game engine instance, dt is the delta time since last frame
+  
+  // your script logic here (will be called every tick)
+}\n`): Promise<ApiResult> =>
     projectsApi.writeFile(project, "scripts", withJsExt(filename), content),
   remove: (project: string, filename: string): Promise<ApiResult> =>
     projectsApi.deleteFile(project, "scripts", withJsExt(filename)),

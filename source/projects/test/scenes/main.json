@@ -46,15 +46,20 @@
         "Transform": {
           "x": 100,
           "y": 150
+        },
+        "ShapeRenderer": {
+          "height": 64,
+          "width": 32
         }
       },
       "components": {
         "SpriteRenderer": {
           "sprite": "tree",
-          "width": 32,
+          "width": 900,
           "height": 32
         }
-      }
+      },
+      "scripts": []
     },
     {
       "id": "spawner",

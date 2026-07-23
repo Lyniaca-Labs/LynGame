@@ -40,6 +40,7 @@ export function buildProject(projectName) {
   const engineSrc = path.join(__dirname, "../../engine");
   const projectSrc = path.join(__dirname, "../../projects", projectName);
   const outDir = path.join(__dirname, "../../output", projectName);
+  const templatePath = path.join(__dirname, "./templates/index.html");
 
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(outDir, { recursive: true });
@@ -47,74 +48,9 @@ export function buildProject(projectName) {
   fs.cpSync(engineSrc, path.join(outDir, "engine"), { recursive: true });
   fs.cpSync(projectSrc, path.join(outDir, "game"), { recursive: true });
 
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>${projectName}</title>
-<style>
-  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
-  #game-container { width: 100%; height: 100%; }
-</style>
-</head>
-<body>
-  <div id="game-container"></div>
-  <script>
-    (function () {
-      function send(level, args) {
-        try {
-          window.parent.postMessage(
-            {
-              source: "game-console",
-              level: level,
-              args: args.map(function (a) {
-                if (a instanceof Error) return a.stack || a.message;
-                if (typeof a === "object") {
-                  try { return JSON.stringify(a); } catch (e) { return String(a); }
-                }
-                return String(a);
-              }),
-              timestamp: Date.now(),
-            },
-            "*"
-          );
-        } catch (e) {
-          // no parent, or parent gone — nothing to do
-        }
-      }
-    
-      ["log", "info", "warn", "error"].forEach(function (level) {
-        var original = console[level] ? console[level].bind(console) : function () {};
-        console[level] = function () {
-          send(level, Array.prototype.slice.call(arguments));
-          original.apply(console, arguments);
-        };
-      });
-    
-      window.addEventListener("error", function (e) {
-        send("error", [e.message + " (" + e.filename + ":" + e.lineno + ")"]);
-      });
-    
-      window.addEventListener("unhandledrejection", function (e) {
-        send("error", [
-          "Unhandled promise rejection: " +
-            (e.reason && e.reason.message ? e.reason.message : e.reason),
-        ]);
-      });
-    })();
-  </script>
-  <script type="module">
-    import { GameEngine } from "./engine/index.js";
-
-    const engine = new GameEngine(document.getElementById("game-container"));
-    window.engine = engine;
-    window.LG = engine;
-
-    const { init } = await import("./game/main.js");
-    init(engine);
-  </script>
-</body>
-</html>`;
+  const html = fs
+    .readFileSync(templatePath, "utf8")
+    .replace(/{{\s*PROJECT_NAME\s*}}/g, projectName);
 
   fs.writeFileSync(path.join(outDir, "index.html"), html);
 
