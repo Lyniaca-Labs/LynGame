@@ -126,6 +126,9 @@ export interface OpenScriptResponse extends ApiResult {
 // stored as plain JSON files under the generic "prefabs" folder, so we build
 // get/save on top of the generic readFile/writeFile.
 
+const withJsExt = (filename: string) => (filename.endsWith(".js") ? filename : `${filename}.js`);
+
+
 export interface PrefabData {
   components: Record<string, Record<string, unknown>>;
   scripts: string[];
@@ -139,6 +142,43 @@ export const prefabsApi = {
   save: async (project: string, prefab: string, data: PrefabData): Promise<ApiResult> => {
     return projectsApi.writeFile(project, "prefabs", `${prefab}.json`, JSON.stringify(data, null, 2));
   },
+  remove: (project: string, prefab: string): Promise<ApiResult> =>
+    projectsApi.deleteFile(project, "prefabs", `${prefab}.json`),
+};
+
+// ---- Components ----
+// No dedicated endpoints — stored as plain JSON files under "components",
+// same pattern as prefabs.
+
+export const componentsApi = {
+  create: (project: string, name: string, source: "project" = "project"): Promise<ApiResult> => {
+    const def: ComponentDefinition = {
+      name,
+      source,
+      filename: withJsExt(name),
+      fields: [],
+    };
+    return projectsApi.writeFile(project, "components", withJsExt(name), JSON.stringify(def, null, 2));
+  },
+  remove: (project: string, name: string): Promise<ApiResult> =>
+    projectsApi.deleteFile(project, "components", withJsExt(name)),
+};
+
+// ---- Scripts ----
+// Plain source files under "scripts" — no JSON wrapper, filename should
+
+export const scriptsApi = {
+  create: (project: string, filename: string, content = `// ${filename}\n`): Promise<ApiResult> =>
+    projectsApi.writeFile(project, "scripts", withJsExt(filename), content),
+  remove: (project: string, filename: string): Promise<ApiResult> =>
+    projectsApi.deleteFile(project, "scripts", withJsExt(filename)),
+};
+
+// ---- Scenes (delete only — create/save already covered by saveScene) ----
+
+export const scenesApi = {
+  remove: (project: string, name: string): Promise<ApiResult> =>
+    projectsApi.deleteFile(project, "scenes", `${name}.json`),
 };
 
 const enc = encodeURIComponent;

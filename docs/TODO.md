@@ -22,7 +22,9 @@ LATER
   - [ ] ability to load a preview of an entity from editor (same with scene)
   - [ ] ability to pause the game
   - [x] code editor
-  - [ ] can edit prefabs
+  - [ ] ability to move entities around, around scenes, duplicate, copy, paste
+  - [ ] little icons for tabs on explorer
+  - [x] can edit prefabs
   - [ ] export project to zip (with a node live server. Can use node or python, or powershell (ps1) to run)
   - [ ] deleting, creating, renaming scripts and components
   - [ ] get codemirror code editor to fit screen better

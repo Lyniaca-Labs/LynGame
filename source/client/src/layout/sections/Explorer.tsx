@@ -42,7 +42,23 @@ const stripExt = (name: string) => name.replace(/\.(js|ts|json)$/i, "");
 
 function ExplorerFiles() {
   const { projectData, currentProject } = useProject();
-  const { target, scene: liveScene, openScene, openEntity, openPrefab, addEntity, deleteEntity } = useSceneEditor();
+  const {
+    target,
+    scene: liveScene,
+    openScene,
+    openEntity,
+    openPrefab,
+    addEntity,
+    deleteEntity,
+    createComponent,
+    deleteComponent,
+    createScript,
+    deleteScript,
+    createScene,
+    deleteScene,
+    createPrefab,
+    deletePrefab,
+  } = useSceneEditor();
 
   // Lazily-populated cache of each scene's entities, so scene nodes can
   // show them as children in the tree without eagerly loading everything
@@ -213,7 +229,10 @@ function ExplorerFiles() {
       }
       actions.push(
         { label: "Rename", icon: Pencil, onClick: () => console.log("rename", node.id) },
-        { label: "Delete", icon: Trash2, danger: true, onClick: () => console.log("delete", node.id) }
+        // deleteScene prompts for the scene name itself rather than taking
+        // one as an argument (matches its () => void signature in the
+        // context), so this re-prompts rather than deleting sceneId directly.
+        { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteScene() }
       );
       return actions;
     }
@@ -226,7 +245,8 @@ function ExplorerFiles() {
           icon: Pencil,
           onClick: () => setOpenCodeFile({ folder: "scripts", filename: node.id }),
         },
-        { label: "Delete", icon: Trash2, danger: true, onClick: () => console.log("delete", node.id) },
+        // deleteScript prompts for the script name itself, same caveat as above.
+        { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteScript() },
       ];
     }
 
@@ -240,18 +260,40 @@ function ExplorerFiles() {
           icon: Pencil,
           onClick: () => setOpenCodeFile({ folder: "components", filename }),
         },
-        { label: "Delete", icon: Trash2, danger: true, onClick: () => console.log("delete", node.id) },
+        // deleteComponent prompts for the component name itself, same caveat.
+        { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteComponent() },
       ];
     }
 
-    // Everything else (prefabs, section headers)
+    // Prefab node — id is the raw prefab filename (e.g. "Player.json"). This
+    // was previously falling through to the generic "everything else" branch
+    // below with console.log stubs; broken out here to match the other
+    // resource types above.
+    if (projectData.prefabs.includes(node.id)) {
+      return [
+        { label: "Rename", icon: Pencil, onClick: () => console.log("rename", node.id) },
+        // deletePrefab prompts for the prefab name itself, same caveat as above.
+        { label: "Delete", icon: Trash2, danger: true, onClick: () => deletePrefab() },
+      ];
+    }
+
+    // Everything else (section headers: Scenes / Prefabs / Scripts / Components)
     const base: MenuAction[] = [
       { label: "Rename", icon: Pencil, onClick: () => console.log("rename", node.id) },
       { label: "Delete", icon: Trash2, danger: true, onClick: () => console.log("delete", node.id) },
     ];
     if (node.children) {
+      // Route "New Item" to the right create function per section, instead
+      // of the previous console.log stub.
+      const newItemHandler = {
+        scenes: createScene,
+        prefabs: createPrefab,
+        scripts: createScript,
+        components: createComponent,
+      }[node.id];
+
       return [
-        { label: "New Item", icon: Plus, onClick: () => console.log("new in", node.id) },
+        { label: "New Item", icon: Plus, onClick: () => (newItemHandler ?? (() => console.log("new in", node.id)))() },
         ...base,
       ];
     }
