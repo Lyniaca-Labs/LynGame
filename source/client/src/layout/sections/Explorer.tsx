@@ -1,18 +1,33 @@
 // Explorer.tsx — full file
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ClipboardEvent, DragEvent } from "react";
 import { Container } from "../../ui/Container";
 import { Tabs } from "../../ui/Tabs";
 import { Modal } from "../../ui/Modal";
+import { Button } from "../../ui/Button";
+import { Input } from "../../ui/Input";
 import { useProject } from "../../context/ProjectContext";
 import { useSceneEditor } from "../../context/SceneEditorContext";
-import { Plus, Pencil, Trash2, Star, Waypoints, FileCode } from "lucide-react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Star,
+  Waypoints,
+  FileCode,
+  Upload,
+  Music,
+  File,
+  WandSparkles,
+} from "lucide-react";
 import { FolderTree, TreeNode, TreeNodeBadge } from "../../ui/FolderTree";
 import { MenuAction } from "../../ui/ActionsMenu";
-import { projectsApi, Entity, graphScriptsApi } from "../../api";
+import { projectsApi, Entity, graphScriptsApi, AssetEntry, BASE_URL } from "../../api";
 import { CodeFileEditor } from "../../components/CodeFileEditor";
 import ScriptGraph from "../../components/graphs/scripting/ScriptGraph";
 import { GraphValue } from "../../components/graphs/GraphEditor";
+import TextureGraph from "../../components/graphs/TextureGraph";
 
 export function Explorer() {
   return (
@@ -44,6 +59,14 @@ const stripExt = (name: string) => name.replace(/\.(js|ts|json)$/i, "");
 
 const isGraphScript = (name: string) => name.endsWith(".lgscript.json");
 const isGeneratedGraphOutput = (name: string) => name.endsWith(".lgscript.js");
+const textureName = (filename: string) => filename.replace(/\.json$/i, "");
+const textureFilename = (name: string) => {
+  const withoutJson = name.replace(/\.json$/i, "");
+  const withTexture = withoutJson.endsWith(".texture")
+    ? withoutJson
+    : `${withoutJson}.texture`;
+  return `${withTexture}.json`;
+};
 
 function ExplorerFiles() {
   const { projectData, currentProject } = useProject();
@@ -399,15 +422,268 @@ function ExplorerFiles() {
 }
 
 function ExplorerAssets() {
-  const { projectData } = useProject();
+  const { projectData, currentProject, reloadProject } = useProject();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [texture, setTexture] = useState<{ name: string; graph?: GraphValue } | null>(null);
+  const [rename, setRename] = useState<AssetEntry | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [dragging, setDragging] = useState(false);
 
   if (!projectData) {
     return <PlaceholderPanel label="No project loaded" />;
   }
 
+  const importFiles = async (files: FileList | File[]) => {
+    if (!currentProject) return;
+
+    for (const file of Array.from(files)) {
+      const reader = new FileReader();
+
+      await new Promise<void>((resolve, reject) => {
+        reader.onload = async () => {
+          try {
+            const filename = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+            await projectsApi.importAsset(currentProject, filename, String(reader.result));
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    await reloadProject();
+  };
+
+  const openAsset = async (asset: AssetEntry) => {
+    if (!currentProject) return;
+    if (asset.type !== "texture") return;
+
+    try {
+      const response = await projectsApi.readFile(
+        currentProject,
+        "assets",
+        asset.relativePath,
+      );
+      const parsed = JSON.parse(response.content);
+      setTexture({ name: asset.relativePath, graph: parsed.graph });
+    } catch {
+      setTexture({ name: asset.relativePath });
+    }
+  };
+
+  const handleDelete = async (asset: AssetEntry) => {
+    if (!currentProject) return;
+    if (!(await window.confirm(`Delete ${asset.relativePath}?`))) return;
+
+    await projectsApi.deleteFile(currentProject, "assets", asset.relativePath);
+    await reloadProject();
+  };
+
+  const handleRename = async () => {
+    if (!currentProject || !rename || !renameValue.trim()) return;
+
+    const nextName = rename.type === "texture"
+      ? textureFilename(renameValue.trim())
+      : renameValue.trim();
+
+    await projectsApi.renameAsset(currentProject, rename.relativePath, nextName);
+    setRename(null);
+    await reloadProject();
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragging(false);
+    void importFiles(event.dataTransfer.files);
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    const files = Array.from(event.clipboardData.files);
+    if (files.length > 0) void importFiles(files);
+  };
+
   return (
-    <div className="p-3 text-xs text-[var(--color-text-faint)]">
-      Assets ({projectData.assets.length})
+    <div
+      className={`flex h-full flex-col gap-2 p-2 ${
+        dragging ? "ring-2 ring-inset ring-[var(--color-accent)]" : ""
+      }`}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={handleDrop}
+      onPaste={handlePaste}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(event) => {
+          if (event.target.files) void importFiles(event.target.files);
+          event.currentTarget.value = "";
+        }}
+      />
+
+      <div className="flex items-center gap-1 text-xs">
+        <span className="text-[var(--color-text-muted)]">
+          Assets ({projectData.assets.length})
+        </span>
+        <Button
+          className="ml-auto"
+          size="sm"
+          iconOnly
+          iconLeft={<Upload size={14} />}
+          title="Import files"
+          onClick={() => inputRef.current?.click()}
+        />
+        <Button
+          size="sm"
+          iconOnly
+          iconLeft={<WandSparkles size={14} />}
+          title="New texture"
+          onClick={() => setTexture({ name: "texture.texture.json" })}
+        />
+      </div>
+
+      <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-2 overflow-auto">
+        {projectData.assets.map((asset) => (
+          <AssetCard
+            key={asset.relativePath}
+            asset={asset}
+            project={currentProject}
+            onOpen={() => void openAsset(asset)}
+            onRename={() => {
+              setRename(asset);
+              setRenameValue(
+                asset.type === "texture"
+                  ? textureName(asset.relativePath)
+                  : asset.relativePath,
+              );
+            }}
+            onDelete={() => void handleDelete(asset)}
+          />
+        ))}
+      </div>
+
+      {projectData.assets.length === 0 && (
+        <div className="text-center text-[10px] text-[var(--color-text-faint)]">
+          Drop files here, paste an image, or import from File Explorer.
+        </div>
+      )}
+
+      <Modal
+        open={rename !== null}
+        onClose={() => setRename(null)}
+        title="Rename Asset"
+      >
+        <div className="space-y-3">
+          <Input
+            autoFocus
+            value={renameValue}
+            onChange={(event) => setRenameValue(event.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setRename(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleRename()}>
+              Rename
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {texture && currentProject && (
+        <TextureGraph
+          open
+          onClose={() => setTexture(null)}
+          project={currentProject}
+          filename={texture.name}
+          assets={projectData.assets}
+          initialValue={texture.graph}
+          onSave={async (graph, dataUrl) => {
+            const name = texture.name.endsWith(".texture.json")
+              ? texture.name
+              : `${texture.name}.texture.json`;
+            await projectsApi.writeFile(
+              currentProject,
+              "assets",
+              name,
+              JSON.stringify({ version: 1, graph, dataUrl }, null, 2),
+            );
+            setTexture(null);
+            await reloadProject();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+interface AssetCardProps {
+  asset: AssetEntry;
+  project: string | null;
+  onOpen: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+}
+
+function AssetCard({ asset, project, onOpen, onRename, onDelete }: AssetCardProps) {
+  const assetUrl = project
+    ? `${BASE_URL}/api/projects/${encodeURIComponent(project)}/assets/raw/${encodeURIComponent(asset.relativePath)}`
+    : "";
+
+  const icon = asset.type === "texture" ? (
+    <WandSparkles size={24} className="text-[var(--color-accent-secondary)]" />
+  ) : asset.type === "audio" ? (
+    <Music size={24} />
+  ) : (
+    <File size={24} />
+  );
+
+  return (
+    <div
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.setData("text/lyngame-asset", asset.key);
+        event.dataTransfer.setData("text/plain", asset.key);
+      }}
+      className="group relative cursor-pointer rounded border border-[var(--color-border)] bg-[var(--color-bg-inset)] p-1 hover:border-[var(--color-accent-secondary)]"
+      onDoubleClick={onOpen}
+    >
+      <div className="flex h-10 items-center justify-center overflow-hidden rounded bg-black/20 opacity-70">
+        {asset.type === "image" ? (
+          <img src={assetUrl} alt={asset.key} className="max-h-full max-w-full object-contain" />
+        ) : (
+          icon
+        )}
+      </div>
+      <div className="truncate pt-1 text-[9px]" title={asset.relativePath}>
+        {asset.key}
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center gap-1 rounded bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
+        <Button
+          variant="ghost"
+          size="sm"
+          iconOnly
+          iconLeft={<Pencil size={11} />}
+          title="Rename"
+          onClick={onRename}
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          iconOnly
+          iconLeft={<Trash2 size={11} />}
+          title="Delete"
+          onClick={onDelete}
+        />
+      </div>
     </div>
   );
 }

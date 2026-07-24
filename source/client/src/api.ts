@@ -124,13 +124,20 @@ export interface ProjectInfo {
   assets: unknown[];
 }
 
+export interface AssetEntry {
+  key: string;
+  relativePath: string;
+  type: "image" | "audio" | "texture" | "other";
+  size?: number;
+}
+
 export interface ProjectEditorData extends ApiResult {
   project: ProjectInfo;
   components: Record<string, ComponentDefinition>;
   scenes: string[];
   prefabs: string[];
   scripts: string[];
-  assets: unknown[];
+  assets: AssetEntry[];
 }
 
 // ---- Folder file listing / editing ----
@@ -297,4 +304,10 @@ export const projectsApi = {
 
   deleteFile: (project: string, folder: EditableFolder, filename: string) =>
     api.del<ApiResult>(`api/projects/${enc(project)}/${enc(folder)}/${enc(filename)}`),
+
+  importAsset: (project: string, filename: string, data: string) =>
+    api.post<ApiResult>(`api/projects/${enc(project)}/assets/import`, { filename, data }),
+
+  renameAsset: (project: string, from: string, to: string) =>
+    api.post<ApiResult>(`api/projects/${enc(project)}/assets/rename`, { from, to }),
 };

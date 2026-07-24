@@ -26,7 +26,7 @@ LATER
   - [ ] event component (calls script on certain event to entity (hold, click, etc))
   - [ ] ability to turn off antialiasing in config / set frame rate and tick speed
   - [ ] keyframes for animation
-  - [ ] camera component -> attaches to entity, can set isactive on camera component and it will turn off all others in scene and attach to scene
+  - [x] camera component -> attaches to entity, can set isactive on camera component and it will turn off all others in scene and attach to scene
   - [ ] screen effects (blur, bloom, vignette, etc)
   - [ ] ability to load an asset into texture creator to create a new version of that asset
     - [ ] requires assets to also be allowed to be json / js files -> built into canvases
@@ -168,13 +168,12 @@ LATER
 - [ ] Animation editor
 - [ ] google magenta tensorflow running in browser for music generation
 
----
-
-AI
+AI (harder future)
 
 build scene tree
 writes scripts
 runs test
 debugs editor
 
+comfyui pixel art builder
 

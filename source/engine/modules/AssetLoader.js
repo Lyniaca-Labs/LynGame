@@ -13,6 +13,7 @@ export default class AssetLoader {
 
   async _loadOne(key, url, type) {
     if (type === "image") this.cache[key] = await this._loadImage(url);
+    else if (type === "texture") this.cache[key] = await this._loadTexture(url);
     else if (type === "audio") this.cache[key] = await this._loadAudio(url);
     else this.cache[key] = await this._loadRaw(url);
   }
@@ -40,6 +41,13 @@ export default class AssetLoader {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to load asset "${url}"`);
     return res;
+  }
+
+  async _loadTexture(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to load texture "${url}"`);
+    const definition = await res.json();
+    return this._loadImage(definition.dataUrl);
   }
 
   get(key) {

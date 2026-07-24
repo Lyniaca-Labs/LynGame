@@ -14,7 +14,7 @@ const engineComponentsDir = path.join(sourceRoot, "engine/components");
 type ComponentSource = "engine" | "project";
 type ComponentEntry = { source: ComponentSource; filename: string; className?: string };
 type ComponentManifest = Record<string, ComponentEntry>;
-type Asset = { relativePath: string; type: "image" | "audio" | "other" };
+type Asset = { relativePath: string; type: "image" | "audio" | "texture" | "other"; size?: number };
 type AssetManifest = Record<string, Asset>;
 type Field = { key: string; type: string; defaultValue: unknown; editable: boolean };
 type JsonRecord = Record<string, any>;
@@ -106,8 +106,9 @@ export default class ProjectHandler {
         let type: Asset["type"] = "other";
         if (IMAGE_EXT.has(ext)) type = "image";
         else if (AUDIO_EXT.has(ext)) type = "audio";
+        else if (ext === ".texture.json" || entry.name.endsWith(".texture.json")) type = "texture";
 
-        manifest[key] = { relativePath: relPath, type };
+        manifest[key] = { relativePath: relPath, type, size: fs.statSync(fullPath).size };
       }
     }
 

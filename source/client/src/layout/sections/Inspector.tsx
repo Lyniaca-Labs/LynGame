@@ -815,6 +815,12 @@ function SchemaField({
           type="text"
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const assetKey = e.dataTransfer.getData("text/lyngame-asset") || e.dataTransfer.getData("text/plain");
+            if (assetKey) onChange(assetKey);
+          }}
           className="w-28 rounded border border-[var(--color-border)] bg-transparent px-1.5 py-0.5 text-[var(--color-text)]"
         />
       )}

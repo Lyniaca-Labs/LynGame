@@ -18,7 +18,7 @@ const sourceRoot = path.resolve(__dirname, __dirname.endsWith(`${path.sep}dist`)
 const projectsDir = path.join(sourceRoot, "projects");
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 
 app.use("/engine", express.static(path.join(sourceRoot, "engine")));
 app.use("/output", express.static(path.join(sourceRoot, "output")));
@@ -224,6 +224,50 @@ app.put("/api/projects/:project/:folder/:filename", (req, res) => {
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
   }
+});
+
+// Binary-safe asset import. The client reads dropped/pasted files as a data URL
+// and sends only the payload; this avoids corrupting PNG/JPEG bytes through
+// the text-file endpoint.
+app.post("/api/projects/:project/assets/import", (req, res) => {
+  try {
+    const filename = String(req.body?.filename ?? "");
+    const data = String(req.body?.data ?? "");
+    if (!/^[a-zA-Z0-9_.-]+$/.test(filename) || !data.startsWith("data:")) {
+      return res.status(400).json({ success: false, error: "Invalid asset import" });
+    }
+    const comma = data.indexOf(",");
+    if (comma < 0) return res.status(400).json({ success: false, error: "Invalid data URL" });
+    const encoded = data.slice(comma + 1);
+    const { dir, filePath } = safeProjectFilePath(req.params.project, "assets", filename);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, Buffer.from(encoded, "base64"));
+    res.json({ success: true });
+  } catch (err) { res.status(400).json({ success: false, error: err.message }); }
+});
+
+app.get("/api/projects/:project/assets/raw/:filename", (req, res) => {
+  try {
+    const filePath = safeProjectFilePath(req.params.project, "assets", req.params.filename).filePath;
+    if (!fs.existsSync(filePath)) return res.status(404).send("Asset not found");
+    res.sendFile(filePath);
+  } catch (err) { res.status(400).send(err instanceof Error ? err.message : String(err)); }
+});
+
+app.post("/api/projects/:project/assets/rename", (req, res) => {
+  try {
+    const from = String(req.body?.from ?? "");
+    const to = String(req.body?.to ?? "");
+    if (!/^[a-zA-Z0-9_.-]+$/.test(from) || !/^[a-zA-Z0-9_.-]+$/.test(to)) {
+      return res.status(400).json({ success: false, error: "Invalid asset name" });
+    }
+    const source = safeProjectFilePath(req.params.project, "assets", from).filePath;
+    const target = safeProjectFilePath(req.params.project, "assets", to).filePath;
+    if (!fs.existsSync(source)) return res.status(404).json({ success: false, error: "Asset not found" });
+    if (fs.existsSync(target)) return res.status(409).json({ success: false, error: "An asset with that name already exists" });
+    fs.renameSync(source, target);
+    res.json({ success: true });
+  } catch (err) { res.status(400).json({ success: false, error: err.message }); }
 });
 
 // Delete a file
