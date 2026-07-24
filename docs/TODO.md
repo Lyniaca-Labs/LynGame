@@ -1,19 +1,30 @@
 # Engine Roadmap
 
 
+
 LATER
 
 - visual node editor / extension basework ( used for textures to)
 
 ## Reported Bugs
 - [ ] When switching scene laggy with spawning script, newly spawned entities will be in wrong scene 
+- [ ] cannot scroll in code editor
+- [ ] switching projects does not fully refresh everything
 
 ## Highest Priority 
 
 - [ ] Graphics framework first (foundation)
+  - [ ] should be able to make global scripts not attached to an entity
   - [ ] entity children
   - [ ] event component (calls script on certain event to entity (hold, click, etc))
   - [ ] ability to turn off antialiasing in config / set frame rate and tick speed
+  - [ ] keyframes for animation
+  - [ ] camera component -> attaches to entity, can set isactive on camera component and it will turn off all others in scene and attach to scene
+  - [ ] screen effects (blur, bloom, vignette, etc)
+  - [ ] ability to load an asset into texture creator to create a new version of that asset
+    - [ ] requires assets to also be allowed to be json / js files -> built into canvases
+    - [ ] should view output of texture at output node
+    - [ ] some textures can be seeded and regenerated
 - [ ] Game framework built on graphics framework
   - [ ] init funciton loading animation (as LynGame)
 - [ ] Engine GUI/editor on top of game framework
@@ -36,7 +47,8 @@ LATER
   - [ ] visual editor and context menu in scene
   - [ ] ESLINT in code editor
   - [ ] autosave option in settings
-  - [ ] preview for prefabs
+  - [ ] preview render for prefabs
+  - [ ] can drag assets in and upload from editor
 
 - [ ] Good overall architecture/design pattern
   - [ ] turn server into typescript, keep all project files and engine files javascript
@@ -69,6 +81,7 @@ LATER
 - [ ] Error handling
 - [x] Performance monitor
 - [ ] Live preview
+- [ ] custom styling / border radius changes (separate from theme) -> "Softness"
 
 ---
 
