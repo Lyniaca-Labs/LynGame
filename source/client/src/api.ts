@@ -79,7 +79,7 @@ export interface SceneResponse extends ApiResult {
 
 export interface ComponentFieldDefinition {
   key: string;
-  type: "number" | "text" | "boolean" | "color" | "vector";
+  type: "number" | "text" | "string" | "boolean" | "color" | "vector";
   defaultValue: unknown;
 }
 
@@ -158,27 +158,29 @@ export const componentsApi = {
       withJsExt(name),
       `import { Component } from "@types/Component.js";
 import { Transform } from "@components/Transform.js";
-
+  
 export class ${name} extends Component {
   static schema = {
     // width: { type: "number", default: 32 },
+    // label: { type: "string", default: "" },
+    // color: { type: "color", default: "#ffffff" },
+    // enabled: { type: "boolean", default: true },
   };
-
-  constructor({ /* width = 32, */ } = {}) {
-    super();
-    // this.width = width;
+  
+  constructor(overrides = {}) {
+    super(overrides); // assigns any fields declared in static schema
   }
-
-  onCreate(entity, engine) {}
-
+  
+  onSpawn(entity, engine) {}
+  
   onTick(entity, engine, dt) {
-    const transform = entity.getComponent(Transform);
+    const transform = entity.getComponent("Transform");
     if (!transform) return;
   }
-
+  
   onDestroy(entity, engine) {}
 }
-`
+  `
     );
   },
   remove: (project: string, name: string): Promise<ApiResult> =>

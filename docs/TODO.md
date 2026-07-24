@@ -15,7 +15,10 @@ LATER
 
 - [ ] Graphics framework first (foundation)
   - [ ] should be able to make global scripts not attached to an entity
+    - [ ] attach scripts to scenes -> callable in scene
+    - [ ] attach scripts to game / engine -> callable from anywhere
   - [ ] entity children
+  - [ ] add static component description alongside schema
   - [ ] event component (calls script on certain event to entity (hold, click, etc))
   - [ ] ability to turn off antialiasing in config / set frame rate and tick speed
   - [ ] keyframes for animation
@@ -35,6 +38,9 @@ LATER
   - [x] code editor
   - [ ] ability to move entities around, around scenes, duplicate, copy, paste
   - [ ] little icons for tabs on explorer
+    - [ ] camera icon for cameras
+    - [ ] entity icon for entities
+    - [ ] hitbox entity evnetually
   - [x] can edit prefabs
   - [ ] export project to zip (with a node live server. Can use node or python, or powershell (ps1) to run)
   - [x] deleting, creating scripts and components

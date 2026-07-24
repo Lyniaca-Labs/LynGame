@@ -782,7 +782,7 @@ function SchemaField({
       {type === "number" && (
         <input
           type="number"
-          value={value as number}
+          value={(value as number) ?? 0}
           onChange={(e) => onChange(Number(e.target.value))}
           className="w-20 rounded border border-[var(--color-border)] bg-transparent px-1.5 py-0.5 text-right text-[var(--color-text)]"
         />
@@ -793,15 +793,15 @@ function SchemaField({
       {type === "color" && (
         <input
           type="color"
-          value={value as string}
+          value={(value as string) ?? "#ffffff"}
           onChange={(e) => onChange(e.target.value)}
           className="h-5 w-8 rounded border border-[var(--color-border)] bg-transparent"
         />
       )}
-      {type === "text" && (
+      {(type === "text" || type === "string") && (
         <input
           type="text"
-          value={value as string}
+          value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
           className="w-28 rounded border border-[var(--color-border)] bg-transparent px-1.5 py-0.5 text-[var(--color-text)]"
         />

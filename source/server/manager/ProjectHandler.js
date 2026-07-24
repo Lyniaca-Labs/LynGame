@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
+import os from "os";
+import { fileURLToPath, pathToFileURL } from "url";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const engineComponentsDir = path.join(__dirname, "../../engine/components");
@@ -116,20 +118,60 @@ export default class ProjectHandler {
     return result;
   }
 
+  
+
+  static resolveAliasImports(source, originalFileDir) {
+    const aliasRoots = {
+      "@types/": path.join(__dirname, "../../engine/types/"),
+      "@components/": path.join(__dirname, "../../engine/components/"),
+    };
+
+    let resolved = source;
+
+    // 1. Resolve known aliases
+    for (const [prefix, realRoot] of Object.entries(aliasRoots)) {
+      const pattern = new RegExp(`(['"])${prefix}([^'"]+)\\1`, "g");
+      resolved = resolved.replace(pattern, (match, quote, rest) => {
+        const realPath = path.join(realRoot, rest);
+        return `${quote}${pathToFileURL(realPath).href}${quote}`;
+      });
+    }
+
+    // 2. Resolve plain relative imports (./ or ../) against the ORIGINAL file's directory
+    const relativePattern = /(['"])(\.\.?\/[^'"]+)\1/g;
+    resolved = resolved.replace(relativePattern, (match, quote, rel) => {
+      const realPath = path.resolve(originalFileDir, rel);
+      return `${quote}${pathToFileURL(realPath).href}${quote}`;
+    });
+
+    return resolved;
+  }
+
   static async loadComponentClass(projectName, entry) {
     const file = entry.source === "engine"
       ? path.join(__dirname, "../../engine/components", entry.filename)
       : path.join(__dirname, "../../projects", projectName, "components", entry.filename);
 
+    let tempFile;
     try {
-      const mod = await import(pathToFileURL(file).href);
+      const originalSource = fs.readFileSync(file, "utf8");
+      const patchedSource = this.resolveAliasImports(originalSource, path.dirname(file));
+      console.log("Patched source:", patchedSource);
+
+      tempFile = path.join(os.tmpdir(), `component-${Date.now()}-${entry.filename}`);
+      fs.writeFileSync(tempFile, patchedSource, "utf8");
+
+      const mod = await import(pathToFileURL(tempFile).href);
       return mod.default ?? mod[entry.className ?? Object.keys(mod)[0]];
-    } catch {
+    } catch (err) {
+      console.error(`Failed to load component ${entry.filename}:`, err);
       return null;
+    } finally {
+      if (tempFile && fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
     }
   }
 
-  static componentSchemas(projectName) {
+  static async componentSchemas(projectName) {
     const manifest = this.scanComponents(projectName);
     const schemas = {};
 
@@ -139,8 +181,10 @@ export default class ProjectHandler {
         ? path.join(__dirname, "../../engine/components", entry.filename)
         : path.join(__dirname, "../../projects", projectName, "components", entry.filename);
 
-      const ComponentClass = this.loadComponentClass(projectName, entry);
+      const ComponentClass = await this.loadComponentClass(projectName, entry);
       const declaredSchema = ComponentClass?.schema;
+
+      console.log(`Component "${name}" schema:`, ComponentClass);
 
       const fields = declaredSchema && Object.keys(declaredSchema).length > 0
         ? Object.entries(declaredSchema).map(([key, def]) => ({
@@ -211,13 +255,13 @@ export default class ProjectHandler {
     return fields;
   }
 
-  static editorSnapshot(projectName) {
+  static async editorSnapshot(projectName) {
     const projectDir = path.join(__dirname, "../../projects", projectName);
     if (!fs.existsSync(projectDir)) throw new Error("Project not found");
     const config = JSON.parse(fs.readFileSync(path.join(projectDir, "project.lg"), "utf8"));
     return {
       project: { ...config, name: projectName },
-      components: this.componentSchemas(projectName),
+      components: await this.componentSchemas(projectName),
       scenes: this.scanFiles(projectName, "scenes").filter((file) => file.endsWith(".json")),
       prefabs: this.scanFiles(projectName, "prefabs").filter((file) => file.endsWith(".json")),
       scripts: this.scanFiles(projectName, "scripts").filter((file) => file.endsWith(".js")),
@@ -240,6 +284,8 @@ export default class ProjectHandler {
 
     const scriptsDir = path.join(__dirname, "../../projects", projectName, "scripts");
 
+    // Collected across scenes + prefabs so imports only get generated once,
+    // regardless of how many places reference a given component/script.
     const allComponents = new Set();
     // scriptName -> Set of human-readable locations referencing it, so a missing
     // script can be traced back to every entity/prefab that attaches it.
@@ -265,11 +311,23 @@ export default class ProjectHandler {
       return lines;
     }
 
-    // --- scenes ---
+    // ---------------------------------------------------------------------
+    // Scenes
+    //
+    // Each scenes/*.json becomes a `scene_<name>(engine)` function that
+    // builds its entities, plus a Scene record { load, cameraId } so
+    // engine.loadScene() knows which entity to hand to setCamera() once the
+    // scene has finished loading (unless the scene's own load fn already
+    // called setCamera explicitly — that always wins).
+    // ---------------------------------------------------------------------
     const sceneFunctions = [];
+    const sceneCameraIds = new Map(); // sceneName -> cameraId | null
+
     for (const file of sceneFiles) {
       const sceneName = path.basename(file, ".json");
       const scene = JSON.parse(fs.readFileSync(path.join(scenesDir, file), "utf-8"));
+
+      sceneCameraIds.set(sceneName, scene.cameraId ?? null);
 
       const bodyLines = [];
       for (const entity of scene.entities || []) {
@@ -301,9 +359,16 @@ export default class ProjectHandler {
       sceneFunctions.push(`function scene_${sceneName}(engine) {\n${bodyLines.join("\n")}\n}`);
     }
 
-    // --- prefabs ---
+    // ---------------------------------------------------------------------
+    // Prefabs
+    //
+    // Each prefabs/*.json becomes a `prefab_<name>(engine, overrides, id)`
+    // factory, registered with engine.prefabs so scenes can instantiate it
+    // by name via entity.prefab above.
+    // ---------------------------------------------------------------------
     const prefabFunctions = [];
     const prefabRegistrations = [];
+
     for (const file of prefabFiles) {
       const prefabName = path.basename(file, ".json");
       const prefab = JSON.parse(fs.readFileSync(path.join(prefabsDir, file), "utf-8"));
@@ -332,6 +397,10 @@ export default class ProjectHandler {
       prefabRegistrations.push(`  engine.prefabs.register("${prefabName}", prefab_${prefabName});`);
     }
 
+    // ---------------------------------------------------------------------
+    // Imports
+    // ---------------------------------------------------------------------
+
     // Components import with a suffixed alias (e.g. `Sprite` -> `Sprite_component`)
     // so a component name can never collide with a script/variable of the same name.
     const componentImports = [...allComponents].map((name) => {
@@ -356,30 +425,36 @@ export default class ProjectHandler {
       return `import { ${name} as ${name}_script } from "./scripts/${name}.js";`;
     }).join("\n");
 
+    // ---------------------------------------------------------------------
+    // Registration calls emitted into init()
+    // ---------------------------------------------------------------------
     const sceneRegistrations = sceneFiles
       .map((f) => path.basename(f, ".json"))
-      .map((name) => `  engine.registerScene("${name}", scene_${name});`)
+      .map((name) => {
+        const cameraId = sceneCameraIds.get(name);
+        return `  engine.registerScene("${name}", scene_${name}, ${JSON.stringify(cameraId)});`;
+      })
       .join("\n");
 
     const assetManifest = ProjectHandler.scanAssets(projectName);
 
     return `${componentImports}
-
-
-${scriptImports}
-
-${prefabFunctions.join("\n\n")}
-
-${sceneFunctions.join("\n\n")}
-
-export async function init(engine) {
-  await engine.assets.load(${JSON.stringify(assetManifest)}, "./game/assets");
-${prefabRegistrations.join("\n")}
-${sceneRegistrations}
-  engine.loadScene("${config.startScene}");
-  engine.start();
-}
-`;
+  
+  
+  ${scriptImports}
+  
+  ${prefabFunctions.join("\n\n")}
+  
+  ${sceneFunctions.join("\n\n")}
+  
+  export async function init(engine) {
+    await engine.assets.load(${JSON.stringify(assetManifest)}, "./game/assets");
+  ${prefabRegistrations.join("\n")}
+  ${sceneRegistrations}
+    engine.loadScene("${config.startScene}");
+    engine.start();
+  }
+  `;
   }
 
   static newConfig(projectName) {

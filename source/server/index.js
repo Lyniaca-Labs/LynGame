@@ -30,9 +30,20 @@ app.get("/api/projects", (_req, res) => {
   res.json({ success: true, projects });
 });
 
-app.get("/api/projects/:project/editor", (req, res) => {
-  try { res.json({ success: true, ...ProjectHandler.editorSnapshot(req.params.project) }); }
-  catch (err) { res.status(404).json({ success: false, error: err.message }); }
+app.get("/api/projects/:project/editor", async (req, res) => {
+  try {
+    const snapshot = await ProjectHandler.editorSnapshot(req.params.project);
+
+    res.json({
+      success: true,
+      ...snapshot,
+    });
+  } catch (err) {
+    res.status(404).json({
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 });
 
 app.get("/api/projects/:project/scenes/:scene", (req, res) => {

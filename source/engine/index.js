@@ -7,6 +7,7 @@ import { Transform } from "./components/Transform.js";
 import { SpriteRenderer } from "./components/SpriteRenderer.js";
 import { PrefabRegistry } from "./modules/PrefabRegistry.js";
 import AssetLoader from "./modules/AssetLoader.js";
+import { Scene } from "./types/Scene.js";
 
 export class GameEngine {
   constructor(gameContainer, options = {}) {
@@ -19,6 +20,8 @@ export class GameEngine {
     this.running = false;
     this.paused = false;
     this.state = {};
+
+    this.camera = null; // optional Camera component, if one is added to an entity. If one is available, it will be used
 
     this.devMode = options.devMode ?? true;
 
@@ -82,21 +85,52 @@ export class GameEngine {
 
   // --- scenes ---
 
+  setCamera(entityId) {
+    if (!entityId) {
+      this.camera = null;
+      return;
+    }
+    const entity = this.getEntity(entityId);
+    if (!entity) return console.error(`Entity "${entityId}" not found`);
+    const camera = entity.getComponent("Camera");
+    if (!camera) return console.error(`Entity "${entityId}" has no Camera component`);
+    this.camera = camera;
+  }
+
+
+  registerScene(name, load, cameraId = null) {
+    this.scenes[name] = new Scene(name, load, cameraId);
+  }
+
   loadScene(name) {
-    if (!this.scenes || !this.scenes[name]) {
+    const scene = this.scenes[name];
+    if (!scene) {
       console.error(`Scene "${name}" not found`);
       return;
     }
     for (const entity of [...this.entities]) {
       this.removeEntity(entity.id);
     }
+    this.camera = null;
     this.currentScene = name;
-    this.scenes[name](this);
-  }
+    scene.load(this);
 
-  registerScene(name, initFn) {
-    if (!this.scenes) this.scenes = {};
-    this.scenes[name] = initFn;
+    // 1. scene's load fn may have called this.setCamera(...) explicitly — leave it alone
+    // 2. otherwise, use the scene's own declared cameraId
+    // 3. otherwise, auto-detect the first entity with a Camera component
+    if (!this.camera && scene.cameraId) {
+      this.setCamera(scene.cameraId);
+    }
+
+    if (!this.camera) {
+      for (const entity of this.entities) {
+        const camera = entity.getComponent("Camera");
+        if (camera) {
+          this.camera = camera;
+          break;
+        }
+      }
+    }
   }
 
   // --- layers ---

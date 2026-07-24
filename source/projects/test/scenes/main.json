@@ -49,7 +49,8 @@
         },
         "ShapeRenderer": {
           "height": 64,
-          "width": 32
+          "width": 32,
+          "color": "#5c4242"
         }
       },
       "components": {
@@ -67,6 +68,25 @@
       "scripts": [
         "spawnEnemies"
       ]
+    },
+    {
+      "id": "cam",
+      "components": {
+        "Camera": {
+          "zoom": 1,
+          "offset": {
+            "x": -200,
+            "y": 0
+          },
+          "bounds": null
+        },
+        "ShapeRenderer": {
+          "shape": "rect",
+          "width": 32,
+          "height": 32,
+          "color": "#7956f5"
+        }
+      }
     }
   ]
 }
