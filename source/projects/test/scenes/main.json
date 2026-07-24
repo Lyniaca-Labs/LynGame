@@ -112,7 +112,10 @@
           "velocityY": 0,
           "grounded": false
         }
-      }
+      },
+      "scripts": [
+        "visual.lgscript"
+      ]
     }
   ]
 }

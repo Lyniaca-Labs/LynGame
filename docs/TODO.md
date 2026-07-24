@@ -166,6 +166,7 @@ LATER
 - [ ] Audio creator
 - [ ] Pixel art editor
 - [ ] Animation editor
+- [ ] google magenta tensorflow running in browser for music generation
 
 ---
 
