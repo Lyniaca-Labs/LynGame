@@ -26,6 +26,7 @@ export interface CodeFileEditorProps {
   onSave?: (newText: string) => void;
   onSaveError?: (message: string) => void;
   onExit?: () => void;
+  onChange?: (newText: string) => void;
   showOpenInVSCode?: boolean;
   className?: string;
 }
@@ -115,6 +116,7 @@ export function CodeFileEditor({
   folder,
   filename,
   onSave,
+  onChange,
   onSaveError,
   onExit,
   showOpenInVSCode = true,
@@ -285,7 +287,10 @@ export function CodeFileEditor({
               themeCompartment.of(syntaxHighlighting(syntaxTheme)),
               ...(wordWrap ? [EditorView.lineWrapping] : []),
             ]}
-            onChange={(v) => setValue(v)}
+            onChange={(v) => {
+              setValue(v);
+              onChange?.(v);
+            }}
             basicSetup={{
               lineNumbers: true,
               foldGutter: true,

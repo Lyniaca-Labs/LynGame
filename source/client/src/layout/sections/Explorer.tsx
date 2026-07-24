@@ -1,6 +1,6 @@
 // Explorer.tsx — full file
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Container } from "../../ui/Container";
 import { Tabs } from "../../ui/Tabs";
 import { Modal } from "../../ui/Modal";
@@ -75,6 +75,9 @@ function ExplorerFiles() {
 
   const [graphContent, setGraphContent] = useState<GraphValue | null>(null);
   const [graphLoading, setGraphLoading] = useState(false);
+
+  const [isCodeDirty, setIsCodeDirty] = useState(false);
+
 
   useEffect(() => {
     if (!openGraphScript || !currentProject) {
@@ -352,14 +355,19 @@ function ExplorerFiles() {
         title={openCodeFile?.filename}
         size="full"
         bodyClassName="h-full"
-        confirmClose={true}
+        confirmClose={isCodeDirty}
       >
         {openCodeFile && currentProject && (
           <CodeFileEditor
+            onSave={() => setIsCodeDirty(false)}
+            onChange={() => setIsCodeDirty(true)}
             project={currentProject}
             folder={openCodeFile.folder}
             filename={openCodeFile.filename}
-            onExit={() => setOpenCodeFile(null)}
+            onExit={() => {
+              setOpenCodeFile(null);
+              setIsCodeDirty(false);
+            }}
           />
         )}
       </Modal>

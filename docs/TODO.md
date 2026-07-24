@@ -11,6 +11,9 @@ LATER
 - [ ] cannot scroll in code editor
 - [ ] switching projects does not fully refresh everything
 - [ ] node editor wires / edges are laggy
+- [ ] graph editor laggy when panning around
+  - [ ] also have connector dots come slightly out and bigger
+  - [ ] replace moving lines with arrows
 
 ## Highest Priority 
 

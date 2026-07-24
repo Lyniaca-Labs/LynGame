@@ -50,7 +50,14 @@ export default function ScriptGraph({
   const [code, setCode] = useState<string>("");
   const [errors, setErrors] = useState<string[]>([]);
   const [showCode, setShowCode] = useState(false);
+  const [savedGraph, setSavedGraph] = useState<GraphValue>(initialValue ?? emptyGraph);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const hasSaved = useMemo(() => {
+    // Compare against the last-saved snapshot, not the original prop.
+    return JSON.stringify(graph) === JSON.stringify(savedGraph);
+  }, [graph, savedGraph]);
 
   const nodeTypes = useMemo(
     () => ({ ...defaultScriptNodeTypes, ...extraNodeTypes }),
@@ -67,6 +74,7 @@ export default function ScriptGraph({
 
   const handleSaveJson = useCallback(() => {
     onSave?.(graph);
+    setSavedGraph(graph);
   }, [graph, onSave]);
 
   const handleLoadJson = useCallback((file: File) => {
@@ -89,7 +97,7 @@ export default function ScriptGraph({
 
   return (
     <Modal
-      confirmClose={true}
+      confirmClose={!hasSaved}
       open={open}
       onClose={onClose}
       title={title}

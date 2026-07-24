@@ -182,6 +182,12 @@ const CATEGORY_PALETTE = [
   "#a5953b", "#3b8ea5", "#a53b6e", "#5ba53b",
 ];
 
+const EDGE_FLOW_KEYFRAMES = `
+@keyframes graph-edge-flow {
+  to { stroke-dashoffset: -12; }
+}
+`;
+
 function hashColor(seed: string): string {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) {
@@ -572,6 +578,7 @@ function DeletableEdge({
   selected,
 }: EdgeProps) {
   const ctx = useContext(NodeRenderContext);
+  const [hovered, setHovered] = useState(false);
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -581,25 +588,71 @@ function DeletableEdge({
     targetPosition,
   });
 
+  const showControls = (selected || hovered) && !ctx?.readOnly;
+  const stroke = (style as React.CSSProperties)?.stroke ?? "var(--color-text-faint)";
+
   return (
     <>
-      <BaseEdge id={id} path={edgePath} style={style} markerEnd={markerEnd} />
-      {selected && !ctx?.readOnly && (
+      {/* Wide, fully transparent path — the actual click/hover target.
+          Renders nothing visible; only exists to make the edge easy to
+          grab with the mouse, since the visible line below stays thin. */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={24}
+        className="cursor-pointer"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={(e) => {
+          e.stopPropagation();
+          ctx?.onRemoveEdge(id);
+        }}
+      />
+
+      {/* The ONE visible line. No BaseEdge here — we render the path
+          ourselves so the dash animation applies directly to what's drawn,
+          instead of layering an animated dashed line on top of a separate
+          static solid one. */}
+      <path
+        d={edgePath}
+        fill="none"
+        markerEnd={markerEnd}
+        stroke={stroke}
+        strokeWidth={selected || hovered ? 2.5 : 1.5}
+        strokeLinecap="butt"
+        strokeDasharray="8 6"
+        opacity={hovered && !selected ? 0.85 : 1}
+        className="react-flow__edge-path"
+        style={{ pointerEvents: "none" }}
+      >
+        <animate
+          attributeName="stroke-dashoffset"
+          from="14"
+          to="0"
+          dur="0.8s"
+          repeatCount="indefinite"
+        />
+      </path>
+
+      {showControls && (
         <EdgeLabelRenderer>
           <button
             type="button"
-            className="nodrag nopan absolute flex h-4 w-4 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-text-faint)] hover:border-[var(--color-danger)] hover:text-[var(--color-danger)]"
+            className="nodrag nopan absolute flex h-6 w-6 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-text-faint)] shadow-sm hover:border-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 hover:text-[var(--color-danger)]"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: "all",
             }}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
             onClick={(e) => {
               e.stopPropagation();
               ctx?.onRemoveEdge(id);
             }}
             title="Remove connection"
           >
-            <X size={10} />
+            <X size={13} />
           </button>
         </EdgeLabelRenderer>
       )}
@@ -881,10 +934,21 @@ function GraphEditorCanvas({
         (c) => c.type === "remove" || (c.type === "position" && c.dragging === false)
       );
       if (isSignificant) pushHistory();
-      onChange({
-        nodes: applyNodeChanges(changes, value.nodes) as GraphNode[],
-        edges: value.edges,
-      });
+
+      const nextNodes = applyNodeChanges(changes, value.nodes) as GraphNode[];
+
+      // Any node ids removed in this batch of changes need their edges
+      // cleaned up too — React Flow's own deleteKeyCode path only emits
+      // node-remove changes, it doesn't touch edges for us.
+      const removedIds = new Set(
+        changes.filter((c) => c.type === "remove").map((c) => c.id)
+      );
+      const nextEdges =
+        removedIds.size > 0
+          ? value.edges.filter((e) => !removedIds.has(e.source) && !removedIds.has(e.target))
+          : value.edges;
+
+      onChange({ nodes: nextNodes, edges: nextEdges });
     },
     [value, onChange, readOnly, pushHistory]
   );
@@ -996,6 +1060,7 @@ function GraphEditorCanvas({
       className={`relative h-full w-full ${className ?? ""}`}
       onClick={() => menu && setMenu(null)}
     >
+      <style>{EDGE_FLOW_KEYFRAMES}</style>
       <NodeRenderContext.Provider value={contextValue}>
         <ReactFlow
           nodes={value.nodes}
