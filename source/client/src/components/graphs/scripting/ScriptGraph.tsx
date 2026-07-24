@@ -89,6 +89,7 @@ export default function ScriptGraph({
 
   return (
     <Modal
+      confirmClose={true}
       open={open}
       onClose={onClose}
       title={title}
@@ -124,7 +125,12 @@ export default function ScriptGraph({
     >
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">
-          <GraphEditor nodeTypes={nodeTypes} value={graph} onChange={setGraph} />
+          <GraphEditor 
+            nodeTypes={nodeTypes} 
+            value={graph} 
+            onChange={setGraph}
+            onSave={handleSaveJson}
+            />
         </div>
 
         {showCode && (

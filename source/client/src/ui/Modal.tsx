@@ -15,6 +15,9 @@ export interface ModalProps {
   bodyClassName?: string;
   /** "md" (default, ~28rem) | "lg" (wide) | "full" (near-fullscreen, for editors/canvases) */
   size?: "md" | "lg" | "full";
+
+  /** If true, clicking outside the modal or pressing escape will not close it until confirmed. */
+  confirmClose?: boolean;
 }
 
 const sizeClasses = {
@@ -33,17 +36,30 @@ export function Modal({
   className,
   bodyClassName,
   size = "md",
+  confirmClose = false,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+
+  const handleExit = async () => {
+    if (confirmClose) {
+      const ok = await window.confirm(
+        `Are you sure you want to close this modal? Unsaved changes will be lost.`
+      );
+      if (!ok) return;
+    }
+    onClose();
+  };
 
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        handleExit();
+      }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
+  }, [open, handleExit]);
 
   useEffect(() => {
     if (!open) return;
@@ -60,7 +76,7 @@ export function Modal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) handleExit();
       }}
     >
       <div

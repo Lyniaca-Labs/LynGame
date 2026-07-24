@@ -352,6 +352,7 @@ function ExplorerFiles() {
         title={openCodeFile?.filename}
         size="full"
         bodyClassName="h-full"
+        confirmClose={true}
       >
         {openCodeFile && currentProject && (
           <CodeFileEditor

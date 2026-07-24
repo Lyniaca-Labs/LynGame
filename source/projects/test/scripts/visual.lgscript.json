@@ -57,26 +57,6 @@
       },
       "selected": false,
       "dragging": false
-    },
-    {
-      "id": "ad6573e4-5c0f-439c-8898-a84c61a4aef0",
-      "type": "compare.greaterThan",
-      "position": {
-        "x": 423.9877667844793,
-        "y": 122.44932436558986
-      },
-      "data": {
-        "values": {
-          "a": 0,
-          "b": 0
-        }
-      },
-      "measured": {
-        "width": 220,
-        "height": 149
-      },
-      "dragging": false,
-      "selected": true
     }
   ],
   "edges": [
