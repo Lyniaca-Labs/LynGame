@@ -1,0 +1,91 @@
+{
+  "nodes": [
+    {
+      "id": "eea4e9b2-ed39-4450-ac4f-15d14a96f4ae",
+      "type": "script.input",
+      "position": {
+        "x": 89.336895029569,
+        "y": 273.8474306007272
+      },
+      "data": {
+        "values": {
+          "key": "value"
+        }
+      },
+      "measured": {
+        "width": 220,
+        "height": 97
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "3fad45ab-acfd-4eee-ba87-038f5b4810bf",
+      "type": "script.output",
+      "position": {
+        "x": 746.0729194400577,
+        "y": 292.6913000632949
+      },
+      "data": {
+        "values": {
+          "key": ""
+        }
+      },
+      "measured": {
+        "width": 220,
+        "height": 139
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "94f949d9-1588-409c-b508-2a4fa0d35846",
+      "type": "compare.equals",
+      "position": {
+        "x": 408.11375654461864,
+        "y": 463.7405445225925
+      },
+      "data": {
+        "values": {
+          "a": "",
+          "b": ""
+        }
+      },
+      "measured": {
+        "width": 220,
+        "height": 149
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "ad6573e4-5c0f-439c-8898-a84c61a4aef0",
+      "type": "compare.greaterThan",
+      "position": {
+        "x": 423.9877667844793,
+        "y": 122.44932436558986
+      },
+      "data": {
+        "values": {
+          "a": 0,
+          "b": 0
+        }
+      },
+      "measured": {
+        "width": 220,
+        "height": 149
+      },
+      "dragging": false,
+      "selected": true
+    }
+  ],
+  "edges": [
+    {
+      "source": "eea4e9b2-ed39-4450-ac4f-15d14a96f4ae",
+      "sourceHandle": "value",
+      "target": "3fad45ab-acfd-4eee-ba87-038f5b4810bf",
+      "targetHandle": "value",
+      "id": "00020be6-8641-459c-95ce-6b1886f37a2a"
+    }
+  ]
+}

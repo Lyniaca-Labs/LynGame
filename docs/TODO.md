@@ -10,6 +10,7 @@ LATER
 - [ ] When switching scene laggy with spawning script, newly spawned entities will be in wrong scene 
 - [ ] cannot scroll in code editor
 - [ ] switching projects does not fully refresh everything
+- [ ] node editor wires / edges are laggy
 
 ## Highest Priority 
 
@@ -49,8 +50,12 @@ LATER
   - [x] codemirror code editor should be based on selected theme
   - [ ] get open in vscode working
   - [x] should be able to put components on a prefab instance, seperate from overrides
+  - [ ] ability to collapse components
   - [ ] undo / redo
   - [ ] visual editor and context menu in scene
+    - [x] script visual editor
+    - [ ] component visual editor
+    - [ ] texture visual editor
   - [ ] ESLINT in code editor
   - [ ] autosave option in settings
   - [ ] preview render for prefabs
@@ -106,7 +111,7 @@ LATER
 - [ ] Y-offset Z-level sorting
 - [x] Global scene switching
 - [x] Global script calls
-
+- [ ] have ai go through and make full documentation of app, components, handlers, etc... (info buttons)
 
 ---
 
@@ -131,6 +136,13 @@ LATER
 - [ ] Strip comments during build
 
 ---
+
+## Performance
+
+- [ ] offscreen culling
+- [ ] sprite batching
+- [ ] texture batching
+- [ ] lazy loading
 
 ## Networking & Backend
 

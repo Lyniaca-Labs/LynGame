@@ -6,11 +6,13 @@ import { Tabs } from "../../ui/Tabs";
 import { Modal } from "../../ui/Modal";
 import { useProject } from "../../context/ProjectContext";
 import { useSceneEditor } from "../../context/SceneEditorContext";
-import { Plus, Pencil, Trash2, Star } from "lucide-react";
+import { Plus, Pencil, Trash2, Star, Waypoints, FileCode } from "lucide-react";
 import { FolderTree, TreeNode, TreeNodeBadge } from "../../ui/FolderTree";
 import { MenuAction } from "../../ui/ActionsMenu";
-import { projectsApi, Entity } from "../../api";
+import { projectsApi, Entity, graphScriptsApi } from "../../api";
 import { CodeFileEditor } from "../../components/CodeFileEditor";
+import ScriptGraph from "../../components/graphs/scripting/ScriptGraph";
+import { GraphValue } from "../../components/graphs/GraphEditor";
 
 export function Explorer() {
   return (
@@ -40,6 +42,9 @@ interface OpenCodeFile {
 // Inspector.tsx's stripExt.
 const stripExt = (name: string) => name.replace(/\.(js|ts|json)$/i, "");
 
+const isGraphScript = (name: string) => name.endsWith(".lgscript.json");
+const isGeneratedGraphOutput = (name: string) => name.endsWith(".lgscript.js");
+
 function ExplorerFiles() {
   const { projectData, currentProject } = useProject();
   const {
@@ -54,25 +59,48 @@ function ExplorerFiles() {
     deleteComponent,
     createScript,
     deleteScript,
+    createGraphScript,
+    deleteGraphScript,
     createScene,
     deleteScene,
     createPrefab,
     deletePrefab,
   } = useSceneEditor();
 
-  // Lazily-populated cache of each scene's entities, so scene nodes can
-  // show them as children in the tree without eagerly loading everything
-  // up front on every render. For whichever scene is currently open in the
-  // Inspector, we read live data from SceneEditorContext instead (below),
-  // so edits made there — renames, adds, deletes — show up immediately.
   const [sceneEntities, setSceneEntities] = useState<Record<string, Entity[]>>({});
-
-  // The script/component file currently open in the CodeFileEditor modal.
   const [openCodeFile, setOpenCodeFile] = useState<OpenCodeFile | null>(null);
+  const [openGraphScript, setOpenGraphScript] = useState<string | null>(null);
 
-  // target now has a "prefab" variant with no sceneId, so pull sceneId out
-  // only for the branches that actually have one (scene/entity).
   const activeSceneId = target && target.kind !== "prefab" ? target.sceneId : undefined;
+
+  const [graphContent, setGraphContent] = useState<GraphValue | null>(null);
+  const [graphLoading, setGraphLoading] = useState(false);
+
+  useEffect(() => {
+    if (!openGraphScript || !currentProject) {
+      setGraphContent(null);
+      return;
+    }
+
+    let cancelled = false;
+    setGraphLoading(true);
+
+    projectsApi
+      .readFile(currentProject, "scripts", openGraphScript)
+      .then((res) => {
+        if (!cancelled) setGraphContent(JSON.parse(res.content) as GraphValue);
+      })
+      .catch(() => {
+        if (!cancelled) setGraphContent({ nodes: [], edges: [] }); // fresh/missing file
+      })
+      .finally(() => {
+        if (!cancelled) setGraphLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [openGraphScript, currentProject]);
 
   useEffect(() => {
     if (!projectData || !currentProject) return;
@@ -169,11 +197,19 @@ function ExplorerFiles() {
     {
       id: "scripts",
       label: "Scripts",
-      children: projectData.scripts.map((s) => ({
-        id: s,
-        label: s,
-        onClick: () => setOpenCodeFile({ folder: "scripts", filename: s }),
-      })),
+      // Generated .lgscript.js siblings are build output, not a separate
+      // asset — keep them out of the tree so each graph script shows once.
+      children: projectData.scripts
+        .filter((s) => !isGeneratedGraphOutput(s))
+        .map((s) => ({
+          id: s,
+          label: s,
+          icon: isGraphScript(s) ? Waypoints : FileCode,
+          onClick: () =>
+            isGraphScript(s)
+              ? setOpenGraphScript(s)
+              : setOpenCodeFile({ folder: "scripts", filename: s }),
+        })),
     },
     {
       id: "components",
@@ -203,8 +239,6 @@ function ExplorerFiles() {
       const isActiveScene = activeSceneId === sceneId;
 
       const actions: MenuAction[] = [
-        // Renaming an entity needs the id-uniqueness check that lives in
-        // the Inspector, so route there rather than duplicating it here.
         { label: "Rename", icon: Pencil, onClick: () => openEntity(sceneId, entityId) },
       ];
       if (isActiveScene) {
@@ -229,25 +263,30 @@ function ExplorerFiles() {
       }
       actions.push(
         { label: "Rename", icon: Pencil, onClick: () => console.log("rename", node.id) },
-        // deleteScene prompts for the scene name itself rather than taking
-        // one as an argument (matches its () => void signature in the
-        // context), so this re-prompts rather than deleting sceneId directly.
         { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteScene(sceneId) }
       );
       return actions;
     }
 
-    // Script node — id is the raw filename (e.g. "LogScript.js")
+    // Script node — id is the raw filename (e.g. "LogScript.js" or "Foo.lgscript.json")
     if (projectData.scripts.includes(node.id)) {
-      return [
-        {
-          label: "Open in Editor",
-          icon: Pencil,
-          onClick: () => setOpenCodeFile({ folder: "scripts", filename: node.id }),
-        },
-        // deleteScript prompts for the script name itself, same caveat as above.
-        { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteScript(node.id) },
-      ];
+      return isGraphScript(node.id)
+        ? [
+          {
+            label: "Open in Graph Editor",
+            icon: Waypoints,
+            onClick: () => setOpenGraphScript(node.id),
+          },
+          { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteGraphScript(node.id) },
+        ]
+        : [
+          {
+            label: "Open in Editor",
+            icon: Pencil,
+            onClick: () => setOpenCodeFile({ folder: "scripts", filename: node.id }),
+          },
+          { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteScript(node.id) },
+        ];
     }
 
     // Component node — id is the component name (e.g. "Movement")
@@ -260,19 +299,14 @@ function ExplorerFiles() {
           icon: Pencil,
           onClick: () => setOpenCodeFile({ folder: "components", filename }),
         },
-        // deleteComponent prompts for the component name itself, same caveat.
         { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteComponent(node.id) },
       ];
     }
 
-    // Prefab node — id is the raw prefab filename (e.g. "Player.json"). This
-    // was previously falling through to the generic "everything else" branch
-    // below with console.log stubs; broken out here to match the other
-    // resource types above.
+    // Prefab node — id is the raw prefab filename (e.g. "Player.json")
     if (projectData.prefabs.includes(node.id)) {
       return [
         { label: "Rename", icon: Pencil, onClick: () => console.log("rename", node.id) },
-        // deletePrefab prompts for the prefab name itself, same caveat as above.
         { label: "Delete", icon: Trash2, danger: true, onClick: () => deletePrefab(node.id) },
       ];
     }
@@ -282,13 +316,19 @@ function ExplorerFiles() {
       { label: "Rename", icon: Pencil, onClick: () => console.log("rename", node.id) },
       { label: "Delete", icon: Trash2, danger: true, onClick: () => console.log("delete", node.id) },
     ];
+
+    if (node.id === "scripts") {
+      return [
+        { label: "New Script", icon: Plus, onClick: () => createScript() },
+        { label: "New Visual Script", icon: Waypoints, onClick: () => createGraphScript() },
+        ...base,
+      ];
+    }
+
     if (node.children) {
-      // Route "New Item" to the right create function per section, instead
-      // of the previous console.log stub.
       const newItemHandler = {
         scenes: createScene,
         prefabs: createPrefab,
-        scripts: createScript,
         components: createComponent,
       }[node.id];
 
@@ -322,6 +362,28 @@ function ExplorerFiles() {
           />
         )}
       </Modal>
+
+      {openGraphScript && !graphLoading && (
+        <ScriptGraph
+          key={openGraphScript}
+          open={openGraphScript !== null}
+          onClose={() => setOpenGraphScript(null)}
+          title={openGraphScript}
+          initialValue={graphContent ?? undefined}
+          onSave={(graph) => {
+            if (openGraphScript && currentProject) {
+              graphScriptsApi
+                .save(currentProject, openGraphScript, JSON.stringify(graph, null, 2))
+                .catch((err) => console.error("graph save failed:", err));
+            }
+          }}
+          onCompile={(code) => {
+            if (openGraphScript && currentProject) {
+              graphScriptsApi.writeCompiled(currentProject, openGraphScript, code);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

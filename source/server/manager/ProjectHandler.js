@@ -156,7 +156,6 @@ export default class ProjectHandler {
     try {
       const originalSource = fs.readFileSync(file, "utf8");
       const patchedSource = this.resolveAliasImports(originalSource, path.dirname(file));
-      console.log("Patched source:", patchedSource);
 
       tempFile = path.join(os.tmpdir(), `component-${Date.now()}-${entry.filename}`);
       fs.writeFileSync(tempFile, patchedSource, "utf8");
@@ -184,7 +183,6 @@ export default class ProjectHandler {
       const ComponentClass = await this.loadComponentClass(projectName, entry);
       const declaredSchema = ComponentClass?.schema;
 
-      console.log(`Component "${name}" schema:`, ComponentClass);
 
       const fields = declaredSchema && Object.keys(declaredSchema).length > 0
         ? Object.entries(declaredSchema).map(([key, def]) => ({
@@ -264,7 +262,10 @@ export default class ProjectHandler {
       components: await this.componentSchemas(projectName),
       scenes: this.scanFiles(projectName, "scenes").filter((file) => file.endsWith(".json")),
       prefabs: this.scanFiles(projectName, "prefabs").filter((file) => file.endsWith(".json")),
-      scripts: this.scanFiles(projectName, "scripts").filter((file) => file.endsWith(".js")),
+      // scripts: this.scanFiles(projectName, "scripts").filter((file) => file.endsWith(".js")),
+      scripts: this.scanFiles(projectName, "scripts").filter(
+        (file) => file.endsWith(".js") || file.endsWith(".lgscript.json")
+      ),
       assets: Object.entries(this.scanAssets(projectName)).map(([key, asset]) => ({ key, ...asset })),
     };
   }

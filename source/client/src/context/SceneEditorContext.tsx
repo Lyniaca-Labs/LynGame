@@ -11,6 +11,7 @@ import {
   Entity,
   ComponentDefinition,
   PrefabData,
+  graphScriptsApi,
 } from "../api";
 
 export type InspectorTarget =
@@ -83,6 +84,8 @@ interface SceneEditorContextValue {
   deleteComponent: (name: string) => Promise<void>;
   createScript: () => Promise<void>;
   deleteScript: (name: string) => Promise<void>;
+  createGraphScript: () => Promise<void>;
+  deleteGraphScript: (name: string) => Promise<void>;
   createScene: () => Promise<void>;
   deleteScene: (name: string) => Promise<void>;
   createPrefab: () => Promise<void>;
@@ -600,6 +603,38 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     [currentProject, reloadProject]
   );
 
+  const createGraphScript = useCallback(async () => {
+    if (!currentProject) return;
+    const name = (await window.prompt("New visual script name:"))?.trim();
+    if (!name) return;
+
+    try {
+      await graphScriptsApi.create(currentProject, name);
+      await reloadProject();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }, [currentProject, reloadProject]);
+
+  const deleteGraphScript = useCallback(
+    async (name: string) => {
+      if (!currentProject) return;
+
+      const ok = await window.confirm(
+        `Delete visual script "${name}"? Entities/prefabs still referencing it by name will be left pointing at a missing file.`
+      );
+      if (!ok) return;
+
+      try {
+        await graphScriptsApi.remove(currentProject, name);
+        await reloadProject();
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    },
+    [currentProject, reloadProject]
+  );
+
   return (
     <SceneEditorContext.Provider
       value={{
@@ -638,6 +673,8 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         deleteComponent,
         createScript,
         deleteScript,
+        createGraphScript,
+        deleteGraphScript,
         createScene,
         deleteScene,
         createPrefab,

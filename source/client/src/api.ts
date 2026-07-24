@@ -126,8 +126,14 @@ export interface OpenScriptResponse extends ApiResult {
 // stored as plain JSON files under the generic "prefabs" folder, so we build
 // get/save on top of the generic readFile/writeFile.
 
+const stripExt = (filename: string) => filename.replace(/\.[^/.]+$/, "");
 const withJsExt = (filename: string) => (filename.endsWith(".js") ? filename : `${filename}.js`);
 const withJsonExt = (filename: string) => (filename.endsWith(".json") ? filename : `${filename}.json`);
+const stripGraphExt = (filename: string) =>
+  filename.replace(/\.lgscript\.(json|js)$/, "");
+
+const withGraphExt = (filename: string) => `${stripGraphExt(filename)}.lgscript.json`;
+const withCompiledExt = (filename: string) => `${stripGraphExt(filename)}.lgscript.js`;
 
 export interface PrefabData {
   components: Record<string, Record<string, unknown>>;
@@ -167,8 +173,8 @@ export class ${name} extends Component {
     // enabled: { type: "boolean", default: true },
   };
   
-  constructor(overrides = {}) {
-    super(overrides); // assigns any fields declared in static schema
+  constructor(data = {}) {
+    super(data); // assigns any fields declared in static schema
   }
   
   onSpawn(entity, engine) {}
@@ -200,6 +206,26 @@ export function ${filename}(entity, engine, dt) {
     projectsApi.writeFile(project, "scripts", withJsExt(filename), content),
   remove: (project: string, filename: string): Promise<ApiResult> =>
     projectsApi.deleteFile(project, "scripts", withJsExt(filename)),
+};
+
+const emptyGraph = JSON.stringify({ nodes: [], edges: [] }, null, 2);
+export const graphScriptsApi = {
+  save: (project: string, filename: string, content: string): Promise<ApiResult> =>
+    projectsApi.writeFile(project, "scripts", withGraphExt(filename), content),
+  create: (project: string, filename: string, content = emptyGraph): Promise<ApiResult> =>
+    projectsApi.writeFile(project, "scripts", withGraphExt(filename), content),
+  remove: async (project: string, filename: string): Promise<ApiResult> => {
+    const result = await projectsApi.deleteFile(project, "scripts", withGraphExt(filename));
+    try {
+      // Compiled sibling may not exist yet (graph was never compiled) — ignore.
+      await projectsApi.deleteFile(project, "scripts", withCompiledExt(filename));
+    } catch {
+      // no-op
+    }
+    return result;
+  },
+  writeCompiled: (project: string, filename: string, code: string): Promise<ApiResult> =>
+    projectsApi.writeFile(project, "scripts", withCompiledExt(filename), code),
 };
 
 // ---- Scenes (delete only — create/save already covered by saveScene) ----

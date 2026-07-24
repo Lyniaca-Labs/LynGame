@@ -6,7 +6,7 @@
     },
     "ShapeRenderer": {
       "shape": "rect",
-      "width": 32,
+      "width": 33,
       "height": 32,
       "color": "#8e7b7b"
     }

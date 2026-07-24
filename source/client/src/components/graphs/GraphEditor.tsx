@@ -49,6 +49,8 @@ import {
   useMemo,
   useRef,
   useState,
+  memo,
+  useEffect
 } from "react";
 import {
   ReactFlow,
@@ -64,6 +66,10 @@ import {
   applyNodeChanges,
   applyEdgeChanges,
   useReactFlow,
+  BaseEdge,
+  EdgeLabelRenderer,
+  getBezierPath,
+  type EdgeProps,
   type Node,
   type Edge,
   type Connection,
@@ -73,7 +79,7 @@ import {
   type NodeTypes as RFNodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Plus, Search, Trash2, X } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Public types — the registry shape extensions author against.
@@ -205,6 +211,7 @@ interface NodeRenderContextValue {
   readOnly: boolean;
   onFieldChange: (nodeId: string, key: string, value: unknown) => void;
   onRemoveNode: (nodeId: string) => void;
+  onRemoveEdge: (edgeId: string) => void;
 }
 
 const NodeRenderContext = createContext<NodeRenderContextValue | null>(null);
@@ -214,7 +221,7 @@ const NodeRenderContext = createContext<NodeRenderContextValue | null>(null);
 // it renders is entirely driven by the matching GraphNodeTypeDefinition.
 // ---------------------------------------------------------------------------
 
-function GenericGraphNode({ id, data, selected, type }: NodeProps) {
+const GenericGraphNode = memo(function GenericGraphNode({ id, data, selected, type }: NodeProps) {
   const ctx = useContext(NodeRenderContext);
   if (!ctx) return null;
 
@@ -323,7 +330,7 @@ function GenericGraphNode({ id, data, selected, type }: NodeProps) {
       )}
     </div>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Field editor — same field-type vocabulary and look as Inspector.tsx's
@@ -552,6 +559,54 @@ function NodeSearchMenu({
   );
 }
 
+function DeletableEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  style,
+  markerEnd,
+  selected,
+}: EdgeProps) {
+  const ctx = useContext(NodeRenderContext);
+  const [edgePath, labelX, labelY] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+
+  return (
+    <>
+      <BaseEdge id={id} path={edgePath} style={style} markerEnd={markerEnd} />
+      {selected && !ctx?.readOnly && (
+        <EdgeLabelRenderer>
+          <button
+            type="button"
+            className="nodrag nopan absolute flex h-4 w-4 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-text-faint)] hover:border-[var(--color-danger)] hover:text-[var(--color-danger)]"
+            style={{
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              pointerEvents: "all",
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              ctx?.onRemoveEdge(id);
+            }}
+            title="Remove connection"
+          >
+            <X size={10} />
+          </button>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -570,6 +625,10 @@ export interface GraphEditorProps {
   showControls?: boolean;
   /** Shown as a hint in the empty state and the toolbar tooltip. */
   emptyMessage?: string;
+  /** Called on Ctrl/Cmd+S. The component has no built-in persistence — you decide what "save" means. */
+  onSave?: (value: GraphValue) => void;
+  /** Max number of undo steps to retain. Defaults to 100. */
+  maxHistory?: number;
 }
 
 export function GraphEditor(props: GraphEditorProps) {
@@ -590,15 +649,156 @@ function GraphEditorCanvas({
   showMiniMap = true,
   showControls = true,
   emptyMessage = "Right-click, or use the + button, to add a node",
+  onSave,
+  maxHistory = 100,
 }: GraphEditorProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
   const [menu, setMenu] = useState<MenuState | null>(null);
 
+  // Undo/redo history. Refs, not state — we don't need a re-render when the
+  // stacks change, only when `value` itself (owned by the parent) changes.
+  const historyPast = useRef<GraphValue[]>([]);
+  const historyFuture = useRef<GraphValue[]>([]);
+  // Avoids pushing history from inside undo/redo's own onChange call.
+  const isTimeTraveling = useRef(false);
+
+  const pushHistory = useCallback(() => {
+    historyPast.current.push(value);
+    if (historyPast.current.length > maxHistory) historyPast.current.shift();
+    historyFuture.current = [];
+  }, [value, maxHistory]);
+
+  const clipboardRef = useRef<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null);
+
+  const copySelection = useCallback(() => {
+    const selectedNodes = value.nodes.filter((n) => n.selected);
+    if (selectedNodes.length === 0) return;
+    const selectedIds = new Set(selectedNodes.map((n) => n.id));
+    const relevantEdges = value.edges.filter(
+      (e) => selectedIds.has(e.source) && selectedIds.has(e.target)
+    );
+    clipboardRef.current = {
+      nodes: selectedNodes.map((n) => structuredClone(n)),
+      edges: relevantEdges.map((e) => structuredClone(e)),
+    };
+  }, [value]);
+
+  const cutSelection = useCallback(() => {
+    if (readOnly) return;
+    copySelection();
+    const selectedIds = new Set(value.nodes.filter((n) => n.selected).map((n) => n.id));
+    if (selectedIds.size === 0) return;
+    pushHistory();
+    onChange({
+      nodes: value.nodes.filter((n) => !selectedIds.has(n.id)),
+      edges: value.edges.filter((e) => !selectedIds.has(e.source) && !selectedIds.has(e.target)),
+    });
+  }, [value, onChange, readOnly, copySelection, pushHistory]);
+
+  const pasteClipboard = useCallback(() => {
+    if (readOnly || !clipboardRef.current) return;
+    const { nodes: copiedNodes, edges: copiedEdges } = clipboardRef.current;
+    pushHistory();
+
+    const idMap = new Map<string, string>();
+    const offset = 40; // px, so pasted nodes are visibly distinct from the source
+
+    const pastedNodes: GraphNode[] = copiedNodes.map((n) => {
+      const newId = crypto.randomUUID();
+      idMap.set(n.id, newId);
+      return {
+        ...n,
+        id: newId,
+        selected: true,
+        position: { x: n.position.x + offset, y: n.position.y + offset },
+      };
+    });
+
+    const pastedEdges: GraphEdge[] = copiedEdges.map((e) => ({
+      ...e,
+      id: crypto.randomUUID(),
+      source: idMap.get(e.source) ?? e.source,
+      target: idMap.get(e.target) ?? e.target,
+    }));
+
+    onChange({
+      // deselect existing nodes so only the pasted ones are highlighted
+      nodes: [...value.nodes.map((n) => ({ ...n, selected: false })), ...pastedNodes],
+      edges: [...value.edges, ...pastedEdges],
+    });
+  }, [value, onChange, readOnly, pushHistory]);
+
+  const undo = useCallback(() => {
+    if (readOnly || historyPast.current.length === 0) return;
+    const previous = historyPast.current.pop()!;
+    historyFuture.current.push(value);
+    isTimeTraveling.current = true;
+    onChange(previous);
+  }, [value, onChange, readOnly]);
+
+  const redo = useCallback(() => {
+    if (readOnly || historyFuture.current.length === 0) return;
+    const next = historyFuture.current.pop()!;
+    historyPast.current.push(value);
+    isTimeTraveling.current = true;
+    onChange(next);
+  }, [value, onChange, readOnly]);
+
+
   const mergedTypeColors = useMemo(
     () => ({ ...DEFAULT_TYPE_COLORS, ...typeColors }),
     [typeColors]
   );
+
+  useEffect(() => {
+    function isEditableTarget(target: EventTarget | null) {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+    }
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (isEditableTarget(e.target)) return;
+
+      switch (e.key.toLowerCase()) {
+        case "z":
+          e.preventDefault();
+          if (e.shiftKey) redo(); // Ctrl+Shift+Z as a common redo alt
+          else undo();
+          break;
+        case "y":
+          e.preventDefault();
+          redo();
+          break;
+        case "x":
+          e.preventDefault();
+          cutSelection();
+          break;
+        case "c":
+          e.preventDefault();
+          copySelection();
+          break;
+        case "v":
+          e.preventDefault();
+          pasteClipboard();
+          break;
+        case "s":
+          e.preventDefault();
+          onSave?.(value);
+          break;
+        case "d":
+          e.preventDefault();
+          copySelection();
+          pasteClipboard();
+          break;
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo, cutSelection, copySelection, pasteClipboard, onSave, value]);
 
   // react-flow wants one component per node.type; we only have one
   // component (GenericGraphNode), so map every registry key to it.
@@ -610,9 +810,12 @@ function GraphEditorCanvas({
     return map;
   }, [registry]);
 
+  const rfEdgeTypes = useMemo(() => ({ default: DeletableEdge }), []);
+
   const handleFieldChange = useCallback(
     (nodeId: string, key: string, fieldValue: unknown) => {
       if (readOnly) return;
+      pushHistory();
       const nextNodes = value.nodes.map((n) =>
         n.id === nodeId
           ? { ...n, data: { ...n.data, values: { ...n.data.values, [key]: fieldValue } } }
@@ -620,20 +823,43 @@ function GraphEditorCanvas({
       );
       onChange({ nodes: nextNodes, edges: value.edges });
     },
-    [value, onChange, readOnly]
+    [value, onChange, readOnly, pushHistory]
+  );
+
+  const handleRemoveEdge = useCallback(
+    (edgeId: string) => {
+      if (readOnly) return;
+      pushHistory();
+      onChange({
+        nodes: value.nodes,
+        edges: value.edges.filter((e) => e.id !== edgeId),
+      });
+    },
+    [value, onChange, readOnly, pushHistory]
   );
 
   const handleRemoveNode = useCallback(
     (nodeId: string) => {
       if (readOnly) return;
+      pushHistory();
       onChange({
         nodes: value.nodes.filter((n) => n.id !== nodeId),
-        edges: value.edges.filter(
-          (e) => e.source !== nodeId && e.target !== nodeId
-        ),
+        edges: value.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
       });
     },
-    [value, onChange, readOnly]
+    [value, onChange, readOnly, pushHistory]
+  );
+
+  const handleConnect = useCallback(
+    (connection: Connection) => {
+      if (readOnly) return;
+      pushHistory();
+      onChange({
+        nodes: value.nodes,
+        edges: addEdge({ ...connection, id: crypto.randomUUID() }, value.edges),
+      });
+    },
+    [value, onChange, readOnly, pushHistory]
   );
 
   const contextValue = useMemo<NodeRenderContextValue>(
@@ -643,42 +869,38 @@ function GraphEditorCanvas({
       readOnly,
       onFieldChange: handleFieldChange,
       onRemoveNode: handleRemoveNode,
+      onRemoveEdge: handleRemoveEdge
     }),
-    [registry, mergedTypeColors, readOnly, handleFieldChange, handleRemoveNode]
+    [registry, mergedTypeColors, readOnly, handleFieldChange, handleRemoveNode, handleRemoveEdge]
   );
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
       if (readOnly) return;
+      const isSignificant = changes.some(
+        (c) => c.type === "remove" || (c.type === "position" && c.dragging === false)
+      );
+      if (isSignificant) pushHistory();
       onChange({
         nodes: applyNodeChanges(changes, value.nodes) as GraphNode[],
         edges: value.edges,
       });
     },
-    [value, onChange, readOnly]
+    [value, onChange, readOnly, pushHistory]
   );
 
   const handleEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       if (readOnly) return;
+      if (changes.some((c) => c.type === "remove")) pushHistory();
       onChange({
         nodes: value.nodes,
         edges: applyEdgeChanges(changes, value.edges),
       });
     },
-    [value, onChange, readOnly]
+    [value, onChange, readOnly, pushHistory]
   );
 
-  const handleConnect = useCallback(
-    (connection: Connection) => {
-      if (readOnly) return;
-      onChange({
-        nodes: value.nodes,
-        edges: addEdge({ ...connection, id: crypto.randomUUID() }, value.edges),
-      });
-    },
-    [value, onChange, readOnly]
-  );
 
   // Unknown/untagged ports never block a connection — type-checking is a
   // guardrail for the domains that opt into it, not a requirement.
@@ -704,33 +926,38 @@ function GraphEditorCanvas({
 
   // Color-code edges by their source port's dataType so a connection's
   // "kind" is visible at a glance, same idea as the port dots.
+  const nodeTypeById = useMemo(() => {
+    const map = new Map<string, string | undefined>();
+    for (const n of value.nodes) map.set(n.id, n.type);
+    return map;
+  }, [value.nodes.map(n => `${n.id}:${n.type}`).join(",")]); // only changes on add/remove/type change, not drag
+
   const styledEdges = useMemo(() => {
     return value.edges.map((edge) => {
-      const sourceNode = value.nodes.find((n) => n.id === edge.source);
-      const sourceDef = sourceNode ? registry[sourceNode.type ?? ""] : undefined;
+      const sourceType = nodeTypeById.get(edge.source);
+      const sourceDef = sourceType ? registry[sourceType] : undefined;
       const port = sourceDef?.outputs?.find((p) => p.id === edge.sourceHandle);
       const stroke = colorForType(port?.dataType, mergedTypeColors);
       return { ...edge, style: { stroke, strokeWidth: 1.5, ...edge.style } };
     });
-  }, [value.edges, value.nodes, registry, mergedTypeColors]);
+  }, [value.edges, nodeTypeById, registry, mergedTypeColors]);
 
   const addNode = useCallback(
     (type: string, position: { x: number; y: number }) => {
       const def = registry[type];
       if (!def) return;
+      pushHistory();
       const initialValues: Record<string, unknown> = {};
       for (const f of def.fields ?? []) initialValues[f.key] = f.defaultValue;
-
       const newNode: GraphNode = {
         id: crypto.randomUUID(),
         type,
         position,
         data: { values: initialValues },
       };
-
       onChange({ nodes: [...value.nodes, newNode], edges: value.edges });
     },
-    [registry, value, onChange]
+    [registry, value, onChange, pushHistory]
   );
 
   const openMenuAt = useCallback(
@@ -774,6 +1001,7 @@ function GraphEditorCanvas({
           nodes={value.nodes}
           edges={styledEdges}
           nodeTypes={rfNodeTypes}
+          edgeTypes={rfEdgeTypes}
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
           onConnect={handleConnect}

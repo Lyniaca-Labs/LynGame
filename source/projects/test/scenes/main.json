@@ -44,7 +44,7 @@
       "prefab": "Enemy",
       "overrides": {
         "Transform": {
-          "x": 100,
+          "x": 101,
           "y": 150
         },
         "ShapeRenderer": {
@@ -64,7 +64,22 @@
     },
     {
       "id": "spawner",
-      "components": {},
+      "components": {
+        "SpriteRenderer": {
+          "sprite": "tree",
+          "width": 32,
+          "height": 32
+        },
+        "Transform": {
+          "x": 0,
+          "y": 0,
+          "rotation": 0,
+          "fixed": false
+        },
+        "input": {
+          "overrides": {}
+        }
+      },
       "scripts": [
         "spawnEnemies"
       ]
@@ -75,7 +90,7 @@
         "Camera": {
           "zoom": 1,
           "offset": {
-            "x": -200,
+            "x": 0,
             "y": 0
           },
           "bounds": null
@@ -85,6 +100,17 @@
           "width": 32,
           "height": 32,
           "color": "#7956f5"
+        },
+        "Transform": {
+          "x": 0,
+          "y": 0,
+          "rotation": 0,
+          "fixed": false
+        },
+        "Gravity": {
+          "force": 500,
+          "velocityY": 0,
+          "grounded": false
         }
       }
     }
