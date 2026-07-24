@@ -164,22 +164,20 @@ export interface GraphValue {
 const DEFAULT_TYPE_COLORS: Record<string, string> = {
   any: "#8b93a1",
   flow: "#e5e7eb",
-  number: "#60a5fa",
-  boolean: "#f472b6",
-  string: "#4ade80",
-  text: "#4ade80",
-  color: "#c084fc",
-  vector: "#2dd4bf",
-  texture: "#fb923c",
-  audio: "#818cf8",
+  number: "#3b82f6",
+  boolean: "#ec4899",
+  string: "#22c55e",
+  text: "#eab308",
+  color: "#a855f7",
+  vector: "#14b8a6",
+  texture: "#f97316",
+  audio: "#6366f1",
+  script: "#eab308",
 };
 
-// A small deterministic palette for auto-coloring node headers when a node
-// type doesn't specify `color` — keeps categories visually distinct without
-// requiring every node type author to pick a hex value.
 const CATEGORY_PALETTE = [
-  "#3b6ea5", "#a5573b", "#3ba573", "#7a3ba5",
-  "#a5953b", "#3b8ea5", "#a53b6e", "#5ba53b",
+  "#2e6fd6", "#d6602e", "#2ea86e", "#a52ed6",
+  "#d6c22e", "#2ea3c9", "#d62e6e", "#6ed62e",
 ];
 
 const EDGE_FLOW_KEYFRAMES = `

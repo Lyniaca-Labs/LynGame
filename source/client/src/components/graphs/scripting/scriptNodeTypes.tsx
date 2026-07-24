@@ -152,7 +152,7 @@ export const defaultScriptNodeTypes: ScriptNodeTypes = {
   },  
   "value.vector2": {
     type: "value.vector2",
-    label: "Vector2",
+    label: "Vector2 (x,y)",
     category: "Value",
     outputs: [{ id: "value", label: "Value", dataType: "vector" }],
     fields: [

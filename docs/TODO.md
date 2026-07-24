@@ -69,6 +69,7 @@ LATER
 - [ ] Scene hierarchy (`Scene[] -> Entity[] -> Children[]`)
 - [x] Components system
 - [ ] Events system
+  - [ ] include in visual scripter
 - [ ] Physics
 - [ ] Collision system
 - [x] Global tick/frame system (`dt`)
