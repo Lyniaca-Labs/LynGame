@@ -170,5 +170,11 @@ LATER
 
 ---
 
+AI
+
+build scene tree
+writes scripts
+runs test
+debugs editor
 
 

@@ -196,10 +196,16 @@ function InspectorEntity({
 
   // Scripts can be attached more than once (your sample data has LogScript
   // twice on fallingBox), so this list isn't filtered by what's already added.
-  const scriptOptions: SelectOption[] = scriptRegistry.map((s) => {
-    const name = stripExt(s);
-    return { value: name, label: name };
-  });
+  const scriptOptions: SelectOption[] = Array.from(
+    new Map(
+      scriptRegistry
+        .filter((s) => !s.endsWith(".lgscript.js"))
+        .map((s) => {
+          const name = stripExt(s);
+          return [name, { value: name, label: name } as SelectOption];
+        })
+    ).values()
+  );
 
   return (
     <Container title={`Inspector — ${entity.id}`} bodyClassName="overflow-y-auto p-2">
@@ -344,10 +350,16 @@ function InspectorPrefab({
     .filter((name) => !usedComponents.has(name))
     .map((name) => ({ value: name, label: name }));
 
-  const scriptOptions: SelectOption[] = scriptRegistry.map((s) => {
-    const name = stripExt(s);
-    return { value: name, label: name };
-  });
+  const scriptOptions: SelectOption[] = Array.from(
+    new Map(
+      scriptRegistry
+        .filter((s) => !s.endsWith(".lgscript.js"))
+        .map((s) => {
+          const name = stripExt(s);
+          return [name, { value: name, label: name } as SelectOption];
+        })
+    ).values()
+  );
 
   return (
     <Container title={`Inspector — ${prefabName} (Prefab)`} bodyClassName="overflow-y-auto p-2">

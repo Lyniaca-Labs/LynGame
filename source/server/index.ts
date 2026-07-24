@@ -7,6 +7,7 @@ import { config } from "./config/config.js";
 import { buildProject } from "./compiler/build.js";
 import ProjectHandler from "./manager/ProjectHandler.js";
 import { spawn } from "child_process";
+import { compileGraphToProject, scriptNodeMetadata } from "./compiler/graphScripts.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -23,6 +24,29 @@ app.use("/engine", express.static(path.join(sourceRoot, "engine")));
 app.use("/output", express.static(path.join(sourceRoot, "output")));
 app.use(express.static(path.join(sourceRoot, "client/dist")));
 app.use(express.static(path.join(sourceRoot, "client")));
+
+// Visual-script node definitions are served from the backend's compiler
+// registry so the editor and build process cannot drift apart.
+app.get("/api/scripts/nodes", (_req, res) => {
+  res.json({ success: true, nodes: scriptNodeMetadata() });
+});
+
+app.post("/api/projects/:project/scripts/:filename/compile", (req, res) => {
+  try {
+    const filename = req.params.filename;
+    if (!/^[a-zA-Z0-9_.-]+(?:\.lgscript)?$/.test(filename)) {
+      return res.status(400).json({ success: false, error: "Invalid graph script name" });
+    }
+
+    const result = compileGraphToProject(req.params.project, filename);
+    if (result.errors.length > 0) {
+      return res.status(422).json({ success: false, code: "", errors: result.errors });
+    }
+    res.json({ success: true, code: result.code });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
 
 // --- Project list ---
 app.get("/api/projects", (_req, res) => {

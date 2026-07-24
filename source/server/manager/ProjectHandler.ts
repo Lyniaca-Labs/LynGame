@@ -2,10 +2,14 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { fileURLToPath, pathToFileURL } from "url";
+import { compiledGraphFilename, graphFilename, scriptSymbol } from "../compiler/graphScripts.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const sourceRoot = __dirname.includes(`${path.sep}dist${path.sep}`)
+  ? path.resolve(__dirname, "../../..")
+  : path.resolve(__dirname, "../..");
 
-const engineComponentsDir = path.join(__dirname, "../../engine/components");
+const engineComponentsDir = path.join(sourceRoot, "engine/components");
 
 type ComponentSource = "engine" | "project";
 type ComponentEntry = { source: ComponentSource; filename: string; className?: string };
@@ -17,7 +21,7 @@ type JsonRecord = Record<string, any>;
 
 export default class ProjectHandler {
   static getProjectFile(projectName) {
-    const projectPath = path.join(__dirname, "../../projects", projectName, "project.lg");
+    const projectPath = path.join(sourceRoot, "projects", projectName, "project.lg");
     if (!fs.existsSync(projectPath)) {
       throw new Error("Project file not found");
     }
@@ -25,8 +29,8 @@ export default class ProjectHandler {
   }
 
   static scanComponents(projectName: string): ComponentManifest {
-    const engineComponentsDir = path.join(__dirname, "../../engine/components");
-    const projectComponentsDir = path.join(__dirname, "../../projects", projectName, "components");
+    const engineComponentsDir = path.join(sourceRoot, "engine/components");
+    const projectComponentsDir = path.join(sourceRoot, "projects", projectName, "components");
 
     const manifest: ComponentManifest = {}; // componentName -> { source: "engine" | "project", filename }
 
@@ -53,7 +57,7 @@ export default class ProjectHandler {
 
   static getScene(projectName, sceneName) {
     const scenePath = path.join(
-      __dirname, "../../projects", projectName, "scenes", `${sceneName}.json`
+      sourceRoot, "projects", projectName, "scenes", `${sceneName}.json`
     );
     if (!fs.existsSync(scenePath)) {
       throw new Error(`Scene "${sceneName}" not found`);
@@ -70,7 +74,7 @@ export default class ProjectHandler {
   }
 
   static scanAssets(projectName: string): AssetManifest {
-    const assetsDir = path.join(__dirname, "../../projects", projectName, "assets");
+    const assetsDir = path.join(sourceRoot, "projects", projectName, "assets");
     const manifest: AssetManifest = {}; // key -> { relativePath, type }
     
 
@@ -112,7 +116,7 @@ export default class ProjectHandler {
   }
 
   static scanFiles(projectName, folder) {
-    const root = path.join(__dirname, "../../projects", projectName, folder);
+    const root = path.join(sourceRoot, "projects", projectName, folder);
     if (!fs.existsSync(root)) return [];
     const result: string[] = [];
     const walk = (dir, prefix = "") => {
@@ -130,8 +134,8 @@ export default class ProjectHandler {
 
   static resolveAliasImports(source, originalFileDir) {
     const aliasRoots = {
-      "@types/": path.join(__dirname, "../../engine/types/"),
-      "@components/": path.join(__dirname, "../../engine/components/"),
+      "@types/": path.join(sourceRoot, "engine/types/"),
+      "@components/": path.join(sourceRoot, "engine/components/"),
     };
 
     let resolved = source;
@@ -157,8 +161,8 @@ export default class ProjectHandler {
 
   static async loadComponentClass(projectName, entry) {
     const file = entry.source === "engine"
-      ? path.join(__dirname, "../../engine/components", entry.filename)
-      : path.join(__dirname, "../../projects", projectName, "components", entry.filename);
+      ? path.join(sourceRoot, "engine/components", entry.filename)
+      : path.join(sourceRoot, "projects", projectName, "components", entry.filename);
 
     let tempFile;
     try {
@@ -185,8 +189,8 @@ export default class ProjectHandler {
     for (const [name, entry] of Object.entries(manifest) as [string, ComponentEntry][]) {
       const editable = entry.source !== "engine";
       const file = entry.source === "engine"
-        ? path.join(__dirname, "../../engine/components", entry.filename)
-        : path.join(__dirname, "../../projects", projectName, "components", entry.filename);
+        ? path.join(sourceRoot, "engine/components", entry.filename)
+        : path.join(sourceRoot, "projects", projectName, "components", entry.filename);
 
       const ComponentClass = await this.loadComponentClass(projectName, entry);
       const declaredSchema = ComponentClass?.schema;
@@ -262,7 +266,7 @@ export default class ProjectHandler {
   }
 
   static async editorSnapshot(projectName) {
-    const projectDir = path.join(__dirname, "../../projects", projectName);
+    const projectDir = path.join(sourceRoot, "projects", projectName);
     if (!fs.existsSync(projectDir)) throw new Error("Project not found");
     const config = JSON.parse(fs.readFileSync(path.join(projectDir, "project.lg"), "utf8"));
     return {
@@ -283,15 +287,15 @@ export default class ProjectHandler {
     const config = JSON.parse(fs.readFileSync(projectConfigPath, "utf-8"));
     const manifest = ProjectHandler.scanComponents(projectName);
 
-    const scenesDir = path.join(__dirname, "../../projects", projectName, "scenes");
+    const scenesDir = path.join(sourceRoot, "projects", projectName, "scenes");
     const sceneFiles = fs.readdirSync(scenesDir).filter((f) => f.endsWith(".json"));
 
-    const prefabsDir = path.join(__dirname, "../../projects", projectName, "prefabs");
+    const prefabsDir = path.join(sourceRoot, "projects", projectName, "prefabs");
     const prefabFiles = fs.existsSync(prefabsDir)
       ? fs.readdirSync(prefabsDir).filter((f) => f.endsWith(".json"))
       : [];
 
-    const scriptsDir = path.join(__dirname, "../../projects", projectName, "scripts");
+    const scriptsDir = path.join(sourceRoot, "projects", projectName, "scripts");
 
     // Collected across scenes + prefabs so imports only get generated once,
     // regardless of how many places reference a given component/script.
@@ -315,7 +319,7 @@ export default class ProjectHandler {
         lines.push(`${indent}${varName}.addComponent(${compName}_component, ${JSON.stringify(data)});`);
       }
       for (const scriptName of node.scripts || []) {
-        lines.push(`${indent}${varName}.attachScript(${scriptName}_script);`);
+        lines.push(`${indent}${varName}.attachScript(${scriptSymbol(scriptName)}_script);`);
       }
       return lines;
     }
@@ -358,7 +362,7 @@ export default class ProjectHandler {
           }
           for (const scriptName of entity.scripts || []) {
             addScriptRef(scriptName, location);
-            bodyLines.push(`    ${varName}.attachScript(${scriptName}_script);`);
+            bodyLines.push(`    ${varName}.attachScript(${scriptSymbol(scriptName)}_script);`);
           }
         } else {
           bodyLines.push(...renderEntity(entity, `entity_${entity.id}`, `"${entity.id}"`, "    ", location));
@@ -396,7 +400,7 @@ export default class ProjectHandler {
         );
       }
       for (const scriptName of prefab.scripts || []) {
-        rootLines.push(`  entity.attachScript(${scriptName}_script);`);
+        rootLines.push(`  entity.attachScript(${scriptSymbol(scriptName)}_script);`);
       }
       rootLines.push(`  return entity;`);
 
@@ -425,13 +429,16 @@ export default class ProjectHandler {
     // broken import, naming every place that still attaches it.
     const scriptImports = [...allScripts.entries()].map(([name, locations]) => {
       const scriptPath = path.join(scriptsDir, `${name}.js`);
-      if (!fs.existsSync(scriptPath)) {
+      const graphPath = path.join(scriptsDir, graphFilename(name));
+      if (!fs.existsSync(scriptPath) && !fs.existsSync(graphPath)) {
         const where = [...locations].join(", ");
         return `console.error(${JSON.stringify(
           `Missing script "${name}" (expected at scripts/${name}.js) — still attached to: ${where}`
         )});`;
       }
-      return `import { ${name} as ${name}_script } from "./scripts/${name}.js";`;
+      const symbol = scriptSymbol(name);
+      const filename = fs.existsSync(graphPath) ? compiledGraphFilename(name) : `${name}.js`;
+      return `import { ${symbol} as ${symbol}_script } from "./scripts/${filename}";`;
     }).join("\n");
 
     // ---------------------------------------------------------------------

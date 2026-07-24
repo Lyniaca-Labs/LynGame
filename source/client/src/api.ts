@@ -53,6 +53,34 @@ export interface BuildResponse extends ApiResult {
   url?: string;
 }
 
+export interface GraphNodeTypeDefinition {
+  type: string;
+  label: string;
+  category?: string;
+  description?: string;
+  inputs?: { id: string; label?: string; dataType?: string }[];
+  outputs?: { id: string; label?: string; dataType?: string }[];
+  fields?: {
+    key: string;
+    label?: string;
+    type: "number" | "boolean" | "color" | "text" | "vector" | "select";
+    defaultValue?: unknown;
+    options?: { value: string; label: string }[];
+    min?: number;
+    max?: number;
+    step?: number;
+  }[];
+}
+
+export interface ScriptNodeTypesResponse extends ApiResult {
+  nodes: Record<string, GraphNodeTypeDefinition>;
+}
+
+export interface GraphCompileResponse extends ApiResult {
+  code: string;
+  errors?: string[];
+}
+
 // ---- Scene / entity shapes ----
 // Component data is intentionally loose (Record<string, unknown>) since new
 // component types can be added without changing the client.
@@ -224,8 +252,9 @@ export const graphScriptsApi = {
     }
     return result;
   },
-  writeCompiled: (project: string, filename: string, code: string): Promise<ApiResult> =>
-    projectsApi.writeFile(project, "scripts", withCompiledExt(filename), code),
+  nodeTypes: (): Promise<ScriptNodeTypesResponse> => api.get("api/scripts/nodes"),
+  compile: (project: string, filename: string): Promise<GraphCompileResponse> =>
+    api.post(`api/projects/${enc(project)}/scripts/${enc(withGraphExt(filename))}/compile`),
 };
 
 // ---- Scenes (delete only — create/save already covered by saveScene) ----

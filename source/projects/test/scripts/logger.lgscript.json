@@ -1,0 +1,172 @@
+{
+  "nodes": [
+    {
+      "id": "6d8556d6-aab6-4bcb-8264-4d76e1cd3a54",
+      "type": "script.output",
+      "position": {
+        "x": 2046.0455380253652,
+        "y": 258.7527063164363
+      },
+      "data": {
+        "values": {
+          "key": ""
+        }
+      },
+      "measured": {
+        "width": 220,
+        "height": 138
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "d52879c2-b991-4531-bd48-963a3093c015",
+      "type": "script.parameters",
+      "position": {
+        "x": 621.2562054554697,
+        "y": 312.7916557949073
+      },
+      "data": {
+        "values": {}
+      },
+      "measured": {
+        "width": 220,
+        "height": 106
+      },
+      "dragging": false,
+      "selected": false
+    },
+    {
+      "id": "4abce22a-362b-47b8-8d46-db02056dc7c4",
+      "type": "script.input",
+      "position": {
+        "x": 648.9299822016576,
+        "y": 488.7003625965155
+      },
+      "data": {
+        "values": {
+          "key": "test"
+        }
+      },
+      "measured": {
+        "width": 220,
+        "height": 96
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "7f185125-1df2-40e8-be07-9edab7bac55b",
+      "type": "entity.getComponent",
+      "position": {
+        "x": 916.4957613509903,
+        "y": 187.75031714431773
+      },
+      "data": {
+        "values": {
+          "component": "Transform"
+        }
+      },
+      "measured": {
+        "width": 220,
+        "height": 106
+      },
+      "selected": false
+    },
+    {
+      "id": "630ea7a6-63e3-4b9a-bf2f-ae73a66d62b2",
+      "type": "component.get",
+      "position": {
+        "x": 1170.9122092991488,
+        "y": 302.0021479358519
+      },
+      "data": {
+        "values": {
+          "property": "x"
+        }
+      },
+      "measured": {
+        "width": 220,
+        "height": 96
+      },
+      "dragging": false,
+      "selected": false
+    },
+    {
+      "id": "03eede25-5788-426f-a2e4-5b93d9776e3c",
+      "type": "component.set",
+      "position": {
+        "x": 1726.8592622229023,
+        "y": 151.23684544805425
+      },
+      "data": {
+        "values": {
+          "property": "x",
+          "value": ""
+        }
+      },
+      "measured": {
+        "width": 220,
+        "height": 148
+      },
+      "dragging": false
+    },
+    {
+      "id": "1f09e172-e122-4073-9b87-d6e3f0faafed",
+      "type": "math.add",
+      "position": {
+        "x": 1449.91257807839,
+        "y": 240.75374380018405
+      },
+      "data": {
+        "values": {
+          "a": 0,
+          "b": 1
+        }
+      },
+      "measured": {
+        "width": 220,
+        "height": 148
+      },
+      "dragging": false,
+      "selected": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "d52879c2-b991-4531-bd48-963a3093c015",
+      "sourceHandle": "entity",
+      "target": "7f185125-1df2-40e8-be07-9edab7bac55b",
+      "targetHandle": "entity",
+      "id": "5617bd3c-09d9-4042-8ba4-92ea45cde42f"
+    },
+    {
+      "source": "7f185125-1df2-40e8-be07-9edab7bac55b",
+      "sourceHandle": "component",
+      "target": "630ea7a6-63e3-4b9a-bf2f-ae73a66d62b2",
+      "targetHandle": "component",
+      "id": "c032adf3-eddf-40ad-99a2-421dd71f94ca"
+    },
+    {
+      "source": "7f185125-1df2-40e8-be07-9edab7bac55b",
+      "sourceHandle": "component",
+      "target": "03eede25-5788-426f-a2e4-5b93d9776e3c",
+      "targetHandle": "component",
+      "id": "ac73e673-544f-4767-8fbd-15c8be9969af"
+    },
+    {
+      "source": "630ea7a6-63e3-4b9a-bf2f-ae73a66d62b2",
+      "sourceHandle": "value",
+      "target": "1f09e172-e122-4073-9b87-d6e3f0faafed",
+      "targetHandle": "a",
+      "id": "a045b631-32b6-424c-b075-718a14077551"
+    },
+    {
+      "source": "1f09e172-e122-4073-9b87-d6e3f0faafed",
+      "sourceHandle": "result",
+      "target": "03eede25-5788-426f-a2e4-5b93d9776e3c",
+      "targetHandle": "value",
+      "id": "76360eb1-ef84-4dae-948a-eb528a1d04e9"
+    }
+  ]
+}

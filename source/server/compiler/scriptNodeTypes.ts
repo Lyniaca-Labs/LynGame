@@ -5,12 +5,36 @@
 // JS function. Everything here is additive — GraphEditor itself stays
 // generic and knows nothing about compilation.
 
-// TODO: move this backend 
+// Shared by the backend compiler and the client graph editor.
 
-import type {
-  GraphNodeTypeDefinition,
-  GraphNode,
-} from "../GraphEditor";
+export interface GraphNodeTypeDefinition {
+  type: string;
+  label: string;
+  category: string;
+  description?: string;
+  inputs?: GraphPortDefinition[];
+  outputs?: GraphPortDefinition[];
+  fields?: GraphFieldDefinition[];
+  /** Keep this node alive even when it is not part of the output dataflow. */
+  sideEffect?: boolean;
+  /** Emit a runtime guard after this node's value is compiled. */
+  assertComponent?: boolean;
+  compile?: (ctx: CompileContext) => CompileOutput;
+}
+
+export interface GraphPortDefinition { id: string; label?: string; dataType?: string; }
+export interface GraphFieldDefinition {
+  key: string;
+  label?: string;
+  type: "number" | "boolean" | "color" | "text" | "vector" | "select";
+  defaultValue?: unknown;
+  options?: { value: string; label: string }[];
+  min?: number;
+  max?: number;
+  step?: number;
+}
+export interface GraphNodeData { values?: Record<string, unknown>; [key: string]: unknown; }
+export interface GraphNode { id: string; type?: string; data?: GraphNodeData; }
 
 /** Resolved JS expression strings for each input port of a node, keyed by port id. */
 export type CompiledInputs = Record<string, string>;
@@ -87,13 +111,26 @@ export const defaultScriptNodeTypes: ScriptNodeTypes = {
     type: "script.input",
     label: "Script Input",
     category: "Script",
-    description: "Reads a field off the function's input object.",
+    description: "Reads a field from the script data object.",
     outputs: [{ id: "value", label: "Value", dataType: "any" }],
     fields: [{ key: "key", label: "Field", type: "text", defaultValue: "value" }],
     compile: (ctx) => {
       const key = String(ctx.values.key ?? "value");
-      return `input${/^[A-Za-z_$][\w$]*$/.test(key) ? `.${key}` : `[${literal(key)}]`}`;
+      return `data${/^[A-Za-z_$][\w$]*$/.test(key) ? `.${key}` : `[${literal(key)}]`}`;
     },
+  },
+
+  "script.parameters": {
+    type: "script.parameters",
+    label: "Parameters",
+    category: "Script",
+    description: "Provides entity, engine, delta time, and custom data to the script.",
+    outputs: [
+      { id: "entity", label: "Entity", dataType: "entity" },
+      { id: "engine", label: "Engine", dataType: "engine" },
+      { id: "dt", label: "Delta Time", dataType: "number" },
+    ],
+    compile: () => ({ entity: "entity", engine: "engine", dt: "dt" }),
   },
 
   "script.output": {
@@ -111,6 +148,194 @@ export const defaultScriptNodeTypes: ScriptNodeTypes = {
       },
     ],
     compile: (ctx) => inputOr(ctx, "value"),
+  },
+
+  "entity.id": {
+    type: "entity.id",
+    label: "Entity ID",
+    category: "Entity",
+    inputs: [{ id: "entity", label: "Entity", dataType: "entity" }],
+    outputs: [{ id: "value", label: "ID", dataType: "string" }],
+    compile: (ctx) => `${inputOr(ctx, "entity", "entity")}.id`,
+  },
+
+  "entity.getComponent": {
+    type: "entity.getComponent",
+    label: "Get Component",
+    category: "Entity",
+    assertComponent: true,
+    inputs: [{ id: "entity", label: "Entity", dataType: "entity" }],
+    outputs: [{ id: "component", label: "Component", dataType: "component" }],
+    fields: [{ key: "component", label: "Component name", type: "text", defaultValue: "Transform" }],
+    compile: (ctx) => `${inputOr(ctx, "entity", "entity")}.getComponent(${literal(ctx.values.component ?? "Transform")})`,
+  },
+
+  "entity.hasComponent": {
+    type: "entity.hasComponent",
+    label: "Has Component",
+    category: "Entity",
+    inputs: [{ id: "entity", label: "Entity", dataType: "entity" }],
+    outputs: [{ id: "value", label: "Present", dataType: "boolean" }],
+    fields: [{ key: "component", label: "Component name", type: "text", defaultValue: "Transform" }],
+    compile: (ctx) => `${inputOr(ctx, "entity", "entity")}.hasComponent(${literal(ctx.values.component ?? "Transform")})`,
+  },
+
+  "entity.state.get": {
+    type: "entity.state.get",
+    label: "Get Entity State",
+    category: "Entity",
+    inputs: [{ id: "entity", label: "Entity", dataType: "entity" }],
+    outputs: [{ id: "value", label: "Value", dataType: "any" }],
+    fields: [{ key: "key", label: "State key", type: "text", defaultValue: "value" }],
+    compile: (ctx) => `${inputOr(ctx, "entity", "entity")}.state[${literal(ctx.values.key ?? "value")}]`,
+  },
+
+  "entity.state.set": {
+    type: "entity.state.set",
+    label: "Set Entity State",
+    category: "Entity",
+    inputs: [
+      { id: "entity", label: "Entity", dataType: "entity" },
+      { id: "value", label: "Value", dataType: "any" },
+    ],
+    outputs: [{ id: "entity", label: "Entity", dataType: "entity" }],
+    fields: [
+      { key: "key", label: "State key", type: "text", defaultValue: "value" },
+      { key: "value", label: "Default value", type: "text", defaultValue: "" },
+    ],
+    compile: (ctx) => {
+      const entity = inputOr(ctx, "entity", "entity");
+      const value = ctx.inputs.value ?? literal(ctx.values.value);
+      return `((${entity}.state[${literal(ctx.values.key ?? "value")}] = ${value}), ${entity})`;
+    },
+  },
+
+  "debug.log": {
+    type: "debug.log",
+    label: "Debug Log",
+    category: "Debug",
+    sideEffect: true,
+    inputs: [{ id: "value", label: "Value", dataType: "any" }],
+    outputs: [{ id: "value", label: "Value", dataType: "any" }],
+    fields: [{ key: "value", label: "Value", type: "text", defaultValue: "" }],
+    compile: (ctx) => {
+      const value = ctx.inputs.value ?? literal(ctx.values.value);
+      return `(console.log(${value}), ${value})`;
+    },
+  },
+
+  "entity.call": {
+    type: "entity.call",
+    label: "Call Entity Method",
+    category: "Entity",
+    inputs: [
+      { id: "entity", label: "Entity", dataType: "entity" },
+      { id: "arg0", label: "Argument", dataType: "any" },
+    ],
+    outputs: [{ id: "value", label: "Result", dataType: "any" }],
+    fields: [
+      { key: "method", label: "Method", type: "text", defaultValue: "destroy" },
+      { key: "arg0", label: "Default argument", type: "text", defaultValue: "" },
+    ],
+    compile: (ctx) => {
+      const entity = inputOr(ctx, "entity", "entity");
+      const method = String(ctx.values.method ?? "destroy").replace(/[^a-zA-Z0-9_$]/g, "");
+      const arg = ctx.inputs.arg0 ?? literal(ctx.values.arg0);
+      return `${entity}?.[${literal(method)}]?.(${arg})`;
+    },
+  },
+
+  "component.get": {
+    type: "component.get",
+    label: "Get Component Property",
+    category: "Component",
+    inputs: [{ id: "component", label: "Component", dataType: "component" }],
+    outputs: [{ id: "value", label: "Value", dataType: "any" }],
+    fields: [{ key: "property", label: "Property", type: "text", defaultValue: "x" }],
+    compile: (ctx) => `${inputOr(ctx, "component", "component")}?.[${literal(ctx.values.property ?? "x")}]`,
+  },
+
+  "component.set": {
+    type: "component.set",
+    label: "Set Component Property",
+    category: "Component",
+    inputs: [
+      { id: "component", label: "Component", dataType: "component" },
+      { id: "value", label: "Value", dataType: "any" },
+    ],
+    outputs: [{ id: "component", label: "Component", dataType: "component" }],
+    fields: [
+      { key: "property", label: "Property", type: "text", defaultValue: "x" },
+      { key: "value", label: "Default value", type: "text", defaultValue: "" },
+    ],
+    compile: (ctx) => {
+      const component = inputOr(ctx, "component", "component");
+      const value = ctx.inputs.value ?? literal(ctx.values.value);
+      const property = literal(ctx.values.property ?? "x");
+      return `((${component}[${property}] = ${value}), ${component})`;
+    },
+  },
+
+  "component.call": {
+    type: "component.call",
+    label: "Call Component Method",
+    category: "Component",
+    inputs: [
+      { id: "component", label: "Component", dataType: "component" },
+      { id: "arg0", label: "Argument", dataType: "any" },
+    ],
+    outputs: [{ id: "value", label: "Result", dataType: "any" }],
+    fields: [
+      { key: "method", label: "Method", type: "text", defaultValue: "update" },
+      { key: "arg0", label: "Default argument", type: "text", defaultValue: "" },
+    ],
+    compile: (ctx) => {
+      const component = inputOr(ctx, "component", "component");
+      const method = String(ctx.values.method ?? "update").replace(/[^a-zA-Z0-9_$]/g, "");
+      const arg = ctx.inputs.arg0 ?? literal(ctx.values.arg0);
+      return `${component}?.[${literal(method)}]?.(${arg})`;
+    },
+  },
+
+  "engine.getEntity": {
+    type: "engine.getEntity",
+    label: "Get Entity",
+    category: "Engine",
+    inputs: [{ id: "engine", label: "Engine", dataType: "engine" }],
+    outputs: [{ id: "entity", label: "Entity", dataType: "entity" }],
+    fields: [{ key: "id", label: "Entity ID", type: "text", defaultValue: "player" }],
+    compile: (ctx) => `${inputOr(ctx, "engine", "engine")}.getEntity(${literal(ctx.values.id ?? "player")})`,
+  },
+
+  "engine.input": {
+    type: "engine.input",
+    label: "Input State",
+    category: "Engine",
+    inputs: [{ id: "engine", label: "Engine", dataType: "engine" }],
+    outputs: [{ id: "pressed", label: "Pressed", dataType: "boolean" }],
+    fields: [{ key: "key", label: "Key code", type: "text", defaultValue: "Space" }],
+    compile: (ctx) => `${inputOr(ctx, "engine", "engine")}.input.isKeyDown(${literal(ctx.values.key ?? "Space")})`,
+  },
+
+  "engine.call": {
+    type: "engine.call",
+    label: "Call Engine Method",
+    category: "Engine",
+    inputs: [
+      { id: "engine", label: "Engine", dataType: "engine" },
+      { id: "arg0", label: "Argument", dataType: "any" },
+    ],
+    outputs: [{ id: "value", label: "Result", dataType: "any" }],
+    fields: [
+      { key: "method", label: "Method", type: "text", defaultValue: "getEntity" },
+      { key: "arg0", label: "Default argument", type: "text", defaultValue: "player" },
+    ],
+    compile: (ctx) => {
+      const engine = inputOr(ctx, "engine", "engine");
+      const method = String(ctx.values.method ?? "getEntity").replace(/[^a-zA-Z0-9_$]/g, "");
+      const arg = ctx.inputs.arg0 ?? literal(ctx.values.arg0);
+      return `${engine}?.[${literal(method)}]?.(${arg})`;
+    },
   },
 
   "value.number": {
@@ -793,3 +1018,6 @@ export const defaultScriptNodeTypes: ScriptNodeTypes = {
     compile: (ctx) => `(!!${inputOr(ctx, "a")} !== !!${inputOr(ctx, "b")})`,
   },
 };
+
+// TODO: add ndoes
+// elapsed time with outputs (hours, minutes, seconds, milliseconds)

@@ -173,6 +173,7 @@ const DEFAULT_TYPE_COLORS: Record<string, string> = {
   texture: "#f97316",
   audio: "#6366f1",
   script: "#eab308",
+  debug: "#f43f5e",
 };
 
 const CATEGORY_PALETTE = [

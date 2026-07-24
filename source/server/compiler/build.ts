@@ -3,8 +3,12 @@ import path from "path";
 import { fileURLToPath } from "url";
 import ProjectHandler from "../manager/ProjectHandler.js";
 import { resolveAliases } from "./aliasResolver.js";
+import { compileProjectGraphScripts } from "./graphScripts.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const sourceRoot = __dirname.includes(`${path.sep}dist${path.sep}`)
+  ? path.resolve(__dirname, "../../..")
+  : path.resolve(__dirname, "../..");
 
 function injectLGAlias(outDir: string): void {
   const gameDir = path.join(outDir, "game");
@@ -37,16 +41,19 @@ function injectLGAlias(outDir: string): void {
 }
 
 export function buildProject(projectName: string): string {
-  const engineSrc = path.join(__dirname, "../../engine");
-  const projectSrc = path.join(__dirname, "../../projects", projectName);
-  const outDir = path.join(__dirname, "../../output", projectName);
-  const templatePath = path.join(__dirname, "./templates/index.html");
+  const engineSrc = path.join(sourceRoot, "engine");
+  const projectSrc = path.join(sourceRoot, "projects", projectName);
+  const outDir = path.join(sourceRoot, "output", projectName);
+  const templatePath = path.join(sourceRoot, "server/compiler/templates/index.html");
 
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(outDir, { recursive: true });
 
   fs.cpSync(engineSrc, path.join(outDir, "engine"), { recursive: true });
   fs.cpSync(projectSrc, path.join(outDir, "game"), { recursive: true });
+  // Graph JSON is editor source only. The final game receives the generated
+  // JavaScript beside ordinary scripts, with the same import/attach path.
+  compileProjectGraphScripts(projectName, path.join(outDir, "game"));
 
   const html = fs
     .readFileSync(templatePath, "utf8")

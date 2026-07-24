@@ -21,14 +21,14 @@
 // pure dataflow graph into a single expression tree per output. That's a
 // deliberate scope cut; add statement-emitting node types later if needed.
 
-import type { GraphValue, GraphNode, GraphEdge } from "../GraphEditor";
-import type { ScriptNodeTypes, CompiledInputs, CompileOutput } from "./scriptNodeTypes";
+import type { GraphNode, ScriptNodeTypes, CompiledInputs, CompileOutput } from "./scriptNodeTypes.js";
+
+export interface GraphEdge { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null; }
+export interface GraphValue { nodes: GraphNode[]; edges: GraphEdge[]; }
 
 export interface CompileOptions {
   /** Function name in the generated source. Defaults to "run". */
   functionName?: string;
-  /** Param name for the input object. Defaults to "input". */
-  paramName?: string;
 }
 
 export interface CompileResult {
@@ -57,7 +57,7 @@ export function compileScriptGraph(
   nodeTypes: ScriptNodeTypes,
   options: CompileOptions = {}
 ): CompileResult {
-  const { functionName = "run", paramName = "input" } = options;
+  const { functionName = "run" } = options;
   const errors: string[] = [];
 
   const nodesById = new Map<string, GraphNode>(graph.nodes.map((n) => [n.id, n]));
@@ -163,6 +163,12 @@ export function compileScriptGraph(
       // Single-output node: one statement, cached under its default port.
       statements.push(`  const ${baseVar} = ${result};`);
       varsByNodeAndPort.set(portKey(nodeId, defaultPort), baseVar);
+      if (def.assertComponent) {
+        const componentName = String(node.data?.values?.component ?? "unknown");
+        statements.push(
+          `  if (!${baseVar}) throw new Error(${JSON.stringify(`Required component "${componentName}" was not found on the entity.`)});`
+        );
+      }
     } else {
       // Multi-output node: one statement per port, suffixed variable names
       // (e.g. n_abc123_x, n_abc123_y) so each output is independently
@@ -179,6 +185,14 @@ export function compileScriptGraph(
 
   const outputNodes = graph.nodes.filter((n) => n.type === "script.output");
   if (outputNodes.length === 0) {
+    // A newly-created graph is a valid no-op script. This lets users save and
+    // compile an empty graph before adding its first output node.
+    if (graph.nodes.length === 0 && graph.edges.length === 0) {
+      return {
+        code: `export function ${functionName}(entity, engine, dt, data = {}) {\n}`,
+        errors: [],
+      };
+    }
     errors.push('No "script.output" node found — nothing to return.');
     return { code: "", errors };
   }
@@ -203,6 +217,28 @@ export function compileScriptGraph(
     }
   }
 
+  // A node is part of the compiled graph whenever it participates in a
+  // connection, even if that branch does not eventually feed script.output.
+  // This preserves useful side branches such as logging and component
+  // validation while still leaving completely isolated nodes out.
+  const connectedNodeIds = new Set<string>();
+  for (const edge of graph.edges) {
+    connectedNodeIds.add(edge.source);
+    connectedNodeIds.add(edge.target);
+  }
+  for (const node of graph.nodes) {
+    if (connectedNodeIds.has(node.id)) resolveNodeOutput(node.id);
+  }
+
+  // Debug/logging nodes are intentionally allowed to be disconnected from
+  // the returned value. Compile them as well so their side effects survive
+  // in the generated script instead of being pruned as dead graph branches.
+  for (const node of graph.nodes) {
+    if (node.type && nodeTypes[node.type]?.sideEffect) {
+      resolveNodeOutput(node.id);
+    }
+  }
+
   if (errors.length > 0) {
     return { code: "", errors };
   }
@@ -213,7 +249,7 @@ export function compileScriptGraph(
       : bareResultVar!;
 
   const code = [
-    `function ${functionName}(${paramName}) {`,
+    `export function ${functionName}(entity, engine, dt, data = {}) {`,
     ...statements,
     `  return ${returnExpr};`,
     `}`,

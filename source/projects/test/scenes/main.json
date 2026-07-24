@@ -60,7 +60,9 @@
           "height": 32
         }
       },
-      "scripts": []
+      "scripts": [
+        "logger.lgscript"
+      ]
     },
     {
       "id": "spawner",
@@ -106,11 +108,6 @@
           "y": 0,
           "rotation": 0,
           "fixed": false
-        },
-        "Gravity": {
-          "force": 500,
-          "velocityY": 0,
-          "grounded": false
         }
       },
       "scripts": [

@@ -8,29 +8,27 @@
 // so saving/loading it as JSON (.lgscript or whatever extension you like)
 // is a plain JSON.stringify/parse — no extra serialization step needed.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Save, FolderUp, Code2, Copy, X } from "lucide-react";
 import { Modal } from "../../../ui/Modal";
 import { Button } from "../../../ui/Button";
 // NOTE: adjust this import if GraphEditor is a named export in your copy
 // of the file rather than a default export.
 import { type GraphValue, GraphEditor } from "../GraphEditor";
-import { defaultScriptNodeTypes, type ScriptNodeTypes } from "./scriptNodeTypes";
-import { compileScriptGraph, type CompileOptions } from "./compileScriptGraph";
+import { graphScriptsApi, type GraphCompileResponse } from "../../../api";
+import type { GraphNodeTypeDefinition } from "../../../api";
 
 export interface ScriptGraphProps {
   open: boolean;
   onClose: () => void;
   /** Starting graph. Defaults to an empty graph. */
   initialValue?: GraphValue;
-  /** Extra node types merged over defaultScriptNodeTypes, e.g. domain-specific nodes. */
-  extraNodeTypes?: ScriptNodeTypes;
-  /** Options passed to the compiler (function name, param name). */
-  compileOptions?: CompileOptions;
+  /** Extra node types merged over the backend-provided registry. */
+  extraNodeTypes?: Record<string, GraphNodeTypeDefinition>;
   /** Called with the graph JSON whenever the user clicks "Save". */
   onSave?: (graph: GraphValue) => void;
-  /** Called with the compiled function source whenever compilation succeeds. */
-  onCompile?: (code: string) => void;
+  /** Compiles the graph through the backend and returns its generated source. */
+  onCompile?: (graph: GraphValue) => Promise<GraphCompileResponse>;
   title?: string;
 }
 
@@ -41,7 +39,7 @@ export default function ScriptGraph({
   onClose,
   initialValue,
   extraNodeTypes,
-  compileOptions,
+  // compileOptions,
   onSave,
   onCompile,
   title = "Script Graph",
@@ -51,6 +49,7 @@ export default function ScriptGraph({
   const [errors, setErrors] = useState<string[]>([]);
   const [showCode, setShowCode] = useState(false);
   const [savedGraph, setSavedGraph] = useState<GraphValue>(initialValue ?? emptyGraph);
+  const [serverNodeTypes, setServerNodeTypes] = useState<Record<string, GraphNodeTypeDefinition>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -59,18 +58,28 @@ export default function ScriptGraph({
     return JSON.stringify(graph) === JSON.stringify(savedGraph);
   }, [graph, savedGraph]);
 
-  const nodeTypes = useMemo(
-    () => ({ ...defaultScriptNodeTypes, ...extraNodeTypes }),
-    [extraNodeTypes]
-  );
+  useEffect(() => {
+    if (!open) return;
+    graphScriptsApi.nodeTypes()
+      .then((response) => setServerNodeTypes(response.nodes))
+      .catch(() => setServerNodeTypes({}));
+  }, [open]);
 
-  const handleCompile = useCallback(() => {
-    const result = compileScriptGraph(graph, nodeTypes, compileOptions);
-    setErrors(result.errors);
-    setCode(result.code);
+  const nodeTypes = useMemo(() => ({ ...serverNodeTypes, ...extraNodeTypes }), [serverNodeTypes, extraNodeTypes]);
+  const nodeTypesReady = Object.keys(nodeTypes).length > 0;
+
+  const handleCompile = useCallback(async () => {
+    if (!onCompile) return;
+    try {
+      const result = await onCompile(graph);
+      setErrors(result.errors ?? []);
+      setCode(result.code ?? "");
+    } catch (err) {
+      setErrors([err instanceof Error ? err.message : String(err)]);
+      setCode("");
+    }
     setShowCode(true);
-    if (result.errors.length === 0) onCompile?.(result.code);
-  }, [graph, nodeTypes, compileOptions, onCompile]);
+  }, [graph, onCompile]);
 
   const handleSaveJson = useCallback(() => {
     onSave?.(graph);
@@ -133,12 +142,18 @@ export default function ScriptGraph({
     >
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">
-          <GraphEditor 
-            nodeTypes={nodeTypes} 
-            value={graph} 
-            onChange={setGraph}
-            onSave={handleSaveJson}
+          {nodeTypesReady ? (
+            <GraphEditor
+              nodeTypes={nodeTypes}
+              value={graph}
+              onChange={setGraph}
+              onSave={handleSaveJson}
             />
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-[var(--color-text-faint)]">
+              Loading script nodes…
+            </div>
+          )}
         </div>
 
         {showCode && (

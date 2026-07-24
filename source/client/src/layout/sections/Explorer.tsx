@@ -386,10 +386,11 @@ function ExplorerFiles() {
                 .catch((err) => console.error("graph save failed:", err));
             }
           }}
-          onCompile={(code) => {
+          onCompile={(graph) => {
             if (openGraphScript && currentProject) {
-              graphScriptsApi.writeCompiled(currentProject, openGraphScript, code);
+              return graphScriptsApi.compile(currentProject, openGraphScript);
             }
+            return Promise.resolve({ success: false, code: "", errors: ["No project selected"] });
           }}
         />
       )}
