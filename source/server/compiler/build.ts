@@ -6,11 +6,11 @@ import { resolveAliases } from "./aliasResolver.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-function injectLGAlias(outDir) {
+function injectLGAlias(outDir: string): void {
   const gameDir = path.join(outDir, "game");
   if (!fs.existsSync(gameDir)) return;
 
-  function walk(dir) {
+  function walk(dir: string): void {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -36,7 +36,7 @@ function injectLGAlias(outDir) {
   walk(gameDir);
 }
 
-export function buildProject(projectName) {
+export function buildProject(projectName: string): string {
   const engineSrc = path.join(__dirname, "../../engine");
   const projectSrc = path.join(__dirname, "../../projects", projectName);
   const outDir = path.join(__dirname, "../../output", projectName);

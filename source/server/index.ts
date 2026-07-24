@@ -11,15 +11,18 @@ import { spawn } from "child_process";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
-const projectsDir = path.join(__dirname, "../projects");
+// Source runs from server/, while compiled output runs from server/dist/.
+// Keep all game assets rooted at source/ in both modes.
+const sourceRoot = path.resolve(__dirname, __dirname.endsWith(`${path.sep}dist`) ? "../../" : "../");
+const projectsDir = path.join(sourceRoot, "projects");
 
 app.use(cors());
 app.use(express.json());
 
-app.use("/engine", express.static(path.join(__dirname, "../engine")));
-app.use("/output", express.static(path.join(__dirname, "../output")));
-app.use(express.static(path.join(__dirname, "../client/dist")));
-app.use(express.static(path.join(__dirname, "../client")));
+app.use("/engine", express.static(path.join(sourceRoot, "engine")));
+app.use("/output", express.static(path.join(sourceRoot, "output")));
+app.use(express.static(path.join(sourceRoot, "client/dist")));
+app.use(express.static(path.join(sourceRoot, "client")));
 
 // --- Project list ---
 app.get("/api/projects", (_req, res) => {
@@ -214,8 +217,8 @@ app.delete("/api/projects/:project/:folder/:filename", (req, res) => {
 });
 
 app.get("/", (_req, res) => {
-  const built = path.join(__dirname, "../client/dist/index.html");
-  res.sendFile(fs.existsSync(built) ? built : path.join(__dirname, "../client/index.html"));
+  const built = path.join(sourceRoot, "client/dist/index.html");
+  res.sendFile(fs.existsSync(built) ? built : path.join(sourceRoot, "client/index.html"));
 });
 
 app.listen(config.port, () => {

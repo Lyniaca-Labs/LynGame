@@ -9,8 +9,8 @@ const ALIASES = {
 };
 
 // Recursively walk a directory and return every .js file
-function walkJsFiles(dir) {
-  let results = [];
+function walkJsFiles(dir: string): string[] {
+  let results: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -23,7 +23,7 @@ function walkJsFiles(dir) {
 }
 
 // Resolve aliases in every .js file under outDir/game, relative to outDir
-export function resolveAliases(outDir) {
+export function resolveAliases(outDir: string): void {
   const gameDir = path.join(outDir, "game");
   if (!fs.existsSync(gameDir)) return;
 

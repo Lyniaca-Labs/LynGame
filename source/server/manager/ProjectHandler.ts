@@ -7,6 +7,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const engineComponentsDir = path.join(__dirname, "../../engine/components");
 
+type ComponentSource = "engine" | "project";
+type ComponentEntry = { source: ComponentSource; filename: string; className?: string };
+type ComponentManifest = Record<string, ComponentEntry>;
+type Asset = { relativePath: string; type: "image" | "audio" | "other" };
+type AssetManifest = Record<string, Asset>;
+type Field = { key: string; type: string; defaultValue: unknown; editable: boolean };
+type JsonRecord = Record<string, any>;
+
 export default class ProjectHandler {
   static getProjectFile(projectName) {
     const projectPath = path.join(__dirname, "../../projects", projectName, "project.lg");
@@ -16,11 +24,11 @@ export default class ProjectHandler {
     return projectPath;
   }
 
-  static scanComponents(projectName) {
+  static scanComponents(projectName: string): ComponentManifest {
     const engineComponentsDir = path.join(__dirname, "../../engine/components");
     const projectComponentsDir = path.join(__dirname, "../../projects", projectName, "components");
 
-    const manifest = {}; // componentName -> { source: "engine" | "project", filename }
+    const manifest: ComponentManifest = {}; // componentName -> { source: "engine" | "project", filename }
 
     if (fs.existsSync(engineComponentsDir)) {
       for (const file of fs.readdirSync(engineComponentsDir)) {
@@ -61,9 +69,9 @@ export default class ProjectHandler {
     return `./components/${componentName}.js`;
   }
 
-  static scanAssets(projectName) {
+  static scanAssets(projectName: string): AssetManifest {
     const assetsDir = path.join(__dirname, "../../projects", projectName, "assets");
-    const manifest = {}; // key -> { relativePath, type }
+    const manifest: AssetManifest = {}; // key -> { relativePath, type }
     
 
     if (!fs.existsSync(assetsDir)) return manifest;
@@ -91,7 +99,7 @@ export default class ProjectHandler {
           );
         }
 
-        let type = "other";
+        let type: Asset["type"] = "other";
         if (IMAGE_EXT.has(ext)) type = "image";
         else if (AUDIO_EXT.has(ext)) type = "audio";
 
@@ -106,7 +114,7 @@ export default class ProjectHandler {
   static scanFiles(projectName, folder) {
     const root = path.join(__dirname, "../../projects", projectName, folder);
     if (!fs.existsSync(root)) return [];
-    const result = [];
+    const result: string[] = [];
     const walk = (dir, prefix = "") => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
@@ -172,9 +180,9 @@ export default class ProjectHandler {
 
   static async componentSchemas(projectName) {
     const manifest = this.scanComponents(projectName);
-    const schemas = {};
+    const schemas: Record<string, JsonRecord> = {};
 
-    for (const [name, entry] of Object.entries(manifest)) {
+    for (const [name, entry] of Object.entries(manifest) as [string, ComponentEntry][]) {
       const editable = entry.source !== "engine";
       const file = entry.source === "engine"
         ? path.join(__dirname, "../../engine/components", entry.filename)
@@ -184,8 +192,8 @@ export default class ProjectHandler {
       const declaredSchema = ComponentClass?.schema;
 
 
-      const fields = declaredSchema && Object.keys(declaredSchema).length > 0
-        ? Object.entries(declaredSchema).map(([key, def]) => ({
+      const fields: Field[] = declaredSchema && Object.keys(declaredSchema).length > 0
+        ? Object.entries(declaredSchema as Record<string, { type: string; default: unknown }>).map(([key, def]) => ({
           key,
           type: def.type,
           defaultValue: def.default,
@@ -216,7 +224,7 @@ export default class ProjectHandler {
         ? source.slice(constructorStart, constructorEnd)
         : "";
 
-    const fields = [];
+    const fields: Field[] = [];
     if (!constructorSource) return fields;
 
     const fieldPattern =
@@ -270,7 +278,7 @@ export default class ProjectHandler {
     };
   }
 
-  static buildMain(projectName) {
+  static buildMain(projectName: string): string {
     const projectConfigPath = ProjectHandler.getProjectFile(projectName);
     const config = JSON.parse(fs.readFileSync(projectConfigPath, "utf-8"));
     const manifest = ProjectHandler.scanComponents(projectName);
@@ -287,14 +295,14 @@ export default class ProjectHandler {
 
     // Collected across scenes + prefabs so imports only get generated once,
     // regardless of how many places reference a given component/script.
-    const allComponents = new Set();
+    const allComponents = new Set<string>();
     // scriptName -> Set of human-readable locations referencing it, so a missing
     // script can be traced back to every entity/prefab that attaches it.
-    const allScripts = new Map();
+    const allScripts = new Map<string, Set<string>>();
 
     function addScriptRef(scriptName, location) {
       if (!allScripts.has(scriptName)) allScripts.set(scriptName, new Set());
-      allScripts.get(scriptName).add(location);
+      allScripts.get(scriptName)?.add(location);
     }
 
     // Emits creation code for one plain (non-prefab-referencing) entity node.
@@ -321,8 +329,8 @@ export default class ProjectHandler {
     // scene has finished loading (unless the scene's own load fn already
     // called setCamera explicitly — that always wins).
     // ---------------------------------------------------------------------
-    const sceneFunctions = [];
-    const sceneCameraIds = new Map(); // sceneName -> cameraId | null
+    const sceneFunctions: string[] = [];
+    const sceneCameraIds = new Map<string, string | null>(); // sceneName -> cameraId | null
 
     for (const file of sceneFiles) {
       const sceneName = path.basename(file, ".json");
@@ -330,7 +338,7 @@ export default class ProjectHandler {
 
       sceneCameraIds.set(sceneName, scene.cameraId ?? null);
 
-      const bodyLines = [];
+      const bodyLines: string[] = [];
       for (const entity of scene.entities || []) {
         const location = `entity "${entity.id}" in scene "${sceneName}"`;
 
@@ -367,8 +375,8 @@ export default class ProjectHandler {
     // factory, registered with engine.prefabs so scenes can instantiate it
     // by name via entity.prefab above.
     // ---------------------------------------------------------------------
-    const prefabFunctions = [];
-    const prefabRegistrations = [];
+    const prefabFunctions: string[] = [];
+    const prefabRegistrations: string[] = [];
 
     for (const file of prefabFiles) {
       const prefabName = path.basename(file, ".json");
@@ -378,7 +386,7 @@ export default class ProjectHandler {
       for (const compName of Object.keys(prefab.components || {})) allComponents.add(compName);
       for (const scriptName of prefab.scripts || []) addScriptRef(scriptName, location);
 
-      const rootLines = [
+      const rootLines: string[] = [
         `  const entity = engine.createEntity(id ?? engine._generateId("${prefabName}"));`,
         `  entity.prefabName = "${prefabName}";`,
       ];
