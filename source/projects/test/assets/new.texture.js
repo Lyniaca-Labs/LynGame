@@ -14,7 +14,7 @@ const LGTexture = {
 };
 
 export function buildTexture(data = {}) {
-  const n1_textureNoise = LGTexture.noise(data.size, 1, 8, "#111827", "#f8fafc");
-  const n2_scriptOutput = n1_textureNoise;
+  const n1_textureAsset = LGTexture.asset(data.assets, "tree", data.size);
+  const n2_scriptOutput = n1_textureAsset;
   return n2_scriptOutput;
 }

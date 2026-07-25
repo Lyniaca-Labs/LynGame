@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Save } from "lucide-react";
-import { AssetEntry, BASE_URL, texturesApi } from "../../api";
+import { AssetEntry } from "../../api";
 import { Button } from "../../ui/Button";
 import { Modal } from "../../ui/Modal";
 import { GraphEditor, type GraphValue } from "./GraphEditor";
+import { renderCompiledTexture } from "../../lib/texturePreview";
 
 const texturePort = { id: "value", label: "Texture", dataType: "texture" };
 
@@ -105,23 +106,7 @@ const starter: GraphValue = {
 };
 
 async function renderTexture(graph: GraphValue, assets: AssetEntry[], project: string, filename: string, size = 160): Promise<string> {
-  const result = await texturesApi.compile(project, filename, graph);
-  const blob = new Blob([result.code], { type: "text/javascript" });
-  const moduleUrl = URL.createObjectURL(blob);
-  try {
-    const compiled = await import(/* @vite-ignore */ moduleUrl);
-    const loaded: Record<string, HTMLImageElement> = {};
-    await Promise.all(assets.filter((asset) => asset.type === "image").map(async (asset) => {
-      const image = new Image();
-      image.src = `${BASE_URL}/api/projects/${encodeURIComponent(project)}/assets/raw/${encodeURIComponent(asset.relativePath)}`;
-      await new Promise<void>((resolve) => { image.onload = () => resolve(); image.onerror = () => resolve(); });
-      loaded[asset.key] = image;
-    }));
-    const canvas = compiled.buildTexture({ size, assets: loaded });
-    return canvas.toDataURL("image/png");
-  } finally {
-    URL.revokeObjectURL(moduleUrl);
-  }
+  return renderCompiledTexture(project, graph, assets, size);
 }
 
 const transparentPreview = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Crect width='160' height='160' fill='%2325202f'/%3E%3Cpath d='M30 30L130 130M130 30L30 130' stroke='%236b5b85' stroke-width='4'/%3E%3C/svg%3E";

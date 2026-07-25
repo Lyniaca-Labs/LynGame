@@ -19,6 +19,8 @@ import {
   Upload,
   Music,
   File,
+  Search,
+  X,
   WandSparkles,
 } from "lucide-react";
 import { FolderTree, TreeNode, TreeNodeBadge } from "../../ui/FolderTree";
@@ -28,6 +30,7 @@ import { CodeFileEditor } from "../../components/CodeFileEditor";
 import ScriptGraph from "../../components/graphs/scripting/ScriptGraph";
 import { GraphValue } from "../../components/graphs/GraphEditor";
 import TextureGraph from "../../components/graphs/TextureGraph";
+import { renderCompiledTexture } from "../../lib/texturePreview";
 
 export function Explorer() {
   return (
@@ -428,6 +431,7 @@ function ExplorerAssets() {
   const [rename, setRename] = useState<AssetEntry | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [search, setSearch] = useState("");
 
   if (!projectData) {
     return <PlaceholderPanel label="No project loaded" />;
@@ -505,9 +509,15 @@ function ExplorerAssets() {
     if (files.length > 0) void importFiles(files);
   };
 
+  const visibleAssets = projectData.assets.filter((asset) =>
+    `${asset.key} ${asset.relativePath} ${asset.type}`.toLowerCase().includes(search.toLowerCase().trim()),
+  );
+  const imageCount = projectData.assets.filter((asset) => asset.type === "image").length;
+  const textureCount = projectData.assets.filter((asset) => asset.type === "texture").length;
+
   return (
     <div
-      className={`flex h-full flex-col gap-2 p-2 ${
+      className={`flex h-full flex-col gap-3 p-3 ${
         dragging ? "ring-2 ring-inset ring-[var(--color-accent)]" : ""
       }`}
       onDragOver={(event) => {
@@ -529,10 +539,13 @@ function ExplorerAssets() {
         }}
       />
 
-      <div className="flex items-center gap-1 text-xs">
-        <span className="text-[var(--color-text-muted)]">
-          Assets ({projectData.assets.length})
-        </span>
+      <div className="flex items-center gap-2">
+        <div>
+          <div className="text-xs font-semibold text-[var(--color-text)]">Asset Library</div>
+          <div className="mt-0.5 text-[10px] text-[var(--color-text-faint)]">
+            {projectData.assets.length} assets · {imageCount} images · {textureCount} textures
+          </div>
+        </div>
         <Button
           className="ml-auto"
           size="sm"
@@ -550,12 +563,28 @@ function ExplorerAssets() {
         />
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-2 overflow-auto">
-        {projectData.assets.map((asset) => (
+      <div className="flex items-center gap-2 rounded border border-[var(--color-border)] bg-[var(--color-bg-inset)] px-2 py-1.5">
+        <Search size={13} className="text-[var(--color-text-faint)]" />
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search assets..."
+          className="min-w-0 flex-1 bg-transparent text-xs text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-faint)]"
+        />
+        {search && <button className="text-[var(--color-text-faint)] hover:text-[var(--color-text)]" onClick={() => setSearch("")}><X size={13} /></button>}
+      </div>
+
+      <div className={`rounded border border-dashed px-3 py-2 text-[10px] transition-colors ${dragging ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10" : "border-[var(--color-border)] text-[var(--color-text-faint)]"}`}>
+        <div className="flex items-center gap-2"><Upload size={13} /><span>Drop files here or paste from your clipboard to import.</span></div>
+      </div>
+
+      <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-2 overflow-auto pr-0.5">
+        {visibleAssets.map((asset) => (
           <AssetCard
             key={asset.relativePath}
             asset={asset}
             project={currentProject}
+            assets={projectData.assets}
             onOpen={() => void openAsset(asset)}
             onRename={() => {
               setRename(asset);
@@ -570,9 +599,9 @@ function ExplorerAssets() {
         ))}
       </div>
 
-      {projectData.assets.length === 0 && (
+      {visibleAssets.length === 0 && (
         <div className="text-center text-[10px] text-[var(--color-text-faint)]">
-          Drop files here, paste an image, or import from File Explorer.
+          {search ? "No matching assets." : "Your asset library is empty."}
         </div>
       )}
 
@@ -628,15 +657,27 @@ function ExplorerAssets() {
 interface AssetCardProps {
   asset: AssetEntry;
   project: string | null;
+  assets: AssetEntry[];
   onOpen: () => void;
   onRename: () => void;
   onDelete: () => void;
 }
 
-function AssetCard({ asset, project, onOpen, onRename, onDelete }: AssetCardProps) {
-  const assetUrl = project
-    ? `${BASE_URL}/api/projects/${encodeURIComponent(project)}/assets/raw/${encodeURIComponent(asset.relativePath)}`
-    : "";
+function AssetCard({ asset, project, assets, onOpen, onRename, onDelete }: AssetCardProps) {
+  const [texturePreview, setTexturePreview] = useState<string | null>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
+
+  useEffect(() => {
+    if (asset.type !== "texture" || !project) return;
+    let cancelled = false;
+    projectsApi.readFile(project, "assets", asset.relativePath)
+      .then((response) => renderCompiledTexture(project, (JSON.parse(response.content) as { graph: GraphValue }).graph, assets, 128))
+      .then((dataUrl) => { if (!cancelled) setTexturePreview(dataUrl); })
+      .catch(() => { if (!cancelled) setPreviewFailed(true); });
+    return () => { cancelled = true; };
+  }, [asset, project]);
+
+  const assetUrl = project ? `${BASE_URL}/api/projects/${encodeURIComponent(project)}/assets/raw/${encodeURIComponent(asset.relativePath)}` : "";
 
   const icon = asset.type === "texture" ? (
     <WandSparkles size={24} className="text-[var(--color-accent-secondary)]" />
@@ -653,18 +694,23 @@ function AssetCard({ asset, project, onOpen, onRename, onDelete }: AssetCardProp
         event.dataTransfer.setData("text/lyngame-asset", asset.key);
         event.dataTransfer.setData("text/plain", asset.key);
       }}
-      className="group relative cursor-pointer rounded border border-[var(--color-border)] bg-[var(--color-bg-inset)] p-1 hover:border-[var(--color-accent-secondary)]"
+      className="group relative cursor-pointer overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-inset)] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--color-accent-secondary)] hover:shadow-md"
       onDoubleClick={onOpen}
     >
-      <div className="flex h-10 items-center justify-center overflow-hidden rounded bg-black/20 opacity-70">
+      <div className="flex h-24 items-center justify-center overflow-hidden bg-black/20">
         {asset.type === "image" ? (
-          <img src={assetUrl} alt={asset.key} className="max-h-full max-w-full object-contain" />
+          <img src={assetUrl} alt={asset.key} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+        ) : asset.type === "texture" && texturePreview ? (
+          <img src={texturePreview} alt={`${asset.key} preview`} className="h-full w-full object-cover" />
+        ) : asset.type === "texture" && !previewFailed ? (
+          <div className="h-5 w-5 animate-pulse rounded bg-[var(--color-accent-secondary)]/30" />
         ) : (
-          icon
+          <div className="flex flex-col items-center gap-1 text-[var(--color-text-faint)]">{icon}<span className="text-[9px] uppercase">{asset.type}</span></div>
         )}
       </div>
-      <div className="truncate pt-1 text-[9px]" title={asset.relativePath}>
-        {asset.key}
+      <div className="p-2">
+        <div className="truncate text-[10px] font-medium text-[var(--color-text)]" title={asset.relativePath}>{asset.key}</div>
+        <div className="mt-0.5 truncate text-[9px] text-[var(--color-text-faint)]">{asset.type} · {formatBytes(asset.size)}</div>
       </div>
       <div className="absolute inset-0 flex items-center justify-center gap-1 rounded bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
         <Button
@@ -686,6 +732,13 @@ function AssetCard({ asset, project, onOpen, onRename, onDelete }: AssetCardProp
       </div>
     </div>
   );
+}
+
+function formatBytes(bytes?: number): string {
+  if (!bytes) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function PlaceholderPanel({ label }: { label: string }) {

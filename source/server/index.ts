@@ -8,7 +8,7 @@ import { buildProject } from "./compiler/build.js";
 import ProjectHandler from "./manager/ProjectHandler.js";
 import { spawn } from "child_process";
 import { compileGraphToProject, scriptNodeMetadata } from "./compiler/graphScripts.js";
-import { compileTextureToProject } from "./compiler/textureCompiler.js";
+import { compileTextureGraph, compileTextureToProject } from "./compiler/textureCompiler.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -55,7 +55,9 @@ app.post("/api/projects/:project/assets/:filename/compile", (req, res) => {
     if (!/^[a-zA-Z0-9_.-]+(?:\.texture)?(?:\.json)?$/.test(filename)) {
       return res.status(400).json({ success: false, error: "Invalid texture name" });
     }
-    const result = compileTextureToProject(req.params.project, filename, req.body?.graph);
+    const result = req.body?.graph
+      ? compileTextureGraph(req.body.graph)
+      : compileTextureToProject(req.params.project, filename);
     if (result.errors.length > 0) return res.status(422).json({ success: false, code: "", errors: result.errors });
     res.json({ success: true, code: result.code });
   } catch (err) {
