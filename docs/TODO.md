@@ -18,6 +18,7 @@ LATER
 ## Highest Priority 
 
 - [ ] Graphics framework first (foundation)
+  - [] text components / font loading (font assets)
   - [ ] should be able to make global scripts not attached to an entity
     - [ ] attach scripts to scenes -> callable in scene
     - [ ] attach scripts to game / engine -> callable from anywhere
@@ -28,6 +29,7 @@ LATER
   - [ ] ability to turn off antialiasing in config / set frame rate and tick speed
   - [ ] keyframes for animation
   - [x] camera component -> attaches to entity, can set isactive on camera component and it will turn off all others in scene and attach to scene
+  - [ ] stop reshipping LGEngine with every single texture
   - [ ] screen effects (blur, bloom, vignette, etc)
   - [ ] ability to load an asset into texture creator to create a new version of that asset
     - [ ] requires assets to also be allowed to be json / js files -> built into canvases

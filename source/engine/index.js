@@ -8,6 +8,7 @@ import { SpriteRenderer } from "./components/SpriteRenderer.js";
 import { PrefabRegistry } from "./modules/PrefabRegistry.js";
 import AssetLoader from "./modules/AssetLoader.js";
 import { Scene } from "./types/Scene.js";
+export { LGTexture } from "./modules/TextureEngine.js";
 
 export class GameEngine {
   constructor(gameContainer, options = {}) {

@@ -61,7 +61,7 @@ app.post("/api/projects/:project/assets/:filename/compile", (req, res) => {
       return res.status(400).json({ success: false, error: "Invalid texture name" });
     }
     const result = req.body?.graph
-      ? compileTextureGraph(req.body.graph)
+      ? compileTextureGraph(req.body.graph, false)
       : compileTextureToProject(req.params.project, filename);
     if (result.errors.length > 0) return res.status(422).json({ success: false, code: "", errors: result.errors });
     res.json({ success: true, code: result.code });

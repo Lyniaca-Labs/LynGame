@@ -11,7 +11,8 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "allowJs": false
+    "allowJs": true,
+    "checkJs": false
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist"]
