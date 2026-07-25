@@ -606,7 +606,7 @@ function ExplorerAssets() {
           filename={texture.name}
           assets={projectData.assets}
           initialValue={texture.graph}
-          onSave={async (graph, dataUrl) => {
+          onSave={async (graph) => {
             const name = texture.name.endsWith(".texture.json")
               ? texture.name
               : `${texture.name}.texture.json`;
@@ -614,7 +614,7 @@ function ExplorerAssets() {
               currentProject,
               "assets",
               name,
-              JSON.stringify({ version: 1, graph, dataUrl }, null, 2),
+              JSON.stringify({ version: 1, graph }, null, 2),
             );
             setTexture(null);
             await reloadProject();

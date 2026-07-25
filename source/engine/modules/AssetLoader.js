@@ -4,11 +4,13 @@ export default class AssetLoader {
   }
 
   async load(manifest, baseUrl = "./assets") {
-    await Promise.all(
-      Object.entries(manifest).map(([key, { relativePath, type }]) =>
-        this._loadOne(key, `${baseUrl}/${relativePath}`, type)
-      )
-    );
+    const entries = Object.entries(manifest);
+    await Promise.all(entries.filter(([, asset]) => asset.type !== "texture").map(([key, { relativePath, type }]) =>
+      this._loadOne(key, `${baseUrl}/${relativePath}`, type)
+    ));
+    for (const [key, { relativePath }] of entries.filter(([, asset]) => asset.type === "texture")) {
+      await this._loadOne(key, `${baseUrl}/${relativePath}`, "texture");
+    }
   }
 
   async _loadOne(key, url, type) {
@@ -44,10 +46,11 @@ export default class AssetLoader {
   }
 
   async _loadTexture(url) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to load texture "${url}"`);
-    const definition = await res.json();
-    return this._loadImage(definition.dataUrl);
+    const module = await import(/* @vite-ignore */ new URL(url, window.location.href).href);
+    if (typeof module.buildTexture !== "function") {
+      throw new Error(`Texture module "${url}" does not export buildTexture`);
+    }
+    return module.buildTexture({ size: 256, assets: this.cache });
   }
 
   get(key) {

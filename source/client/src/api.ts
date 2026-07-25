@@ -264,6 +264,11 @@ export const graphScriptsApi = {
     api.post(`api/projects/${enc(project)}/scripts/${enc(withGraphExt(filename))}/compile`),
 };
 
+export const texturesApi = {
+  compile: (project: string, filename: string, graph: unknown): Promise<GraphCompileResponse> =>
+    api.post(`api/projects/${enc(project)}/assets/${enc(filename)}/compile`, { graph }),
+};
+
 // ---- Scenes (delete only — create/save already covered by saveScene) ----
 
 export const scenesApi = {

@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import ProjectHandler from "../manager/ProjectHandler.js";
 import { resolveAliases } from "./aliasResolver.js";
 import { compileProjectGraphScripts } from "./graphScripts.js";
+import { compileProjectTextures } from "./textureCompiler.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sourceRoot = __dirname.includes(`${path.sep}dist${path.sep}`)
@@ -54,6 +55,7 @@ export function buildProject(projectName: string): string {
   // Graph JSON is editor source only. The final game receives the generated
   // JavaScript beside ordinary scripts, with the same import/attach path.
   compileProjectGraphScripts(projectName, path.join(outDir, "game"));
+  compileProjectTextures(projectName, path.join(outDir, "game"));
 
   const html = fs
     .readFileSync(templatePath, "utf8")

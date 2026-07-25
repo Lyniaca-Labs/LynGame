@@ -3,6 +3,7 @@ import path from "path";
 import os from "os";
 import { fileURLToPath, pathToFileURL } from "url";
 import { compiledGraphFilename, graphFilename, scriptSymbol } from "../compiler/graphScripts.js";
+import { compiledTextureFilename } from "../compiler/textureCompiler.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sourceRoot = __dirname.includes(`${path.sep}dist${path.sep}`)
@@ -91,6 +92,7 @@ export default class ProjectHandler {
           walk(fullPath, relPrefix ? `${relPrefix}/${entry.name}` : entry.name);
           continue;
         }
+        if (entry.name.endsWith(".texture.js")) continue;
 
         const ext = path.extname(entry.name).toLowerCase();
         const nameNoExt = entry.name.slice(0, -ext.length);
@@ -454,6 +456,9 @@ export default class ProjectHandler {
       .join("\n");
 
     const assetManifest = ProjectHandler.scanAssets(projectName);
+    for (const asset of Object.values(assetManifest)) {
+      if (asset.type === "texture") asset.relativePath = compiledTextureFilename(asset.relativePath);
+    }
 
     return `${componentImports}
   
