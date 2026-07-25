@@ -23,6 +23,7 @@ LATER
     - [ ] attach scripts to game / engine -> callable from anywhere
   - [ ] entity children
   - [ ] add static component description alongside schema
+  - [ ] shadow component > renders a pixelated or high def shadow underneath
   - [ ] event component (calls script on certain event to entity (hold, click, etc))
   - [ ] ability to turn off antialiasing in config / set frame rate and tick speed
   - [ ] keyframes for animation
@@ -58,7 +59,7 @@ LATER
   - [ ] visual editor and context menu in scene
     - [x] script visual editor
     - [ ] component visual editor
-    - [ ] texture visual editor
+    - [x] texture visual editor
   - [ ] ESLINT in code editor
   - [ ] autosave option in settings
   - [ ] preview render for prefabs
@@ -104,7 +105,8 @@ LATER
 
 - [ ] SpriteSheets
 - [ ] Tilemaps
-- [ ] Texture system (runtime clipped sprites)
+  - [ ] sprite map rules for autofilling > wave function collapse
+- [x] Texture system (runtime clipped sprites)
 - [ ] Repeating textures
 - [ ] Particles
 - [ ] Pathfinding
@@ -135,7 +137,7 @@ LATER
 - [ ] TypeScript parser
 - [ ] Visual scripting system
 - [ ] Code blocks → generated source
-- [ ] Texture blocks → generated textures
+- [x] Texture blocks → generated textures
 - [ ] Compile to optimized import map
 - [ ] Strip comments during build
 

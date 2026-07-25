@@ -1,101 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Save } from "lucide-react";
-import { AssetEntry } from "../../api";
+import { AssetEntry, texturesApi, type TextureNodeMetadata } from "../../api";
 import { Button } from "../../ui/Button";
 import { Modal } from "../../ui/Modal";
 import { GraphEditor, type GraphValue } from "./GraphEditor";
 import { renderCompiledTexture } from "../../lib/texturePreview";
 
+
+
 const texturePort = { id: "value", label: "Texture", dataType: "texture" };
 
-const registry = {
-  "texture.color": {
-    type: "texture.color",
-    label: "Solid Color",
-    category: "Generators",
-    color: "#a855f7",
-    outputs: [texturePort],
-    fields: [{ key: "color", type: "color" as const, defaultValue: "#7c3aed" }],
-  },
-  "texture.gradient": {
-    type: "texture.gradient",
-    label: "Gradient",
-    category: "Generators",
-    color: "#ec4899",
-    outputs: [texturePort],
-    fields: [
-      { key: "direction", type: "select" as const, defaultValue: "horizontal", options: [{ value: "horizontal", label: "Horizontal" }, { value: "vertical", label: "Vertical" }, { value: "diagonal", label: "Diagonal" }] },
-      { key: "from", type: "color" as const, defaultValue: "#111827" },
-      { key: "to", type: "color" as const, defaultValue: "#38bdf8" },
-    ],
-  },
-  "texture.noise": {
-    type: "texture.noise",
-    label: "Noise",
-    category: "Generators",
-    color: "#f97316",
-    outputs: [texturePort],
-    fields: [
-      { key: "seed", type: "number" as const, defaultValue: 1 },
-      { key: "scale", type: "number" as const, defaultValue: 8, min: 1, max: 64 },
-      { key: "colorA", type: "color" as const, defaultValue: "#111827" },
-      { key: "colorB", type: "color" as const, defaultValue: "#f8fafc" },
-    ],
-  },
-  "texture.checker": {
-    type: "texture.checker",
-    label: "Checker",
-    category: "Generators",
-    color: "#eab308",
-    outputs: [texturePort],
-    fields: [
-      { key: "size", type: "number" as const, defaultValue: 16, min: 2, max: 64 },
-      { key: "colorA", type: "color" as const, defaultValue: "#111827" },
-      { key: "colorB", type: "color" as const, defaultValue: "#f8fafc" },
-    ],
-  },
-  "texture.asset": {
-    type: "texture.asset",
-    label: "Existing Asset",
-    category: "Inputs",
-    color: "#22c55e",
-    outputs: [texturePort],
-    fields: [{ key: "asset", type: "text" as const, defaultValue: "" }],
-  },
-  "texture.blend": {
-    type: "texture.blend",
-    label: "Blend",
-    category: "Filters",
-    color: "#14b8a6",
-    inputs: [{ id: "a", label: "A", dataType: "texture" }, { id: "b", label: "B", dataType: "texture" }],
-    outputs: [texturePort],
-    fields: [{ key: "amount", type: "number" as const, defaultValue: 0.5, min: 0, max: 1, step: 0.05 }],
-  },
-  "texture.invert": {
-    type: "texture.invert",
-    label: "Invert",
-    category: "Filters",
-    color: "#6366f1",
-    inputs: [{ id: "texture", label: "Texture", dataType: "texture" }],
-    outputs: [texturePort],
-  },
-  "texture.brightness": {
-    type: "texture.brightness",
-    label: "Brightness",
-    category: "Filters",
-    color: "#0ea5e9",
-    inputs: [{ id: "texture", label: "Texture", dataType: "texture" }],
-    outputs: [texturePort],
-    fields: [{ key: "amount", type: "number" as const, defaultValue: 1, min: 0, max: 2, step: 0.05 }],
-  },
-  "texture.output": {
-    type: "texture.output",
-    label: "Output",
-    category: "Output",
-    color: "#ef8fc8",
-    inputs: [{ id: "texture", label: "Texture", dataType: "texture" }],
-  },
-};
+// TODO: fetch these from backend too
 
 const starter: GraphValue = {
   nodes: [
@@ -126,6 +41,20 @@ export default function TextureGraph({ open, onClose, project, filename, assets,
   const [graph, setGraph] = useState<GraphValue>(startingGraph);
   const [savedGraph, setSavedGraph] = useState<GraphValue>(startingGraph);
   const [preview, setPreview] = useState("");
+  const [registry, setRegistry] = useState<Record<string, TextureNodeMetadata>>({});
+
+  // textureapi.getNodeTypes() is a GET request, so we can safely call it in useEffect without worrying about stale closures.
+  useEffect(() => {
+    let cancelled = false;
+    void texturesApi.getNodeTypes().then((types) => {
+      if (!cancelled) {
+        setRegistry(types as unknown as Record<string, TextureNodeMetadata>);
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+
   const textureAssets = useMemo(() => assets.filter((asset) => asset.type === "image" || asset.type === "texture"), [assets]);
   const dirty = useMemo(
     () => JSON.stringify(graph) !== JSON.stringify(savedGraph),
@@ -187,7 +116,13 @@ export default function TextureGraph({ open, onClose, project, filename, assets,
           </div>
           <div className="min-h-0 flex-1 overflow-auto p-3">
             {preview ? (
-              <img src={preview} alt="Texture preview" className="w-full rounded border border-[var(--color-border)]" onError={() => setPreview(transparentPreview)} />
+              <img
+                src={preview}
+                alt="Texture preview"
+                className="w-full rounded border border-[var(--color-border)]"
+                style={{ imageRendering: "pixelated" }}
+                onError={() => setPreview(transparentPreview)}
+              />
             ) : (
               <div className="text-xs text-[var(--color-text-faint)]">Connect a node to Output.</div>
             )}

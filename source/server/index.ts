@@ -8,7 +8,7 @@ import { buildProject } from "./compiler/build.js";
 import ProjectHandler from "./manager/ProjectHandler.js";
 import { spawn } from "child_process";
 import { compileGraphToProject, scriptNodeMetadata } from "./compiler/graphScripts.js";
-import { compileTextureGraph, compileTextureToProject } from "./compiler/textureCompiler.js";
+import { compileTextureGraph, compileTextureToProject, getTextureNodeMetadata } from "./compiler/textureCompiler.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -47,6 +47,11 @@ app.post("/api/projects/:project/scripts/:filename/compile", (req, res) => {
   } catch (err) {
     res.status(400).json({ success: false, error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+
+app.get("/api/textures/nodes", (_req, res) => {
+  res.json({ success: true, nodes: getTextureNodeMetadata() });
 });
 
 app.post("/api/projects/:project/assets/:filename/compile", (req, res) => {
@@ -300,6 +305,8 @@ app.delete("/api/projects/:project/:folder/:filename", (req, res) => {
     res.status(400).json({ success: false, error: err.message });
   }
 });
+
+
 
 app.get("/", (_req, res) => {
   const built = path.join(sourceRoot, "client/dist/index.html");

@@ -1,6 +1,6 @@
 
 const LGTexture = {
-  canvas(size) { const c = document.createElement("canvas"); c.width = size; c.height = size; return c; },
+  canvas(size) { const c = document.createElement("canvas"); c.width = size; c.height = size; const ctx = c.getContext("2d"); if (ctx) ctx.imageSmoothingEnabled = false; return c; },
   empty(size) { return this.canvas(size); },
   color(size, value) { const c = this.canvas(size), x = c.getContext("2d"); x.fillStyle = value; x.fillRect(0, 0, size, size); return c; },
   gradient(size, direction, from, to) { const c = this.canvas(size), x = c.getContext("2d"); const g = direction === "vertical" ? x.createLinearGradient(0, 0, 0, size) : direction === "diagonal" ? x.createLinearGradient(0, 0, size, size) : x.createLinearGradient(0, 0, size, 0); g.addColorStop(0, from); g.addColorStop(1, to); x.fillStyle = g; x.fillRect(0, 0, size, size); return c; },
@@ -10,7 +10,8 @@ const LGTexture = {
   noise(size, seed, scale, aValue, bValue) { const a = this.channels(aValue), b = this.channels(bValue); return this.pixels(size, (x, y) => { const wave = Math.sin((x / Math.max(1, scale) + seed) * 12.9898 + (y / Math.max(1, scale) + seed) * 78.233) * 43758.5453; const amount = wave - Math.floor(wave); return a.map((channel, i) => Math.round(channel + (b[i] - channel) * amount)); }); },
   asset(assets, key, size) { const source = assets?.[key]; if (!source) return this.empty(size); const c = this.canvas(size); c.getContext("2d").drawImage(source, 0, 0, size, size); return c; },
   blend(a, b, amount, size) { const c = this.canvas(size), x = c.getContext("2d"); x.drawImage(a, 0, 0); x.globalAlpha = amount; x.drawImage(b, 0, 0); x.globalAlpha = 1; return c; },
-  filter(input, mode, amount, size) { const c = this.canvas(size), x = c.getContext("2d"); x.drawImage(input, 0, 0); const pixels = x.getImageData(0, 0, size, size); for (let i = 0; i < pixels.data.length; i += 4) for (let channel = 0; channel < 3; channel++) pixels.data[i + channel] = mode === "invert" ? 255 - pixels.data[i + channel] : Math.min(255, pixels.data[i + channel] * amount); x.putImageData(pixels, 0, 0); return c; }
+  filter(input, mode, amount, size) { const c = this.canvas(size), x = c.getContext("2d"); x.drawImage(input, 0, 0); const pixels = x.getImageData(0, 0, size, size); for (let i = 0; i < pixels.data.length; i += 4) for (let channel = 0; channel < 3; channel++) pixels.data[i + channel] = mode === "invert" ? 255 - pixels.data[i + channel] : Math.min(255, pixels.data[i + channel] * amount); x.putImageData(pixels, 0, 0); return c; },
+  antialias(input, size, strength) { const factor = Math.max(1, Number(strength) || 2); const smallSize = Math.max(1, Math.round(size / factor)); const small = document.createElement("canvas"); small.width = smallSize; small.height = smallSize; const sx = small.getContext("2d"); sx.imageSmoothingEnabled = true; sx.imageSmoothingQuality = "high"; sx.drawImage(input, 0, 0, smallSize, smallSize); const c = document.createElement("canvas"); c.width = size; c.height = size; const x = c.getContext("2d"); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high"; x.drawImage(small, 0, 0, size, size); return c; }
 };
 
 export function buildTexture(data = {}) {

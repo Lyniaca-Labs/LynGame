@@ -10,13 +10,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Save, FolderUp, Code2, Copy, X } from "lucide-react";
-import { Modal } from "../../../ui/Modal";
-import { Button } from "../../../ui/Button";
+import { Modal } from "../../ui/Modal";
+import { Button } from "../../ui/Button";
 // NOTE: adjust this import if GraphEditor is a named export in your copy
 // of the file rather than a default export.
-import { type GraphValue, GraphEditor } from "../GraphEditor";
-import { graphScriptsApi, type GraphCompileResponse } from "../../../api";
-import type { GraphNodeTypeDefinition } from "../../../api";
+import { type GraphValue, GraphEditor } from "./GraphEditor";
+import { graphScriptsApi, type GraphCompileResponse } from "../../api";
+import type { GraphNodeTypeDefinition } from "../../api";
 
 export interface ScriptGraphProps {
   open: boolean;

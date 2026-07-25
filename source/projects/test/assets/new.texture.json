@@ -6,8 +6,8 @@
         "id": "output",
         "type": "texture.output",
         "position": {
-          "x": 545.3137617557874,
-          "y": 121.48904480916397
+          "x": 858.8501015116343,
+          "y": 91.76712215063141
         },
         "data": {
           "values": {}
@@ -64,7 +64,7 @@
         "sourceHandle": "value",
         "target": "output",
         "targetHandle": "texture",
-        "id": "5f6283e9-6a0a-4e3e-ae69-6178f8a14954"
+        "id": "22b298f1-3958-446f-accc-d166fe877c2a"
       }
     ]
   }

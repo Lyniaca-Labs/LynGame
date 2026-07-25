@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { compileScriptGraph, type CompileResult, type GraphValue } from "./compileScriptGraph.js";
-import type { ScriptNodeTypes } from "./scriptNodeTypes.js";
+import { textureScriptNodeTypes } from "./textureNodeRegistry.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sourceRoot = __dirname.includes(`${path.sep}dist${path.sep}`)
@@ -24,7 +24,7 @@ export function compiledTextureFilename(filename: string): string {
 
 const runtime = `
 const LGTexture = {
-  canvas(size) { const c = document.createElement("canvas"); c.width = size; c.height = size; return c; },
+  canvas(size) { const c = document.createElement("canvas"); c.width = size; c.height = size; const ctx = c.getContext("2d"); if (ctx) ctx.imageSmoothingEnabled = false; return c; },
   empty(size) { return this.canvas(size); },
   color(size, value) { const c = this.canvas(size), x = c.getContext("2d"); x.fillStyle = value; x.fillRect(0, 0, size, size); return c; },
   gradient(size, direction, from, to) { const c = this.canvas(size), x = c.getContext("2d"); const g = direction === "vertical" ? x.createLinearGradient(0, 0, 0, size) : direction === "diagonal" ? x.createLinearGradient(0, 0, size, size) : x.createLinearGradient(0, 0, size, 0); g.addColorStop(0, from); g.addColorStop(1, to); x.fillStyle = g; x.fillRect(0, 0, size, size); return c; },
@@ -34,28 +34,17 @@ const LGTexture = {
   noise(size, seed, scale, aValue, bValue) { const a = this.channels(aValue), b = this.channels(bValue); return this.pixels(size, (x, y) => { const wave = Math.sin((x / Math.max(1, scale) + seed) * 12.9898 + (y / Math.max(1, scale) + seed) * 78.233) * 43758.5453; const amount = wave - Math.floor(wave); return a.map((channel, i) => Math.round(channel + (b[i] - channel) * amount)); }); },
   asset(assets, key, size) { const source = assets?.[key]; if (!source) return this.empty(size); const c = this.canvas(size); c.getContext("2d").drawImage(source, 0, 0, size, size); return c; },
   blend(a, b, amount, size) { const c = this.canvas(size), x = c.getContext("2d"); x.drawImage(a, 0, 0); x.globalAlpha = amount; x.drawImage(b, 0, 0); x.globalAlpha = 1; return c; },
-  filter(input, mode, amount, size) { const c = this.canvas(size), x = c.getContext("2d"); x.drawImage(input, 0, 0); const pixels = x.getImageData(0, 0, size, size); for (let i = 0; i < pixels.data.length; i += 4) for (let channel = 0; channel < 3; channel++) pixels.data[i + channel] = mode === "invert" ? 255 - pixels.data[i + channel] : Math.min(255, pixels.data[i + channel] * amount); x.putImageData(pixels, 0, 0); return c; }
+  filter(input, mode, amount, size) { const c = this.canvas(size), x = c.getContext("2d"); x.drawImage(input, 0, 0); const pixels = x.getImageData(0, 0, size, size); for (let i = 0; i < pixels.data.length; i += 4) for (let channel = 0; channel < 3; channel++) pixels.data[i + channel] = mode === "invert" ? 255 - pixels.data[i + channel] : Math.min(255, pixels.data[i + channel] * amount); x.putImageData(pixels, 0, 0); return c; },
+  antialias(input, size, strength) { const factor = Math.max(1, Number(strength) || 2); const smallSize = Math.max(1, Math.round(size / factor)); const small = document.createElement("canvas"); small.width = smallSize; small.height = smallSize; const sx = small.getContext("2d"); sx.imageSmoothingEnabled = true; sx.imageSmoothingQuality = "high"; sx.drawImage(input, 0, 0, smallSize, smallSize); const c = document.createElement("canvas"); c.width = size; c.height = size; const x = c.getContext("2d"); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high"; x.drawImage(small, 0, 0, size, size); return c; }
 };
 `;
-
-const textureNodeTypes: ScriptNodeTypes = {
-  "script.output": { type: "script.output", label: "Output", category: "Output", inputs: [{ id: "texture", dataType: "texture" }], compile: ({ inputs }) => inputs.texture ?? "LGTexture.empty(data.size)" },
-  "texture.color": { type: "texture.color", label: "Solid Color", category: "Generators", compile: ({ values }) => `LGTexture.color(data.size, ${JSON.stringify(String(values.color ?? "#7c3aed"))})` },
-  "texture.gradient": { type: "texture.gradient", label: "Gradient", category: "Generators", compile: ({ values }) => `LGTexture.gradient(data.size, ${JSON.stringify(String(values.direction ?? "horizontal"))}, ${JSON.stringify(String(values.from ?? "#111827"))}, ${JSON.stringify(String(values.to ?? "#38bdf8"))})` },
-  "texture.checker": { type: "texture.checker", label: "Checker", category: "Generators", compile: ({ values }) => `LGTexture.checker(data.size, ${Number(values.size ?? 16)}, ${JSON.stringify(String(values.colorA ?? "#111827"))}, ${JSON.stringify(String(values.colorB ?? "#f8fafc"))})` },
-  "texture.noise": { type: "texture.noise", label: "Noise", category: "Generators", compile: ({ values }) => `LGTexture.noise(data.size, ${Number(values.seed ?? 1)}, ${Number(values.scale ?? 8)}, ${JSON.stringify(String(values.colorA ?? "#111827"))}, ${JSON.stringify(String(values.colorB ?? "#f8fafc"))})` },
-  "texture.asset": { type: "texture.asset", label: "Existing Asset", category: "Inputs", compile: ({ values }) => `LGTexture.asset(data.assets, ${JSON.stringify(String(values.asset ?? ""))}, data.size)` },
-  "texture.blend": { type: "texture.blend", label: "Blend", category: "Filters", inputs: [{ id: "a" }, { id: "b" }], compile: ({ values, inputs }) => `LGTexture.blend(${inputs.a ?? "LGTexture.empty(data.size)"}, ${inputs.b ?? "LGTexture.empty(data.size)"}, ${Number(values.amount ?? 0.5)}, data.size)` },
-  "texture.invert": { type: "texture.invert", label: "Invert", category: "Filters", inputs: [{ id: "texture" }], compile: ({ inputs }) => `LGTexture.filter(${inputs.texture ?? "LGTexture.empty(data.size)"}, "invert", 1, data.size)` },
-  "texture.brightness": { type: "texture.brightness", label: "Brightness", category: "Filters", inputs: [{ id: "texture" }], compile: ({ values, inputs }) => `LGTexture.filter(${inputs.texture ?? "LGTexture.empty(data.size)"}, "brightness", ${Number(values.amount ?? 1)}, data.size)` },
-};
 
 export function compileTextureGraph(graph: GraphValue): CompileResult {
   const normalized: GraphValue = {
     ...graph,
     nodes: graph.nodes.map((node) => node.type === "texture.output" ? { ...node, type: "script.output" } : node),
   };
-  const result = compileScriptGraph(normalized, textureNodeTypes, { functionName: "buildTexture" });
+  const result = compileScriptGraph(normalized, textureScriptNodeTypes, { functionName: "buildTexture" });
   if (result.errors.length > 0) return result;
   // Texture builders are called with one options object by both the editor
   // preview and AssetLoader. The generic script compiler uses the script
@@ -93,3 +82,5 @@ export function compileProjectTextures(project: string, outputGameDir: string): 
     fs.rmSync(path.join(outputDir, filename), { force: true });
   }
 }
+
+export { getTextureNodeMetadata } from "./textureNodeRegistry.js";

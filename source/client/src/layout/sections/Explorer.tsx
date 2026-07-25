@@ -27,7 +27,7 @@ import { FolderTree, TreeNode, TreeNodeBadge } from "../../ui/FolderTree";
 import { MenuAction } from "../../ui/ActionsMenu";
 import { projectsApi, Entity, graphScriptsApi, AssetEntry, BASE_URL } from "../../api";
 import { CodeFileEditor } from "../../components/CodeFileEditor";
-import ScriptGraph from "../../components/graphs/scripting/ScriptGraph";
+import ScriptGraph from "../../components/graphs/ScriptGraph";
 import { GraphValue } from "../../components/graphs/GraphEditor";
 import TextureGraph from "../../components/graphs/TextureGraph";
 import { renderCompiledTexture } from "../../lib/texturePreview";
@@ -680,12 +680,14 @@ function AssetCard({ asset, project, assets, onOpen, onRename, onDelete }: Asset
   const assetUrl = project ? `${BASE_URL}/api/projects/${encodeURIComponent(project)}/assets/raw/${encodeURIComponent(asset.relativePath)}` : "";
 
   const icon = asset.type === "texture" ? (
-    <WandSparkles size={24} className="text-[var(--color-accent-secondary)]" />
+    <WandSparkles size={22} className="text-[var(--color-accent-secondary)]" />
   ) : asset.type === "audio" ? (
-    <Music size={24} />
+    <Music size={22} />
   ) : (
-    <File size={24} />
+    <File size={22} />
   );
+
+  const hasVisual = (asset.type === "image") || (asset.type === "texture" && texturePreview);
 
   return (
     <div
@@ -694,32 +696,49 @@ function AssetCard({ asset, project, assets, onOpen, onRename, onDelete }: Asset
         event.dataTransfer.setData("text/lyngame-asset", asset.key);
         event.dataTransfer.setData("text/plain", asset.key);
       }}
-      className="group relative cursor-pointer overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-inset)] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--color-accent-secondary)] hover:shadow-md"
-      onDoubleClick={onOpen}
+      // onDoubleClick={onOpen}
+      onClick={onOpen}
+      className="group relative aspect-square w-full cursor-pointer overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-inset)] shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-[var(--color-accent-secondary)] hover:shadow-lg"
     >
-      <div className="flex h-24 items-center justify-center overflow-hidden bg-black/20">
+      {/* Visual layer */}
+      <div className="absolute inset-0 flex items-center justify-center bg-black/25">
         {asset.type === "image" ? (
-          <img src={assetUrl} alt={asset.key} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+          <img src={assetUrl} alt={asset.key} className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" />
         ) : asset.type === "texture" && texturePreview ? (
-          <img src={texturePreview} alt={`${asset.key} preview`} className="h-full w-full object-cover" />
+          <img src={texturePreview} alt={`${asset.key} preview`} className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" />
         ) : asset.type === "texture" && !previewFailed ? (
-          <div className="h-5 w-5 animate-pulse rounded bg-[var(--color-accent-secondary)]/30" />
+          <div className="h-6 w-6 animate-pulse rounded-full bg-[var(--color-accent-secondary)]/30" />
         ) : (
-          <div className="flex flex-col items-center gap-1 text-[var(--color-text-faint)]">{icon}<span className="text-[9px] uppercase">{asset.type}</span></div>
+          <div className="flex flex-col items-center gap-1.5 text-[var(--color-text-faint)]">
+            {icon}
+            <span className="text-[9px] font-medium uppercase tracking-wide">{asset.type}</span>
+          </div>
         )}
       </div>
-      <div className="p-2">
-        <div className="truncate text-[10px] font-medium text-[var(--color-text)]" title={asset.relativePath}>{asset.key}</div>
-        <div className="mt-0.5 truncate text-[9px] text-[var(--color-text-faint)]">{asset.type} · {formatBytes(asset.size)}</div>
+
+      {/* Bottom info scrim */}
+      <div className={`absolute inset-x-0 bottom-0 px-2 pb-1.5 pt-4 ${hasVisual ? "bg-gradient-to-t from-black/80 via-black/40 to-transparent" : "bg-gradient-to-t from-black/50 to-transparent"}`}>
+        <div className={`truncate text-[10px] font-medium ${hasVisual ? "text-white" : "text-[var(--color-text)]"}`} title={asset.relativePath}>
+          {asset.key}
+        </div>
+        <div className={`mt-0.5 truncate text-[9px] ${hasVisual ? "text-white/70" : "text-[var(--color-text-faint)]"}`}>
+          {asset.type} · {formatBytes(asset.size)}
+        </div>
       </div>
-      <div className="absolute inset-0 flex items-center justify-center gap-1 rounded bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
+
+      {/* Hover actions */}
+      <div className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
         <Button
           variant="ghost"
           size="sm"
           iconOnly
           iconLeft={<Pencil size={11} />}
           title="Rename"
-          onClick={onRename}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRename();
+          }}
+          className="bg-black/50 backdrop-blur-sm hover:bg-black/70"
         />
         <Button
           variant="ghost"
@@ -727,7 +746,11 @@ function AssetCard({ asset, project, assets, onOpen, onRename, onDelete }: Asset
           iconOnly
           iconLeft={<Trash2 size={11} />}
           title="Delete"
-          onClick={onDelete}
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
+          className="bg-black/50 backdrop-blur-sm hover:bg-black/70"
         />
       </div>
     </div>

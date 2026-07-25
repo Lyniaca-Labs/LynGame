@@ -72,8 +72,9 @@ export interface GraphNodeTypeDefinition {
   }[];
 }
 
-export interface ScriptNodeTypesResponse extends ApiResult {
-  nodes: Record<string, GraphNodeTypeDefinition>;
+export interface ScriptNodeTypesResponse {
+  success: boolean;
+  nodes: Record<string, TextureNodeMetadata>;
 }
 
 export interface GraphCompileResponse extends ApiResult {
@@ -264,11 +265,41 @@ export const graphScriptsApi = {
     api.post(`api/projects/${enc(project)}/scripts/${enc(withGraphExt(filename))}/compile`),
 };
 
+export interface TextureNodeField {
+  key: string;
+  type: "number" | "color" | "text" | "select";
+  defaultValue: unknown;
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: { value: string; label: string }[];
+}
+export interface TextureNodePort {
+  id: string;
+  label: string;
+  dataType: "texture";
+}
+export interface TextureNodeDefinition {
+  type: string;
+  label: string;
+  category: string;
+  color: string;
+  inputs?: TextureNodePort[];
+  outputs?: TextureNodePort[];
+  fields?: TextureNodeField[];
+  compile: (args: { values: Record<string, unknown>; inputs: Record<string, string> }) => string;
+}
+export type TextureNodeMetadata = Omit<TextureNodeDefinition, "compile">;
+
 export const texturesApi = {
   compile: (project: string, filename: string, graph: unknown): Promise<GraphCompileResponse> =>
     api.post(`api/projects/${enc(project)}/assets/${enc(filename)}/compile`, { graph }),
+  getNodeTypes: async (): Promise<Record<string, TextureNodeMetadata>> => {
+    const res = await fetch(`${BASE_URL}/api/textures/nodes`);
+    const data: ScriptNodeTypesResponse = await res.json();
+    return data.nodes;
+  },
 };
-
 // ---- Scenes (delete only — create/save already covered by saveScene) ----
 
 export const scenesApi = {
