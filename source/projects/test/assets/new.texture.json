@@ -6,8 +6,8 @@
         "id": "output",
         "type": "texture.output",
         "position": {
-          "x": 858.8501015116343,
-          "y": 91.76712215063141
+          "x": 1257.4096463576798,
+          "y": -116.84230394763023
         },
         "data": {
           "values": {}
@@ -17,26 +17,6 @@
           "height": 79
         },
         "dragging": false
-      },
-      {
-        "id": "783e04d1-40dc-42d7-b2f3-ece70ac3f479",
-        "type": "texture.noise",
-        "position": {
-          "x": 207.49475558849548,
-          "y": 96.10881641042666
-        },
-        "data": {
-          "values": {
-            "seed": 1,
-            "scale": 8
-          }
-        },
-        "measured": {
-          "width": 242,
-          "height": 197
-        },
-        "dragging": false,
-        "selected": false
       },
       {
         "id": "2b41204c-f59b-4fe5-ab7a-6580961e1a0e",
@@ -66,7 +46,7 @@
         },
         "data": {
           "values": {
-            "amount": 9
+            "amount": 1.15
           }
         },
         "measured": {
@@ -75,6 +55,103 @@
         },
         "selected": false,
         "dragging": false
+      },
+      {
+        "id": "da4a8690-4280-4663-8d44-2cded0e07eb9",
+        "type": "texture.rotate",
+        "position": {
+          "x": 474.30186197362275,
+          "y": 70.0828738387345
+        },
+        "data": {
+          "values": {
+            "degrees": 47
+          }
+        },
+        "measured": {
+          "width": 220,
+          "height": 96
+        },
+        "dragging": false,
+        "selected": false
+      },
+      {
+        "id": "f1e79dd6-18a3-495c-bd35-eb50b5522101",
+        "type": "texture.random",
+        "position": {
+          "x": 236.86334976705513,
+          "y": -263.1060468160147
+        },
+        "data": {
+          "values": {
+            "seed": 6,
+            "colorA": "#111827",
+            "colorB": "#f8fafc"
+          }
+        },
+        "measured": {
+          "width": 220,
+          "height": 148
+        },
+        "dragging": false,
+        "selected": false
+      },
+      {
+        "id": "a1e997dd-fe2c-4eef-b68f-15b13806bda4",
+        "type": "texture.noise",
+        "position": {
+          "x": 410.69988085392845,
+          "y": 109.92233937114362
+        },
+        "data": {
+          "values": {
+            "seed": 1,
+            "scale": 8,
+            "colorA": "#111827",
+            "colorB": "#f8fafc"
+          }
+        },
+        "measured": {
+          "width": 220,
+          "height": 176
+        },
+        "selected": false
+      },
+      {
+        "id": "2ea23eb7-efc7-446d-b787-4209d3cd40c5",
+        "type": "texture.invert",
+        "position": {
+          "x": 575.3822594069111,
+          "y": -219.22193547137266
+        },
+        "data": {
+          "values": {}
+        },
+        "measured": {
+          "width": 220,
+          "height": 58
+        },
+        "dragging": false,
+        "selected": false
+      },
+      {
+        "id": "46515bca-b2b2-49c3-8e2c-2daea9717156",
+        "type": "texture.opacity",
+        "position": {
+          "x": 881.8788648447836,
+          "y": -186.07566738879171
+        },
+        "data": {
+          "values": {
+            "amount": 0.25
+          }
+        },
+        "measured": {
+          "width": 220,
+          "height": 96
+        },
+        "dragging": false,
+        "selected": true
       }
     ],
     "edges": [
@@ -86,11 +163,32 @@
         "id": "53f29c31-365e-41c5-ab7b-d86b24af4f1a"
       },
       {
-        "source": "a4245ead-7a1e-4592-b794-bf6a2de63618",
+        "source": "2b41204c-f59b-4fe5-ab7a-6580961e1a0e",
+        "sourceHandle": "value",
+        "target": "da4a8690-4280-4663-8d44-2cded0e07eb9",
+        "targetHandle": "texture",
+        "id": "e6651380-2771-49f1-9764-9c175fb66185"
+      },
+      {
+        "source": "f1e79dd6-18a3-495c-bd35-eb50b5522101",
+        "sourceHandle": "value",
+        "target": "2ea23eb7-efc7-446d-b787-4209d3cd40c5",
+        "targetHandle": "texture",
+        "id": "1967a273-bb2b-48d8-b7f7-cbde67dcf5db"
+      },
+      {
+        "source": "2ea23eb7-efc7-446d-b787-4209d3cd40c5",
+        "sourceHandle": "value",
+        "target": "46515bca-b2b2-49c3-8e2c-2daea9717156",
+        "targetHandle": "texture",
+        "id": "dc4aa74d-bf69-4359-8b58-229fb271e8a8"
+      },
+      {
+        "source": "46515bca-b2b2-49c3-8e2c-2daea9717156",
         "sourceHandle": "value",
         "target": "output",
         "targetHandle": "texture",
-        "id": "e7981399-6381-4954-aa07-d6559722f7f2"
+        "id": "50f92b6b-df92-4d2b-84ed-7f52b15374ba"
       }
     ]
   }

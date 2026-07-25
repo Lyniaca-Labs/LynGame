@@ -22,23 +22,36 @@ export function compiledTextureFilename(filename: string): string {
   return `${textureBaseName(filename)}.texture.js`;
 }
 
-let runtime = null as string | null;
 
-export function compileTextureGraph(graph: GraphValue, isBuild = false): CompileResult {
+let runtime: string | undefined;
+let runtimeMtimeMs: number | undefined;
 
-  if(!runtime) {
-    // fetch LGBuild
-    const runtimePath = path.join(sourceRoot, "engine", "modules", "TextureEngine.js");
-    if (!fs.existsSync(runtimePath)) {
-      throw new Error(`TextureEngine.js not found at ${runtimePath}`);
-    }
-    const runtimeCode = fs.readFileSync(runtimePath, "utf8");
-    // remove export statement
-    const runtimeCodeWithoutExport = runtimeCode.replace(/export\s+const\s+LGTexture\s*=\s*{/, "const LGTexture = {");
-    // set to runtime
-    runtime = runtimeCodeWithoutExport;
+function getRuntime(): string {
+  const runtimePath = path.join(sourceRoot, "engine", "modules", "TextureEngine.js");
+  if (!fs.existsSync(runtimePath)) {
+    throw new Error(`TextureEngine.js not found at ${runtimePath}`);
   }
 
+  const { mtimeMs } = fs.statSync(runtimePath);
+  if (runtime && runtimeMtimeMs === mtimeMs) {
+    return runtime; // unchanged since last read, reuse cache
+  }
+
+  const runtimeCode = fs.readFileSync(runtimePath, "utf8");
+  const runtimeCodeWithoutExport = runtimeCode.replace(
+    /export\s+const\s+LGTexture\s*=\s*{/,
+    "const LGTexture = {",
+  );
+  if (runtimeCodeWithoutExport === runtimeCode) {
+    throw new Error("Failed to strip export statement from TextureEngine.js — check its format");
+  }
+
+  runtime = runtimeCodeWithoutExport;
+  runtimeMtimeMs = mtimeMs;
+  return runtime;
+}
+
+export function compileTextureGraph(graph: GraphValue, isBuild = false): CompileResult {
   const normalized: GraphValue = {
     ...graph,
     nodes: graph.nodes.map((node) => node.type === "texture.output" ? { ...node, type: "script.output" } : node),
@@ -53,7 +66,7 @@ export function compileTextureGraph(graph: GraphValue, isBuild = false): Compile
     "export function buildTexture(data = {}) {",
   );
   // isBuild is true when compiling for the final game build, in which case we want to import LGTexture from the engine module. Otherwise, use the runtime implementation for the editor preview.
-  let libImport = isBuild ? `import { LGTexture } from "../../engine/index.js";` : runtime;
+  const libImport = isBuild ? `import { LGTexture } from "../../engine/index.js";` : getRuntime();
   return { ...result, code: `${libImport}\n${code}` };
 }
 

@@ -14,6 +14,8 @@ LATER
 - [ ] graph editor laggy when panning around
   - [ ] also have connector dots come slightly out and bigger
   - [ ] replace moving lines with arrows
+  - [ ] texture editor lines do not evenly connect with nodes
+  - [ ] upload image (dataurl) to texture graph (hardcoded const image node)
 
 ## Highest Priority 
 
