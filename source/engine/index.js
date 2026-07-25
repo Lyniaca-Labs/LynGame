@@ -198,6 +198,13 @@ export class GameEngine {
     return this.entities.find((e) => e.id === id);
   }
 
+  getViewportSize() {
+    return {
+      width: this.gameContainer.clientWidth,
+      height: this.gameContainer.clientHeight,
+    };
+  }
+
   // --- previews ---
 
   /**

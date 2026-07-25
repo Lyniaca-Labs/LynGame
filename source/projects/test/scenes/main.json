@@ -31,6 +31,15 @@
             "x": 0,
             "y": 0
           }
+        },
+        "Camera": {
+          "zoom": 1,
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "bounds": null,
+          "target": null
         }
       },
       "scripts": [
@@ -90,14 +99,6 @@
     {
       "id": "cam",
       "components": {
-        "Camera": {
-          "zoom": 1,
-          "offset": {
-            "x": 0,
-            "y": 0
-          },
-          "bounds": null
-        },
         "ShapeRenderer": {
           "shape": "rect",
           "width": 32,

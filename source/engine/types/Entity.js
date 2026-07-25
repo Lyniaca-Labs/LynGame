@@ -62,4 +62,21 @@ export class Entity {
     }
     return null;
   }
+  
+  // returns the max of sprite or shape renderer width and height
+  getDimensions() {
+    let width = 0;
+    let height = 0;
+    const spriteRenderer = this.getComponent("SpriteRenderer");
+    if (spriteRenderer) {
+      width = Math.max(width, spriteRenderer.width);
+      height = Math.max(height, spriteRenderer.height);
+    }
+    const shapeRenderer = this.getComponent("ShapeRenderer");
+    if (shapeRenderer) {
+      width = Math.max(width, shapeRenderer.width);
+      height = Math.max(height, shapeRenderer.height);
+    }
+    return { width, height };
+  }
 }
