@@ -33,6 +33,8 @@ export class GameEngine {
     this._pausedElapsed = 0;
     this._pauseStartedAt = null;
 
+    this._cachedViewportSize = null;
+
     this.input = new Input(gameContainer);
     this.perf = new PerformanceMonitor(this, options.perf);
 
@@ -199,10 +201,13 @@ export class GameEngine {
   }
 
   getViewportSize() {
-    return {
-      width: this.gameContainer.clientWidth,
-      height: this.gameContainer.clientHeight,
-    };
+    if (!this._cachedViewportSize) {
+      this._cachedViewportSize = {
+        width: this.gameContainer.clientWidth,
+        height: this.gameContainer.clientHeight,
+      };
+    }
+    return this._cachedViewportSize;
   }
 
   // --- previews ---
@@ -361,6 +366,8 @@ export class GameEngine {
   }
 
   _update(dt) {
+    this._cachedViewportSize = null; // invalidate at start of frame
+
     for (const entity of this.entities) {
       for (const script of entity.scripts) {
         script(entity, this, dt);
@@ -370,6 +377,7 @@ export class GameEngine {
       }
     }
   }
+
 
   _render() {
     const gameLayer = this.getLayer("main");
