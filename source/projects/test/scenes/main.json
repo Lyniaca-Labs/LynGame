@@ -37,7 +37,7 @@
           "height": 0,
           "offsetX": 0,
           "offsetY": 0,
-          "cursor": "pointer",
+          "cursor": "default",
           "holdThreshold": 0.4,
           "dragThreshold": 50,
           "autoDimensions": true,

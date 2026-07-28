@@ -27,15 +27,26 @@ function compileCode(code, paramNames = ["entity", "engine", "data"]) {
 
 export class Interactable extends Component {
   static schema = {
-    width: { type: "number", default: 0 },
-    height: { type: "number", default: 0 },
-    offsetX: { type: "number", default: 0 },
-    offsetY: { type: "number", default: 0 },
-    cursor: { type: "string", default: "pointer" },
-    holdThreshold: { type: "number", default: 0.4 },
-    dragThreshold: { type: "number", default: 25 },
+    width: { type: "number", default: 0, description: "Width of the hit area, in pixels." },
+    height: { type: "number", default: 0, description: "Height of the hit area, in pixels." },
+    offsetX: { type: "number", default: 0, description: "Horizontal offset of the hit area." },
+    offsetY: { type: "number", default: 0, description: "Vertical offset of the hit area." },
 
-    autoDimensions: { type: "boolean", default: true },
+    cursor: {
+      type: "select",
+      default: "pointer",
+      description: "CSS cursor shown while hovering this entity.",
+      options: [
+        { value: "pointer", label: "Pointer" },
+        { value: "grab", label: "Grab" },
+        { value: "default", label: "Default" },
+        { value: "text", label: "Text" },
+        { value: "not-allowed", label: "Not allowed" },
+      ],
+    },
+
+    holdThreshold: { type: "number", default: 0.4, description: "Seconds pressed before onHold fires." },
+    dragThreshold: { type: "number", default: 25, description: "Pixels of movement before a press becomes a drag." },
 
     onClick: { type: "code", default: null },
     onHoverEnter: { type: "code", default: null },
@@ -56,8 +67,6 @@ export class Interactable extends Component {
     this.onDragStart = compileCode(overrides.onDragStart);
     this.onDrag = compileCode(overrides.onDrag);
     this.onDragEnd = compileCode(overrides.onDragEnd);
-
-    this.autoDimensions = overrides.autoDimensions ?? true;
 
     // internal interaction state
     this._hovered = false;

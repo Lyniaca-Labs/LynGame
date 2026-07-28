@@ -17,8 +17,24 @@ type ComponentEntry = { source: ComponentSource; filename: string; className?: s
 type ComponentManifest = Record<string, ComponentEntry>;
 type Asset = { relativePath: string; type: "image" | "audio" | "texture" | "other"; size?: number };
 type AssetManifest = Record<string, Asset>;
-type Field = { key: string; type: string; defaultValue: unknown; editable: boolean };
 type JsonRecord = Record<string, any>;
+
+interface ComponentSchemaFieldDef {
+  type: string;
+  default: unknown;
+  description?: string;
+  options?: { value: string; label: string }[];
+}
+
+interface Field {
+  key: string;
+  type: string;
+  defaultValue: unknown;
+  editable: boolean;
+  description?: string;
+  options?: { value: string; label: string }[];
+}
+
 
 export default class ProjectHandler {
   static getProjectFile(projectName) {
@@ -172,7 +188,10 @@ export default class ProjectHandler {
       const originalSource = fs.readFileSync(file, "utf8");
       const patchedSource = this.resolveAliasImports(originalSource, path.dirname(file));
 
-      tempFile = path.join(os.tmpdir(), `component-${Date.now()}-${entry.filename}`);
+      const tmpDir = path.join(sourceRoot, ".tmp-components");
+      if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+      tempFile = path.join(tmpDir, `component-${Date.now()}-${entry.filename}`);
       fs.writeFileSync(tempFile, patchedSource, "utf8");
 
       const mod = await import(pathToFileURL(tempFile).href);
@@ -185,7 +204,7 @@ export default class ProjectHandler {
     }
   }
 
-  static async componentSchemas(projectName) {
+  static async componentSchemas(projectName: string): Promise<Record<string, JsonRecord>> {
     const manifest = this.scanComponents(projectName);
     const schemas: Record<string, JsonRecord> = {};
 
@@ -196,15 +215,16 @@ export default class ProjectHandler {
         : path.join(sourceRoot, "projects", projectName, "components", entry.filename);
 
       const ComponentClass = await this.loadComponentClass(projectName, entry);
-      const declaredSchema = ComponentClass?.schema;
-
+      const declaredSchema = ComponentClass?.schema as Record<string, ComponentSchemaFieldDef> | undefined;
 
       const fields: Field[] = declaredSchema && Object.keys(declaredSchema).length > 0
-        ? Object.entries(declaredSchema as Record<string, { type: string; default: unknown }>).map(([key, def]) => ({
+        ? Object.entries(declaredSchema).map(([key, def]) => ({
           key,
           type: def.type,
           defaultValue: def.default,
           editable,
+          description: def.description ?? "",
+          options: def.options,
         }))
         : this.inferFieldsFromSource(fs.readFileSync(file, "utf8"), editable);
 
@@ -219,7 +239,6 @@ export default class ProjectHandler {
 
     return schemas;
   }
-
   // Legacy fallback: reverse-engineers field metadata by regex-scanning the
   // constructor source. Only used for components that haven't declared a
   // static `schema` yet. Remove once all components are migrated.

@@ -267,7 +267,7 @@ export function CodeFileEditor({
         </div>
       </div>
 
-      <div className="relative flex-1 overflow-hidden">
+      <div className="relative flex-1 min-h-0">
         {loading ? (
           <div className="flex h-full items-center justify-center text-xs text-[var(--color-text-faint)]">
             <Loader2 size={14} className="mr-2 animate-spin" />

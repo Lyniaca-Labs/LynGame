@@ -681,6 +681,8 @@ function OverrideComponentPanel({
           <SchemaField
             key={def.key}
             label={def.key}
+            description={def.description}
+            options={def.options}
             type={def.type}
             value={values[def.key] ?? def.defaultValue}
             onChange={(v) => onFieldChange(entityId, componentName, def.key, v)}
@@ -745,8 +747,10 @@ function ComponentPanel({
         {fieldDefs.map((def) => (
           <SchemaField
             key={def.key}
+            options={def.options}
             label={def.key}
             type={def.type}
+            description={def.description}
             value={values[def.key] ?? def.defaultValue}
             onChange={(v) => onFieldChange(entityId, componentName, def.key, v)}
           />
@@ -766,27 +770,64 @@ function inferType(value: unknown): FieldType {
   return "text";
 }
 
+function FieldLabel({ label, description }: { label: string; description?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[var(--color-text-faint)]">
+      {label}
+      {description && (
+        <span
+          title={description}
+          className="inline-flex h-3.5 w-3.5 shrink-0 cursor-help items-center justify-center
+                     rounded-full border border-current text-[9px] leading-none opacity-60 hover:opacity-100"
+        >
+          i
+        </span>
+      )}
+    </span>
+  );
+}
+
 function SchemaField({
   label,
   type,
   value,
   onChange,
+  options,
+  description,
 }: {
   label: string;
   type: FieldType;
   value: unknown;
   onChange: (value: unknown) => void;
+  options?: SelectOption[];
+  description?: string;
 }) {
   if (type === "vector") {
     const vec = (value as { x?: number; y?: number }) ?? {};
     return (
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="text-[var(--color-text-faint)]">{label}</span>
+        <FieldLabel label={label} description={description} />
         <div className="flex items-center gap-1.5">
           <VectorAxisInput axis="x" value={vec.x ?? 0} onChange={(v) => onChange({ ...vec, x: v })} />
           <VectorAxisInput axis="y" value={vec.y ?? 0} onChange={(v) => onChange({ ...vec, y: v })} />
         </div>
       </div>
+    );
+  }
+
+  if (type === "select") {
+    // console.log("Rendering select field", { label, value, options, type });
+    return (
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <FieldLabel label={label} description={description} />
+        <Select
+          options={options ?? []}
+          value={value as string}
+          onChange={onChange}
+          className="w-28"
+          align="end"
+        />
+      </label>
     );
   }
   
@@ -812,7 +853,7 @@ function SchemaField({
     return (
       <>
         <label className="flex items-center justify-between gap-2 text-xs">
-          <span className="text-[var(--color-text-faint)]">{label}</span>
+          <FieldLabel label={label} description={description} />
           <div className="flex items-center gap-1">
             {hasCode && (
               <Button
@@ -848,7 +889,7 @@ function SchemaField({
 
   return (
     <label className="flex items-center justify-between gap-2 text-xs">
-      <span className="text-[var(--color-text-faint)]">{label}</span>
+      <FieldLabel label={label} description={description} />
       {type === "number" && (
         <input
           type="number"

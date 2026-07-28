@@ -59,6 +59,7 @@ LATER
   - [x] event component (calls script on certain event to entity (hold, click, etc))
   - [ ] dropdown type for component schema -> dropdown options
   - [ ] ability to turn off antialiasing in config / set frame rate and tick speed
+  - [ ] custom cursor support
   - [ ] keyframes for animation
   - [x] camera component -> attaches to entity, can set isactive on camera component and it will turn off all others in scene and attach to scene
   - [x] stop reshipping LGEngine with every single texture

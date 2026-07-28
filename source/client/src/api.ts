@@ -1,3 +1,5 @@
+import { SelectOption } from "./ui/Select";
+
 const request = async <T>(url: string, options?: RequestInit): Promise<T> => {
   const response = await fetch(url, options);
 
@@ -108,8 +110,10 @@ export interface SceneResponse extends ApiResult {
 
 export interface ComponentFieldDefinition {
   key: string;
-  type: "number" | "text" | "string" | "boolean" | "color" | "vector" | "code";
+  type: "number" | "text" | "string" | "boolean" | "color" | "vector" | "code" | "select";
   defaultValue: unknown;
+  description?: string;
+  options?: SelectOption[];
 }
 
 export interface ComponentDefinition {

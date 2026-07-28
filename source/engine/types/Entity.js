@@ -2,7 +2,7 @@ export class Entity {
   constructor(id) {
     this.id = id;
     this.components = new Map();
-    this.scripts = [];
+    this.scripts = []; // array of functions to call on each tick, in order of attachment
     this.engine = null;
 
     this.state = {}; // for storing arbitrary state, e.g. for scripts to communicate with each other

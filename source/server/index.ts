@@ -1,3 +1,11 @@
+process.on("exit", (code) => {
+  console.log("!!! PROCESS EXITING, code:", code);
+  console.trace("exit trace");
+});
+process.on("beforeExit", (code) => {
+  console.log("!!! beforeExit fired, code:", code);
+});
+
 import express from "express";
 import cors from "cors";
 import path from "path";
@@ -9,6 +17,7 @@ import ProjectHandler from "./manager/ProjectHandler.js";
 import { spawn } from "child_process";
 import { compileGraphToProject, scriptNodeMetadata } from "./compiler/graphScripts.js";
 import { compileTextureGraph, compileTextureToProject, getTextureNodeMetadata } from "./compiler/textureCompiler.js";
+import { killPort } from "./utils/killPort.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -312,6 +321,8 @@ app.get("/", (_req, res) => {
   const built = path.join(sourceRoot, "client/dist/index.html");
   res.sendFile(fs.existsSync(built) ? built : path.join(sourceRoot, "client/index.html"));
 });
+
+await killPort(config.port);
 
 app.listen(config.port, () => {
   console.log(`Server running at http://${config.host}:${config.port}`);

@@ -2,7 +2,7 @@ import { Component } from "../types/Component.js";
 
 export class SpriteRenderer extends Component {
   static schema = {
-    sprite: { type: "string", default: "" },
+    sprite: { type: "string", default: "", description: "The key of the sprite image to render." },
     width: { type: "number", default: 32 },
     height: { type: "number", default: 32 },
   };

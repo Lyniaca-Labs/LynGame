@@ -7,7 +7,7 @@
     "build": "tsc && powershell -NoProfile -Command \"Copy-Item -LiteralPath config/server.json -Destination dist/config/server.json -Force\"",
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.js",
-    "dev": "nodemon --exec tsx index.ts"
+    "dev": "tsx watch --ignore \"../projects/**\" --ignore \"../output/**\" --ignore \"../.tmp-components/**\" --clear-screen=false index.ts"
   },
   "author": "",
   "license": "ISC",
