@@ -1,6 +1,32 @@
 # Engine Roadmap
 
+## ULTRA PRIORITY (3-Day Jam: Card Game / Time-Strategy / Deck Builder)
 
+### Must-have to build the game at all
+- [x] Text components / font loading — card names, costs, stats, descriptions
+- [x] Event component (click, hold, drag/release) — picking up & playing cards
+- [ ] Entity children — compose a card from bg + art + text + icons as one unit
+- [ ] Z-index layers / multiple canvases — card stacking, hand fanning, dragged-card-on-top
+- [ ] GUI helper/system — hand layout, deck/discard pile counters, buttons, turn/timer UI
+- [ ] Global scripts not attached to an entity — game manager (turn order, timers, win condition)
+  - [ ] attach scripts to scenes -> callable in scene
+  - [ ] attach scripts to game/engine -> callable from anywhere
+
+### Must-fix bugs (actively block building the game)
+- [ ] Cannot scroll in code editor
+- [ ] Scene switching laggy / spawned entities end up in wrong scene
+
+### Needed to actually ship/submit
+- [ ] Export project to zip (with live server to run it)
+
+### High-value if time allows
+- [ ] Move entities around/between scenes, duplicate, copy/paste — massive speed-up for laying out cards & board
+- [ ] Audio system — basic SFX for playing cards / timers
+- [ ] SpriteSheets — faster card art iteration than one texture per card
+- [ ] Collision/simple hit-detection — drop zones for cards (could piggyback on event component instead if time-crunched)
+
+### Explicitly defer (not needed for this jam)
+Tilemaps, Physics, Pathfinding, Inverse Kinematics, Particles, Screen effects, Keyframe animation, Undo/redo, ESLint, Visual scripting, TypeScript parser, Node backend/save endpoints, Editor extensions (sprite/texture/tilemap/audio creators), Icon pack, comfyui/magenta stuff.
 
 LATER
 
@@ -11,6 +37,8 @@ LATER
 - [ ] cannot scroll in code editor
 - [ ] switching projects does not fully refresh everything
 - [ ] node editor wires / edges are laggy
+- [ ] need checkbox component
+- [ ] standardize the code editor modal
 - [ ] graph editor laggy when panning around
   - [ ] also have connector dots come slightly out and bigger
   - [ ] replace moving lines with arrows
@@ -20,14 +48,16 @@ LATER
 ## Highest Priority 
 
 - [ ] Graphics framework first (foundation)
-  - [] text components / font loading (font assets)
+  - [x] text components / font loading (font assets)
   - [ ] should be able to make global scripts not attached to an entity
     - [ ] attach scripts to scenes -> callable in scene
     - [ ] attach scripts to game / engine -> callable from anywhere
   - [ ] entity children
+  - [ ] icons for premade components
   - [ ] add static component description alongside schema
   - [ ] shadow component > renders a pixelated or high def shadow underneath
-  - [ ] event component (calls script on certain event to entity (hold, click, etc))
+  - [x] event component (calls script on certain event to entity (hold, click, etc))
+  - [ ] dropdown type for component schema -> dropdown options
   - [ ] ability to turn off antialiasing in config / set frame rate and tick speed
   - [ ] keyframes for animation
   - [x] camera component -> attaches to entity, can set isactive on camera component and it will turn off all others in scene and attach to scene
@@ -74,7 +104,7 @@ LATER
   - [ ] turn server into typescript, keep all project files and engine files javascript
 - [ ] Scene hierarchy (`Scene[] -> Entity[] -> Children[]`)
 - [x] Components system
-- [ ] Events system
+- [x] Events system
   - [ ] include in visual scripter
 - [ ] Physics
 - [ ] Collision system
@@ -82,8 +112,8 @@ LATER
 - [x] Sprite renderer
 - [x] Asset manager
 - [ ] Z-index layers / multiple canvases
-- [ ] Camera
-  - [ ] part of scene, interacts with all transforms
+- [x] Camera
+  - [x] part of scene, interacts with all transforms
 - [ ] Custom save format
 - [ ] Documentation
 - [ ] Ability to keep alive scenes after switching / auto scene cache
@@ -172,10 +202,11 @@ LATER
 - [ ] Sprite creator
 - [ ] Texture creator
 - [ ] Tilemap creator
-- [ ] Audio creator
+- [ ] Audio creator 
 - [ ] Pixel art editor
 - [ ] Animation editor
 - [ ] google magenta tensorflow running in browser for music generation
+- [ ] drums too
 
 AI (harder future)
 

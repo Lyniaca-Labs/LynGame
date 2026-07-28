@@ -1,13 +1,15 @@
 // Inspector.tsx — full file
 
 import { ReactNode, useEffect, useState } from "react";
-import { Trash2, RefreshCw } from "lucide-react";
+import { Trash2, RefreshCw, X } from "lucide-react";
 import { Container } from "../../ui/Container";
 import { Select, SelectOption } from "../../ui/Select";
 import { useSceneEditor } from "../../context/SceneEditorContext";
 import { useProject } from "../../context/ProjectContext";
 import { Entity, ComponentDefinition, ComponentFieldDefinition, PrefabData } from "../../api";
 import type { GameViewHandle } from "../sections/GameView";
+import { CodeStringEditorModal } from "../../components/CodeStringEditorModal";
+import { Button } from "../../ui/Button";
 
 type FieldType = ComponentFieldDefinition["type"];
 
@@ -785,6 +787,62 @@ function SchemaField({
           <VectorAxisInput axis="y" value={vec.y ?? 0} onChange={(v) => onChange({ ...vec, y: v })} />
         </div>
       </div>
+    );
+  }
+  
+  const SCOPE_BY_FIELD: Record<string, string[]> = {
+    onClick: ["entity", "engine"],
+    onHoverEnter: ["entity", "engine"],
+    onHoverExit: ["entity", "engine"],
+    onHold: ["entity", "engine"],
+    onDragStart: ["entity", "engine", "data"],
+    onDrag: ["entity", "engine", "data"],
+    onDragEnd: ["entity", "engine", "data"],
+  };
+
+  if (type === "code") {
+    const [editing, setEditing] = useState(false);
+    const hasCode = typeof value === "string" && value.trim().length > 0;
+
+    const handleClear = async () => {
+      const ok = await confirm("Are you sure you want to clear this code? This action cannot be undone.");
+      if (ok) onChange(null);
+    };
+
+    return (
+      <>
+        <label className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-[var(--color-text-faint)]">{label}</span>
+          <div className="flex items-center gap-1">
+            {hasCode && (
+              <Button
+                variant="ghost"
+                className="w-7 justify-center px-0"
+                title={`Clear ${label}`}
+                onClick={handleClear}
+              >
+                <X size={20} />
+              </Button>
+            )}
+            <Button onClick={() => setEditing(true)} className="w-28 justify-center">
+              {hasCode ? "Edit code" : "Add code"}
+            </Button>
+          </div>
+        </label>
+
+        <CodeStringEditorModal
+          open={editing}
+          value={hasCode ? (value as string) : ""}
+          language="js"
+          title={label}
+          scopeVars={SCOPE_BY_FIELD[label] ?? ["entity", "engine"]}
+          onSave={(next) => {
+            const trimmed = next.trim();
+            onChange(trimmed.length > 0 ? next : null);
+          }}
+          onClose={() => setEditing(false)}
+        />
+      </>
     );
   }
 

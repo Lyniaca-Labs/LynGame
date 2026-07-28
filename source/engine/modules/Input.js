@@ -12,6 +12,8 @@ export class Input {
     this.mouseButtonsReleased = new Set();
     this.wheelDelta = 0;
 
+    this.pointerEvents = []; 
+
     this._bind();
   }
 
@@ -34,16 +36,19 @@ export class Input {
       this.mouse.dy = newY - this.mouse.y;
       this.mouse.x = newX;
       this.mouse.y = newY;
+      this.pointerEvents.push({ type: "move", x: newX, y: newY, time: performance.now() });
     });
 
     this.gameContainer.addEventListener("mousedown", (e) => {
       if (!this.mouseButtons.has(e.button)) this.mouseButtonsPressed.add(e.button);
       this.mouseButtons.add(e.button);
+      this.pointerEvents.push({ type: "down", x: this.mouse.x, y: this.mouse.y, button: e.button, time: performance.now() });
     });
 
     window.addEventListener("mouseup", (e) => {
       this.mouseButtons.delete(e.button);
       this.mouseButtonsReleased.add(e.button);
+      this.pointerEvents.push({ type: "up", x: this.mouse.x, y: this.mouse.y, button: e.button, time: performance.now() });
     });
 
     this.gameContainer.addEventListener("wheel", (e) => {
@@ -64,6 +69,12 @@ export class Input {
   wasMouseReleased(button = 0) { return this.mouseButtonsReleased.has(button); }
 
   // Call once per frame, AFTER all component/script updates read this-frame state
+  drainPointerEvents() {
+    const events = this.pointerEvents;
+    this.pointerEvents = [];
+    return events;
+  }
+
   _endFrame() {
     this.keysPressed.clear();
     this.keysReleased.clear();
@@ -72,5 +83,15 @@ export class Input {
     this.mouse.dx = 0;
     this.mouse.dy = 0;
     this.wheelDelta = 0;
+  }
+
+  get pointer() {
+    return {
+      x: this.mouse.x,
+      y: this.mouse.y,
+      down: this.mouseButtons.has(0),
+      justPressed: this.mouseButtonsPressed.has(0),
+      justReleased: this.mouseButtonsReleased.has(0),
+    };
   }
 }

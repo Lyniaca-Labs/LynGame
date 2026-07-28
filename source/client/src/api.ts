@@ -108,7 +108,7 @@ export interface SceneResponse extends ApiResult {
 
 export interface ComponentFieldDefinition {
   key: string;
-  type: "number" | "text" | "string" | "boolean" | "color" | "vector";
+  type: "number" | "text" | "string" | "boolean" | "color" | "vector" | "code";
   defaultValue: unknown;
 }
 

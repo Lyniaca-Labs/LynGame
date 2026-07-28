@@ -36,6 +36,10 @@ export class Entity {
     return this.components.get(componentRef);
   }
 
+  getComponentList() {
+    return Array.from(this.components.keys());
+  }
+
   hasComponent(componentRef) {
     return this.getComponent(componentRef) !== undefined;
   }
@@ -76,6 +80,11 @@ export class Entity {
     if (shapeRenderer) {
       width = Math.max(width, shapeRenderer.width);
       height = Math.max(height, shapeRenderer.height);
+    }
+    const textRenderer = this.getComponent("TextRenderer");
+    if (textRenderer) {
+      width = textRenderer.getWidth(this.engine.ctx);
+      height = textRenderer.getHeight(this.engine.ctx);
     }
     return { width, height };
   }

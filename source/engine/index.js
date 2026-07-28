@@ -33,6 +33,8 @@ export class GameEngine {
     this._pausedElapsed = 0;
     this._pauseStartedAt = null;
 
+    this.ctx = document.createElement("canvas").getContext("2d"); // for measuring text sizes, etc. offscreen, never visible, never rendered
+
     this._cachedViewportSize = null;
 
     this.input = new Input(gameContainer);
@@ -366,15 +368,44 @@ export class GameEngine {
   }
 
   _update(dt) {
-    this._cachedViewportSize = null; // invalidate at start of frame
+    this._cachedViewportSize = null;
 
+    // 1. Scripts + every component EXCEPT Camera/Interactable run first.
+    //    This is where Movement lives, so gravity/velocity resolve transform.y
+    //    for this frame before anything reads it for camera-follow or hit-testing.
+    //    (Camera and Interactable are excluded here and ticked explicitly below,
+    //    in the order they actually depend on each other.)
     for (const entity of this.entities) {
-      for (const script of entity.scripts) {
-        script(entity, this, dt);
-      }
+      const camera = entity.getComponent("Camera");
+      const interactable = entity.getComponent("Interactable");
+
+      for (const script of entity.scripts) script(entity, this, dt);
       for (const component of entity.components.values()) {
+        if (component === camera || component === interactable) continue;
         component.onTick?.(entity, this, dt);
       }
+    }
+
+    // 2. Camera follows this frame's FINAL transform (post-Movement).
+    for (const entity of this.entities) {
+      entity.getComponent("Camera")?.onTick?.(entity, this, dt);
+    }
+
+    // 3. Pointer events hit-test against this frame's final transform + camera.
+    //    Edge-triggered only: press-start, drag-start/drag/drag-end, click.
+    const events = this.input.drainPointerEvents();
+    for (const event of events) {
+      for (const entity of this.entities) {
+        entity.getComponent("Interactable")?.handlePointerEvent?.(entity, this, event);
+      }
+    }
+
+    // 4. Interactable's own onTick: hover + hold. Both are continuous/time-based
+    //    (hover can change with no new events if the box moves under a still
+    //    cursor; hold accumulates by dt regardless of events), so they need a
+    //    per-frame pass against the same final transform + camera as above.
+    for (const entity of this.entities) {
+      entity.getComponent("Interactable")?.onTick?.(entity, this, dt);
     }
   }
 
