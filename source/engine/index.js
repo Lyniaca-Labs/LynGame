@@ -37,7 +37,7 @@ export class GameEngine {
 
     this._cachedViewportSize = null;
 
-    this.input = new Input(gameContainer);
+    this.input = new Input(gameContainer, this);
     this.perf = new PerformanceMonitor(this, options.perf);
 
     window.addEventListener("resize", this._handleResize.bind(this));

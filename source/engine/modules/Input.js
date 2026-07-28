@@ -1,6 +1,7 @@
 export class Input {
-  constructor(gameContainer) {
+  constructor(gameContainer, engine) {
     this.gameContainer = gameContainer;
+    this.engine = engine;
 
     this.keys = new Set();
     this.keysPressed = new Set();  // true for exactly one frame
@@ -19,16 +20,19 @@ export class Input {
 
   _bind() {
     window.addEventListener("keydown", (e) => {
+      if(this.engine.paused) return;
       if (!this.keys.has(e.code)) this.keysPressed.add(e.code);
       this.keys.add(e.code);
     });
 
     window.addEventListener("keyup", (e) => {
+      if (this.engine.paused) return;
       this.keys.delete(e.code);
       this.keysReleased.add(e.code);
     });
 
     this.gameContainer.addEventListener("mousemove", (e) => {
+      if (this.engine.paused) return;
       const rect = this.gameContainer.getBoundingClientRect();
       const newX = e.clientX - rect.left;
       const newY = e.clientY - rect.top;
@@ -40,18 +44,21 @@ export class Input {
     });
 
     this.gameContainer.addEventListener("mousedown", (e) => {
+      if (this.engine.paused) return;
       if (!this.mouseButtons.has(e.button)) this.mouseButtonsPressed.add(e.button);
       this.mouseButtons.add(e.button);
       this.pointerEvents.push({ type: "down", x: this.mouse.x, y: this.mouse.y, button: e.button, time: performance.now() });
     });
 
     window.addEventListener("mouseup", (e) => {
+      if (this.engine.paused) return;
       this.mouseButtons.delete(e.button);
       this.mouseButtonsReleased.add(e.button);
       this.pointerEvents.push({ type: "up", x: this.mouse.x, y: this.mouse.y, button: e.button, time: performance.now() });
     });
 
     this.gameContainer.addEventListener("wheel", (e) => {
+      if (this.engine.paused) return;
       this.wheelDelta = e.deltaY;
     });
 
