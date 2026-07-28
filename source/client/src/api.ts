@@ -1,7 +1,12 @@
 import { SelectOption } from "./ui/Select";
 
 const request = async <T>(url: string, options?: RequestInit): Promise<T> => {
-  const response = await fetch(url, options);
+  let response = null;
+  try {
+    response = await fetch(url, options);
+  } catch (error) {
+    throw new Error(`Request failed: ${error}`);
+  }
 
   if (!response.ok) {
     // surface the server's { error: "..." } message when it sends one,
@@ -13,6 +18,7 @@ const request = async <T>(url: string, options?: RequestInit): Promise<T> => {
     } catch {
       // not JSON, fall back to the generic message
     }
+    alert(message);
     throw new Error(message);
   }
 
@@ -239,6 +245,8 @@ export class ${name} extends Component {
 export const scriptsApi = {
   create: (project: string, filename: string, content = `// ${filename}\n
 export function ${filename}(entity, engine, dt) {
+  // these are the base arguments when attaching a script to an entity
+  // you may call this manually with engine.callScript("${filename}", ...args) if you want to invoke it from another script
   // entity is the entity instance, engine is the game engine instance, dt is the delta time since last frame
   
   // your script logic here (will be called every tick)

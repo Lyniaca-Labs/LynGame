@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { fileURLToPath, pathToFileURL } from "url";
-import { compiledGraphFilename, graphFilename, scriptSymbol } from "../compiler/graphScripts.js";
+import { compiledGraphFilename, graphBaseName, graphFilename, scriptSymbol } from "../compiler/graphScripts.js";
 import { compiledTextureFilename } from "../compiler/textureCompiler.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -319,19 +319,72 @@ export default class ProjectHandler {
 
     const scriptsDir = path.join(sourceRoot, "projects", projectName, "scripts");
 
-    // Collected across scenes + prefabs so imports only get generated once,
-    // regardless of how many places reference a given component/script.
     const allComponents = new Set<string>();
-    // scriptName -> Set of human-readable locations referencing it, so a missing
-    // script can be traced back to every entity/prefab that attaches it.
     const allScripts = new Map<string, Set<string>>();
 
-    function addScriptRef(scriptName, location) {
-      if (!allScripts.has(scriptName)) allScripts.set(scriptName, new Set());
-      allScripts.get(scriptName)?.add(location);
+    // ---------------------------------------------------------------------
+    // Script name canonicalization
+    //
+    // The file on disk is the ONLY source of truth for a script's name/casing
+    // — required so import paths are correct on case-sensitive filesystems
+    // (itch.io, most non-Windows hosts). Scan scripts/ up front to build a
+    // lowercase -> actual-filename map. Any entity/prefab reference is then
+    // checked against it in addScriptRef:
+    //   - no match at all              -> throw (typo'd/deleted script)
+    //   - match but casing differs     -> throw (must fix the JSON, not the file)
+    //   - match, casing identical      -> fine, proceed
+    // Two files on disk differing only by case is itself ambiguous and is
+    // rejected at scan time below.
+    // ---------------------------------------------------------------------
+    const scriptNameCanon = new Map<string, string>(); // lowercase -> actual on-disk name
+
+    if (fs.existsSync(scriptsDir)) {
+      for (const file of fs.readdirSync(scriptsDir)) {
+        let diskName: string | null = null;
+        if (file.endsWith(".lgscript.json")) {
+          diskName = file.slice(0, -".lgscript.json".length);
+        } else if (file.endsWith(".lgscript.js")) {
+          continue; // compiled output, not a source name
+        } else if (file.endsWith(".js")) {
+          diskName = path.basename(file, ".js");
+        }
+        if (!diskName) continue;
+
+        const lower = diskName.toLowerCase();
+        const existing = scriptNameCanon.get(lower);
+        if (existing !== undefined && existing !== diskName) {
+          throw new Error(
+            `Ambiguous scripts in ${scriptsDir}: "${existing}" and "${diskName}" differ only by case. ` +
+            `Rename one — this is not resolvable on case-sensitive filesystems.`
+          );
+        }
+        scriptNameCanon.set(lower, diskName);
+      }
     }
 
-    // Emits creation code for one plain (non-prefab-referencing) entity node.
+    function addScriptRef(scriptName: string, location: string): string {
+      const baseName = graphBaseName(scriptName); // strip an optional trailing .lgscript(.json|.js) suffix
+      const lower = baseName.toLowerCase();
+      const onDisk = scriptNameCanon.get(lower);
+
+      if (onDisk === undefined) {
+        throw new Error(
+          `Missing script "${scriptName}" (referenced by ${location}) — ` +
+          `no file named "${baseName}.js" or "${baseName}.lgscript.json" exists in ${scriptsDir}.`
+        );
+      }
+      if (onDisk !== baseName) {
+        throw new Error(
+          `Script "${scriptName}" (referenced by ${location}) does not match the on-disk casing "${onDisk}". ` +
+          `Fix the reference to use "${onDisk}" exactly — casing must match for case-sensitive filesystems.`
+        );
+      }
+
+      if (!allScripts.has(onDisk)) allScripts.set(onDisk, new Set());
+      allScripts.get(onDisk)?.add(location);
+      return onDisk;
+    }
+
     function renderEntity(node, varName, idExpr, indent = "    ", location) {
       for (const compName of Object.keys(node.components || {})) allComponents.add(compName);
       for (const scriptName of node.scripts || []) addScriptRef(scriptName, location);
@@ -346,17 +399,8 @@ export default class ProjectHandler {
       return lines;
     }
 
-    // ---------------------------------------------------------------------
-    // Scenes
-    //
-    // Each scenes/*.json becomes a `scene_<name>(engine)` function that
-    // builds its entities, plus a Scene record { load, cameraId } so
-    // engine.loadScene() knows which entity to hand to setCamera() once the
-    // scene has finished loading (unless the scene's own load fn already
-    // called setCamera explicitly — that always wins).
-    // ---------------------------------------------------------------------
     const sceneFunctions: string[] = [];
-    const sceneCameraIds = new Map<string, string | null>(); // sceneName -> cameraId | null
+    const sceneCameraIds = new Map<string, string | null>();
 
     for (const file of sceneFiles) {
       const sceneName = path.basename(file, ".json");
@@ -374,10 +418,6 @@ export default class ProjectHandler {
             `    const ${varName} = engine.prefabs.instantiate("${entity.prefab}", ${JSON.stringify(entity.overrides || {})}, "${entity.id}");`
           );
 
-          // Entity-local components/scripts layered on top of the prefab (e.g.
-          // added via the Inspector's "Components" section while a prefab is
-          // attached). These aren't part of the prefab, so instantiate() has no
-          // idea about them — add them explicitly after instantiation.
           for (const [compName, data] of Object.entries(entity.components || {})) {
             allComponents.add(compName);
             bodyLines.push(`    ${varName}.addComponent(${compName}_component, ${JSON.stringify(data)});`);
@@ -394,13 +434,6 @@ export default class ProjectHandler {
       sceneFunctions.push(`function scene_${sceneName}(engine) {\n${bodyLines.join("\n")}\n}`);
     }
 
-    // ---------------------------------------------------------------------
-    // Prefabs
-    //
-    // Each prefabs/*.json becomes a `prefab_<name>(engine, overrides, id)`
-    // factory, registered with engine.prefabs so scenes can instantiate it
-    // by name via entity.prefab above.
-    // ---------------------------------------------------------------------
     const prefabFunctions: string[] = [];
     const prefabRegistrations: string[] = [];
 
@@ -432,12 +465,23 @@ export default class ProjectHandler {
       prefabRegistrations.push(`  engine.prefabs.register("${prefabName}", prefab_${prefabName});`);
     }
 
-    // ---------------------------------------------------------------------
-    // Imports
-    // ---------------------------------------------------------------------
+    if (fs.existsSync(scriptsDir)) {
+      for (const file of fs.readdirSync(scriptsDir).sort()) {
+        let name: string | null = null;
 
-    // Components import with a suffixed alias (e.g. `Sprite` -> `Sprite_component`)
-    // so a component name can never collide with a script/variable of the same name.
+        if (file.endsWith(".lgscript.json")) {
+          name = file.slice(0, -".lgscript.json".length);
+        } else if (file.endsWith(".lgscript.js")) {
+          continue;
+        } else if (file.endsWith(".js")) {
+          name = path.basename(file, ".js");
+        }
+
+        if (!name) continue;
+        addScriptRef(name, "registered from scripts/ (not attached to any entity/prefab)");
+      }
+    }
+
     const componentImports = [...allComponents].map((name) => {
       const entry = manifest[name];
       if (!entry) throw new Error(`Component "${name}" not found in engine or project`);
@@ -446,26 +490,26 @@ export default class ProjectHandler {
     }).join("\n");
 
     // Scripts import with a suffixed alias (e.g. `testScript` -> `testScript_script`).
-    // If the backing file no longer exists on disk (deleted/renamed script that's
-    // still referenced by an entity or prefab), emit a console.error instead of a
-    // broken import, naming every place that still attaches it.
-    const scriptImports = [...allScripts.entries()].map(([name, locations]) => {
-      const scriptPath = path.join(scriptsDir, `${name}.js`);
-      const graphPath = path.join(scriptsDir, graphFilename(name));
-      if (!fs.existsSync(scriptPath) && !fs.existsSync(graphPath)) {
-        const where = [...locations].join(", ");
-        return `console.error(${JSON.stringify(
-          `Missing script "${name}" (expected at scripts/${name}.js) — still attached to: ${where}`
-        )});`;
-      }
-      const symbol = scriptSymbol(name);
-      const filename = fs.existsSync(graphPath) ? compiledGraphFilename(name) : `${name}.js`;
-      return `import { ${symbol} as ${symbol}_script } from "./scripts/${filename}";`;
-    }).join("\n");
+    // Missing scripts and case mismatches are now caught earlier in addScriptRef
+    // (thrown, failing the build) — by the time we get here every entry in
+    // allScripts is guaranteed to have a real file on disk with matching casing.
+    const scriptImports = (() => {
+      const seenSymbols = new Set<string>();
+      const lines: string[] = [];
 
-    // ---------------------------------------------------------------------
-    // Registration calls emitted into init()
-    // ---------------------------------------------------------------------
+      for (const name of allScripts.keys()) {
+        const graphPath = path.join(scriptsDir, graphFilename(name));
+        const symbol = scriptSymbol(name);
+        if (seenSymbols.has(symbol)) continue;
+        seenSymbols.add(symbol);
+
+        const filename = fs.existsSync(graphPath) ? compiledGraphFilename(name) : `${name}.js`;
+        lines.push(`import { ${symbol} as ${symbol}_script } from "./scripts/${filename}";`);
+      }
+
+      return lines.join("\n");
+    })();
+
     const sceneRegistrations = sceneFiles
       .map((f) => path.basename(f, ".json"))
       .map((name) => {
@@ -478,6 +522,18 @@ export default class ProjectHandler {
     for (const asset of Object.values(assetManifest)) {
       if (asset.type === "texture") asset.relativePath = compiledTextureFilename(asset.relativePath);
     }
+
+    const engineScriptRegistrations = (() => {
+      const seenSymbols = new Set<string>();
+      const lines: string[] = [];
+      for (const name of allScripts.keys()) {
+        const symbol = scriptSymbol(name);
+        if (seenSymbols.has(symbol)) continue;
+        seenSymbols.add(symbol);
+        lines.push(`  engine.registerScript("${name}", ${symbol}_script);`);
+      }
+      return lines.join("\n");
+    })();
 
     return `${componentImports}
   
@@ -492,6 +548,7 @@ export default class ProjectHandler {
     await engine.assets.load(${JSON.stringify(assetManifest)}, "./game/assets");
   ${prefabRegistrations.join("\n")}
   ${sceneRegistrations}
+  ${engineScriptRegistrations}
     engine.loadScene("${config.startScene}");
     engine.start();
   }

@@ -1,4 +1,4 @@
-export function logger_lgscript(entity, engine, dt, data = {}) {
+export function logger(entity, engine, dt, data = {}) {
   const n1_scriptOutput = undefined;
   const n2_scriptParameters_entity = entity;
   const n2_scriptParameters_engine = engine;

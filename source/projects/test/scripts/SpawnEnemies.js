@@ -1,4 +1,4 @@
-export function spawnEnemies(entity, engine, dt) {
+export function SpawnEnemies(entity, engine, dt) {
 
   const transform = entity.getComponent("Transform");
   if(!transform) return;

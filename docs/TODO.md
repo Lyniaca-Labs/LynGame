@@ -118,6 +118,7 @@ LATER
 - [ ] Custom save format
 - [ ] Documentation
 - [ ] Ability to keep alive scenes after switching / auto scene cache
+- [ ] spriterenderer filter component
 
 ---
 

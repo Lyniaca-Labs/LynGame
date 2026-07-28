@@ -22,13 +22,13 @@ export function compiledGraphFilename(filename: string): string {
   return `${graphBaseName(filename)}.lgscript.js`;
 }
 
-export function scriptSymbol(filename: string): string {
-  const isGraph = /\.lgscript(?:\.(json|js))?$/i.test(filename);
-  const value = (isGraph ? graphBaseName(filename) : filename.replace(/\.js$/i, ""))
-    .replace(/[^a-zA-Z0-9_$]/g, "_");
-  return isGraph ? `${value || "graphScript"}_lgscript` : (value || "script");
+export function scriptSymbol(name: string): string {
+  const base = name
+    .replace(/\.lgscript(?:\.(json|js))?$/i, "")
+    .replace(/\.js$/i, "");
+  const value = base.replace(/[^a-zA-Z0-9_$]/g, "_");
+  return value || "script";
 }
-
 export function compileGraph(projectName: string, filename: string, graph?: GraphValue): CompileResult {
   const sourcePath = path.join(scriptsRoot(projectName), graphFilename(filename));
   const source = graph ?? JSON.parse(fs.readFileSync(sourcePath, "utf8")) as GraphValue;

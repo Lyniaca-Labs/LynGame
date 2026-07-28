@@ -28,15 +28,23 @@ type ConfirmRequest = {
   resolve: (value: boolean) => void;
 };
 
-type DialogRequest = PromptRequest | ConfirmRequest;
+type AlertRequest = {
+  id: string;
+  type: "alert";
+  message: string;
+  resolve: () => void;
+};
+
+type DialogRequest = PromptRequest | ConfirmRequest | AlertRequest;
 
 // Augment the global window type so `await window.prompt(...)` /
-// `await window.confirm(...)` type-check as promise-returning.
+// `await window.confirm(...)` / `await window.alert(...)` type-check as
+// promise-returning.
 declare global {
   interface Window {
     prompt(message?: string, defaultValue?: string): Promise<string | null>;
     confirm(message?: string): Promise<boolean>;
-    // TODO: add alert
+    alert(message?: string): Promise<void>;
     gameViewRef: React.RefObject<GameViewHandle> | null;
   }
 }
@@ -53,12 +61,13 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 
   // resolves whichever request is currently on top of the queue and
   // advances to the next one, if any
-  const resolveCurrent = useCallback((value: string | boolean | null) => {
+  const resolveCurrent = useCallback((value: string | boolean | null | void) => {
     setQueue((q) => {
       const [first, ...rest] = q;
       if (!first) return q;
       if (first.type === "prompt") first.resolve(value as string | null);
-      else first.resolve(value as boolean);
+      else if (first.type === "confirm") first.resolve(value as boolean);
+      else first.resolve();
       return rest;
     });
   }, []);
@@ -68,6 +77,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const originalPrompt = window.prompt;
     const originalConfirm = window.confirm;
+    const originalAlert = window.alert;
 
     (window as unknown as { prompt: (message?: string, defaultValue?: string) => Promise<string | null> }).prompt =
       (message?: string, defaultValue?: string) => {
@@ -91,9 +101,18 @@ export function DialogProvider({ children }: { children: ReactNode }) {
         });
       };
 
+    (window as unknown as { alert: (message?: string) => Promise<void> }).alert =
+      (message?: string) => {
+        return new Promise<void>((resolve) => {
+          idRef.current += 1;
+          enqueue({ id: String(idRef.current), type: "alert", message: message ?? "", resolve });
+        });
+      };
+
     return () => {
       window.prompt = originalPrompt;
       window.confirm = originalConfirm;
+      window.alert = originalAlert;
     };
   }, [enqueue]);
 
@@ -119,12 +138,19 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           onCancel={() => resolveCurrent(false)}
         />
       )}
+      {current?.type === "alert" && (
+        <AlertModal
+          key={current.id}
+          message={current.message}
+          onDismiss={() => resolveCurrent()}
+        />
+      )}
     </DialogContext.Provider>
   );
 }
 
 // No hook needed — the whole point is that consumers keep calling
-// window.prompt / window.confirm directly, unchanged.
+// window.prompt / window.confirm / window.alert directly, unchanged.
 
 // ---- internal modal components ----
 
@@ -135,12 +161,15 @@ interface PromptModalProps {
   onCancel: () => void;
 }
 
-
-
 interface ConfirmModalProps {
   message: string;
   onConfirm: () => void;
   onCancel: () => void;
+}
+
+interface AlertModalProps {
+  message: string;
+  onDismiss: () => void;
 }
 
 function PromptModal({ message, defaultValue, onSubmit, onCancel }: PromptModalProps) {
@@ -195,6 +224,26 @@ function ConfirmModal({ message, onConfirm, onCancel }: ConfirmModalProps) {
           </Button>
           <Button variant="danger" onClick={onConfirm}>
             Confirm
+          </Button>
+        </div>
+      }
+    >
+      <span />
+    </Modal>
+  );
+}
+
+function AlertModal({ message, onDismiss }: AlertModalProps) {
+  return (
+    <Modal
+      open
+      onClose={onDismiss}
+      title="Alert"
+      description={message}
+      footer={
+        <div className="flex items-center gap-2">
+          <Button variant="accent" onClick={onDismiss}>
+            OK
           </Button>
         </div>
       }

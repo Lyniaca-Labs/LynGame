@@ -20,7 +20,9 @@ export class GameEngine {
     this.currentScene = null;
     this.running = false;
     this.paused = false;
-    this.state = {};
+
+    this.scripts = {};
+    this.state = {}; // for storing arbitrary state, e.g. scripts, player data, etc...
 
     this.camera = null; // optional Camera component, if one is added to an entity. If one is available, it will be used
 
@@ -80,6 +82,15 @@ export class GameEngine {
         );
       }
     });
+  }
+
+  registerScript(name, script) {
+    this.scripts[name] = script;
+  }
+  callScript(name, ...args) {
+    const script = this.scripts[name];
+    if (!script) return console.error(`Script "${name}" not found`);
+    return script(...args);
   }
 
   get time() {

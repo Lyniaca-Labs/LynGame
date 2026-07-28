@@ -41,7 +41,7 @@
           "holdThreshold": 0.4,
           "dragThreshold": 50,
           "autoDimensions": true,
-          "onClick": "console.log(\"gi\")",
+          "onClick": "engine.callScript(\"test\", \"hello\")",
           "onHoverEnter": null,
           "onHoverExit": null,
           "onHold": null,
@@ -95,13 +95,10 @@
           "y": 0,
           "rotation": 0,
           "fixed": false
-        },
-        "input": {
-          "overrides": {}
         }
       },
       "scripts": [
-        "spawnEnemies"
+        "SpawnEnemies"
       ]
     },
     {
