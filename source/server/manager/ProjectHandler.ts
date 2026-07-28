@@ -217,7 +217,13 @@ export default class ProjectHandler {
       const ComponentClass = await this.loadComponentClass(projectName, entry);
       const declaredSchema = ComponentClass?.schema as Record<string, ComponentSchemaFieldDef> | undefined;
 
-      const fields: Field[] = declaredSchema && Object.keys(declaredSchema).length > 0
+      // NOTE: `declaredSchema !== undefined` (not a length check) — a component
+      // with `static schema = {}` has legitimately declared "no fields" and
+      // should NOT fall through to the regex-based legacy inference below,
+      // which only knows how to read constructor *parameter* defaults and
+      // would otherwise misreport things like `constructor(overrides = {})`
+      // as a real "overrides" field.
+      const fields: Field[] = declaredSchema !== undefined
         ? Object.entries(declaredSchema).map(([key, def]) => ({
           key,
           type: def.type,
@@ -429,6 +435,25 @@ export default class ProjectHandler {
         } else {
           bodyLines.push(...renderEntity(entity, `entity_${entity.id}`, `"${entity.id}"`, "    ", location));
         }
+      }
+
+      // Second pass: wire up parent/child relationships. This has to run
+      // after every entity in the scene has been created above, since
+      // parentId can reference an entity declared later in the array —
+      // by now every `entity_<id>` var is already in scope regardless of
+      // declaration order.
+      const idsInScene = new Set((scene.entities || []).map((e) => e.id));
+      for (const entity of scene.entities || []) {
+        if (!entity.parentId) continue;
+        if (!idsInScene.has(entity.parentId)) {
+          throw new Error(
+            `Entity "${entity.id}" in scene "${sceneName}" has parentId "${entity.parentId}", which does not exist in this scene.`
+          );
+        }
+        if (entity.parentId === entity.id) {
+          throw new Error(`Entity "${entity.id}" in scene "${sceneName}" cannot be its own parent.`);
+        }
+        bodyLines.push(`    entity_${entity.parentId}.addChild(entity_${entity.id});`);
       }
 
       sceneFunctions.push(`function scene_${sceneName}(engine) {\n${bodyLines.join("\n")}\n}`);

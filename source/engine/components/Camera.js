@@ -1,12 +1,11 @@
 import { Component } from "../types/Component.js";
-import { Transform } from "./Transform.js";
 
 export class Camera extends Component {
   static schema = {
-    zoom: { type: "number", default: 1 },
-    offset: { type: "vector", default: { x: 0, y: 0 } },
-    bounds: { type: "object", default: null },
-    target: { type: "string", default: null }, // optional entity this camera follows, set via follow()
+    zoom: { type: "number", default: 1, description: "Camera zoom level. 1 = normal, >1 = zoomed in." },
+    offset: { type: "vector", default: { x: 0, y: 0 }, description: "Pixel offset from the followed entity's position." },
+    bounds: { type: "object", default: null, description: "Optional world bounds clamping where the camera can look." },
+    target: { type: "string", default: null, description: "Id of the entity this camera follows. Set via follow()/followEntity(); defaults to the entity this Camera is attached to." },
   };
 
   constructor(overrides = {}) {
@@ -33,7 +32,7 @@ export class Camera extends Component {
   calculatePosition(entity, engine, dt) {
     const source = this.target ?? entity;
 
-    const transform = source?.getComponent(Transform);
+    const transform = source?.getWorldTransform(engine);
     const baseX = transform ? transform.x : 0;
     const baseY = transform ? transform.y : 0;
 

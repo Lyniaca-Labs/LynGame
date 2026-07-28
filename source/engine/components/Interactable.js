@@ -122,7 +122,7 @@ export class Interactable extends Component {
   // after Movement + Camera have both resolved for this frame (see engine
   // _update ordering). Owns press-start, drag-start/drag/drag-end, and click.
   handlePointerEvent(entity, engine, event) {
-    const transform = entity.getComponent("Transform");
+    const transform = entity.getWorldTransform(engine);
     if (!transform) return;
 
     const world = this._screenToWorld(engine, transform, event.x, event.y);
@@ -186,7 +186,7 @@ export class Interactable extends Component {
   // if the box itself moves under a still cursor) and hold (accumulates by
   // dt, not by input events).
   onTick(entity, engine, dt) {
-    const transform = entity.getComponent("Transform");
+    const transform = entity.getWorldTransform(engine);
     if (!transform || !engine.input?.pointer) return;
 
     const world = this._screenToWorld(engine, transform, engine.input.pointer.x, engine.input.pointer.y);

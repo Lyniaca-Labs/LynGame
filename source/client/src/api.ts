@@ -101,6 +101,11 @@ export interface Entity {
   prefab?: string;
   // used in place of components when the entity is a prefab instance
   overrides?: Record<string, Record<string, unknown>>;
+  // id of this entity's parent within the same scene, or absent/null for a
+  // top-level entity. Mirrors Entity.addChild()/parent in the engine
+  // (source/engine/types/Entity.js) — the compiler wires these up into real
+  // addChild() calls when building the scene (see ProjectHandler.ts).
+  parentId?: string | null;
 }
 
 export interface Scene {

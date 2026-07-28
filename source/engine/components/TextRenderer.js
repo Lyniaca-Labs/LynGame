@@ -41,34 +41,34 @@ function loadGoogleFont(family, weight = "400") {
 
 export class TextRenderer extends Component {
   static schema = {
-    text: { type: "string", default: "" },
+    text: { type: "string", default: "", description: "Text to render. Use \\n for line breaks." },
 
     // Font
-    fontFamily: { type: "string", default: "sans-serif" }, // set to a Google Font name to auto-load it
-    googleFont: { type: "boolean", default: false }, // true = fetch fontFamily from Google Fonts
-    fontSize: { type: "number", default: 16 },
-    fontWeight: { type: "string", default: "400" }, // "400", "700", "bold", etc.
-    fontStyle: { type: "string", default: "normal" }, // "normal" | "italic" | "oblique"
+    fontFamily: { type: "string", default: "sans-serif", description: "Font family name. Set googleFont to auto-load it from Google Fonts." },
+    googleFont: { type: "boolean", default: false, description: "If true, fetches fontFamily from Google Fonts automatically." },
+    fontSize: { type: "number", default: 16, description: "Font size in pixels." },
+    fontWeight: { type: "string", default: "400", description: "\"400\", \"700\", \"bold\", etc." },
+    fontStyle: { type: "string", default: "normal", description: "\"normal\" | \"italic\" | \"oblique\"." },
 
     // Color / stroke / shadow
-    color: { type: "color", default: "#fff" },
-    strokeColor: { type: "color", default: "" }, // empty = no stroke
-    strokeWidth: { type: "number", default: 0 },
+    color: { type: "color", default: "#fff", description: "Fill color of the text." },
+    strokeColor: { type: "color", default: "", description: "Outline color. Empty = no stroke." },
+    strokeWidth: { type: "number", default: 0, description: "Outline width in pixels." },
 
     // Layout / box model
-    align: { type: "string", default: "left" }, // "left" | "center" | "right"
-    verticalAlign: { type: "string", default: "top" }, // "top" | "middle" | "bottom"
-    lineHeight: { type: "number", default: 1.2 }, // multiplier of fontSize
-    letterSpacing: { type: "number", default: 0 }, // px
+    align: { type: "string", default: "left", description: "\"left\" | \"center\" | \"right\"." },
+    verticalAlign: { type: "string", default: "top", description: "\"top\" | \"middle\" | \"bottom\"." },
+    lineHeight: { type: "number", default: 1.2, description: "Line height as a multiplier of fontSize." },
+    letterSpacing: { type: "number", default: 0, description: "Extra spacing between letters, in pixels." },
 
     // Wrapping / overflow
-    maxWidth: { type: "number", default: 0 }, // 0 = no wrap/no limit
-    maxHeight: { type: "number", default: 0 }, // 0 = unlimited height
-    wrap: { type: "boolean", default: true }, // wrap onto multiple lines within maxWidth
-    ellipsis: { type: "boolean", default: false }, // truncate with "…" if it overflows maxWidth/maxHeight
+    maxWidth: { type: "number", default: 0, description: "Max width in pixels before wrapping/ellipsis. 0 = no limit." },
+    maxHeight: { type: "number", default: 0, description: "Max height in pixels before lines are dropped/ellipsized. 0 = unlimited." },
+    wrap: { type: "boolean", default: true, description: "Wrap text onto multiple lines within maxWidth." },
+    ellipsis: { type: "boolean", default: false, description: "Truncate with \"…\" if the text overflows maxWidth/maxHeight." },
 
     // Text transform (CSS-style)
-    textTransform: { type: "string", default: "none" }, // "none" | "uppercase" | "lowercase" | "capitalize"
+    textTransform: { type: "string", default: "none", description: "\"none\" | \"uppercase\" | \"lowercase\" | \"capitalize\"." },
   };
 
   constructor(overrides = {}) {

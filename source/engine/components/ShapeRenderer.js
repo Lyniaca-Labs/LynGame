@@ -2,10 +2,10 @@ import { Component } from "../types/Component.js";
 
 export class ShapeRenderer extends Component {
   static schema = {
-    shape: { type: "string", default: "rect" }, // "rect" or "circle"
-    width: { type: "number", default: 32 },
-    height: { type: "number", default: 32 },
-    color: { type: "color", default: "#fff" },
+    shape: { type: "string", default: "rect", description: "\"rect\" or \"circle\"." },
+    width: { type: "number", default: 32, description: "Width in pixels (diameter, for circles)." },
+    height: { type: "number", default: 32, description: "Height in pixels. Ignored for circles (width is used as the diameter)." },
+    color: { type: "color", default: "#fff", description: "Fill color." },
   };
 
   constructor(overrides = {}) {

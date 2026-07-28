@@ -22,8 +22,12 @@ import {
   Search,
   X,
   WandSparkles,
+  Copy,
+  ClipboardCopy,
+  ClipboardPaste,
+  FolderInput,
 } from "lucide-react";
-import { FolderTree, TreeNode, TreeNodeBadge } from "../../ui/FolderTree";
+import { FolderTree, TreeNode, TreeNodeBadge, DropPosition } from "../../ui/FolderTree";
 import { MenuAction } from "../../ui/ActionsMenu";
 import { projectsApi, Entity, graphScriptsApi, AssetEntry, BASE_URL } from "../../api";
 import { CodeFileEditor } from "../../components/CodeFileEditor";
@@ -71,6 +75,59 @@ const textureFilename = (name: string) => {
   return `${withTexture}.json`;
 };
 
+// Carried on TreeNode.meta so drop handling can resolve "same parent as
+// this node" (for sibling drops) or "this node's own id" (for child drops)
+// without re-deriving it from node.id, which only encodes sceneFile+entityId.
+type EntityNodeMeta =
+  | { kind: "entity"; sceneId: string; entityId: string; parentId: string | null }
+  | { kind: "scene"; sceneId: string };
+
+// Turns a scene's flat entities array (Entity.parentId links) into nested
+// TreeNodes for FolderTree — which already has collapse/expand built in, so
+// nesting a card's children under it is enough to get a collapsible
+// hierarchy row for free. An entity whose parentId doesn't resolve to a
+// live sibling (stale reference, e.g. after a partial edit) falls back to
+// rendering at the top level rather than disappearing.
+function buildEntityTree(
+  sceneFile: string,
+  sceneId: string,
+  entities: Entity[],
+  openEntity: (sceneId: string, entityId: string) => void
+): TreeNode[] {
+  const ids = new Set(entities.map((e) => e.id));
+  const byParent = new Map<string, Entity[]>();
+  const roots: Entity[] = [];
+
+  for (const e of entities) {
+    if (e.parentId && ids.has(e.parentId)) {
+      const list = byParent.get(e.parentId) ?? [];
+      list.push(e);
+      byParent.set(e.parentId, list);
+    } else {
+      roots.push(e);
+    }
+  }
+
+  const buildNode = (e: Entity): TreeNode => {
+    const children = byParent.get(e.id);
+    const meta: EntityNodeMeta = {
+      kind: "entity",
+      sceneId,
+      entityId: e.id,
+      parentId: ids.has(e.parentId ?? "") ? e.parentId! : null,
+    };
+    return {
+      id: `${sceneFile}::${e.id}`,
+      label: e.id,
+      onClick: () => openEntity(sceneId, e.id),
+      children: children?.length ? children.map(buildNode) : undefined,
+      meta,
+    };
+  };
+
+  return roots.map(buildNode);
+}
+
 function ExplorerFiles() {
   const { projectData, currentProject } = useProject();
   const {
@@ -81,6 +138,12 @@ function ExplorerFiles() {
     openPrefab,
     addEntity,
     deleteEntity,
+    setEntityParent,
+    duplicateEntity,
+    entityClipboard,
+    copyEntity,
+    pasteEntity,
+    moveEntityToScene,
     createComponent,
     deleteComponent,
     createScript,
@@ -201,16 +264,15 @@ function ExplorerFiles() {
         const isActiveScene = activeSceneId === sceneId && liveScene?.name === sceneId;
         const entities = isActiveScene ? liveScene.entities : sceneEntities[sceneId];
 
+        const sceneMeta: EntityNodeMeta = { kind: "scene", sceneId };
+
         return {
           id: sceneFile,
           label: sceneId,
           badges: sceneBadges(sceneFile),
           onClick: () => openScene(sceneId),
-          children: entities?.map((e) => ({
-            id: `${sceneFile}::${e.id}`,
-            label: e.id,
-            onClick: () => openEntity(sceneId, e.id),
-          })),
+          children: entities ? buildEntityTree(sceneFile, sceneId, entities, openEntity) : undefined,
+          meta: sceneMeta,
         };
       }),
     },
@@ -260,6 +322,19 @@ function ExplorerFiles() {
     },
   ];
 
+  // Clears the Explorer's cached entity list for a scene so the next render
+  // re-fetches it — needed after moveEntityToScene, which persists straight
+  // to disk via the API rather than through the local `scene` draft state,
+  // so the cache would otherwise go stale for whichever of the two scenes
+  // isn't currently open in the Inspector.
+  const invalidateSceneCache = (...sceneIds: string[]) => {
+    setSceneEntities((prev) => {
+      const next = { ...prev };
+      for (const id of sceneIds) delete next[id];
+      return next;
+    });
+  };
+
   const getActions = (node: TreeNode): MenuAction[] => {
     // Entity node, id shape is "sceneFile.json::entityId"
     if (node.id.includes("::")) {
@@ -270,7 +345,35 @@ function ExplorerFiles() {
       const actions: MenuAction[] = [
         { label: "Rename", icon: Pencil, onClick: () => openEntity(sceneId, entityId) },
       ];
+
       if (isActiveScene) {
+        actions.push(
+          { label: "Add Child Entity", icon: Plus, onClick: () => addEntity(entityId) },
+          { label: "Duplicate", icon: Copy, onClick: () => duplicateEntity(entityId) },
+          { label: "Copy", icon: ClipboardCopy, onClick: () => copyEntity(entityId) }
+        );
+
+        if (entityClipboard?.length) {
+          actions.push({
+            label: "Paste as Child",
+            icon: ClipboardPaste,
+            onClick: () => pasteEntity(entityId),
+          });
+        }
+
+        for (const otherSceneFile of projectData.scenes) {
+          if (otherSceneFile === sceneFile) continue;
+          const otherSceneId = otherSceneFile.replace(".json", "");
+          actions.push({
+            label: `Move to "${otherSceneId}"`,
+            icon: FolderInput,
+            onClick: () =>
+              moveEntityToScene(entityId, otherSceneId, () =>
+                invalidateSceneCache(sceneId, otherSceneId)
+              ),
+          });
+        }
+
         actions.push({
           label: "Delete",
           icon: Trash2,
@@ -289,6 +392,9 @@ function ExplorerFiles() {
       const actions: MenuAction[] = [];
       if (isActiveScene) {
         actions.push({ label: "New Entity", icon: Plus, onClick: () => addEntity() });
+        if (entityClipboard?.length) {
+          actions.push({ label: "Paste Entity", icon: ClipboardPaste, onClick: () => pasteEntity(null) });
+        }
       }
       actions.push(
         { label: "Rename", icon: Pencil, onClick: () => console.log("rename", node.id) },
@@ -369,10 +475,76 @@ function ExplorerFiles() {
     return base;
   };
 
+  // Drag-and-drop on the Scenes tree (entity + scene nodes). The source
+  // entity must be in the currently-open (active) scene — that's the only
+  // scene whose entities live in mutable local state; other scenes are just
+  // cached snapshots for display. Where the cursor lands on the target row
+  // decides the outcome (see FolderTree's DropPosition/resolveDropPosition):
+  //   - dropped in the top/bottom ~30% of a row  -> sibling, at that
+  //     position, same parent as the target
+  //   - dropped in the middle ~40% of an entity row -> child of the target
+  //   - dropped anywhere on a scene row -> top-level in that scene
+  // Dropping on a DIFFERENT scene than the dragged entity's own goes through
+  // moveEntityToScene (persists both scene files immediately) instead of
+  // setEntityParent (local draft only) — same rule the "Move to Scene"
+  // context-menu action already follows.
+  const getEntityDragId = (node: TreeNode) => (node.id.includes("::") ? node.id : undefined);
+
+  const handleEntityDrop = (draggedId: string, targetNode: TreeNode, position: DropPosition) => {
+    if (draggedId === targetNode.id) return;
+    const [draggedSceneFile, draggedEntityId] = draggedId.split("::");
+    if (!draggedEntityId) return;
+
+    const sourceSceneId = draggedSceneFile.replace(".json", "");
+    if (activeSceneId !== sourceSceneId) return; // only the open scene's entities are mutable via drag
+
+    const meta = targetNode.meta as EntityNodeMeta | undefined;
+    if (!meta) return; // dropped on something outside the entity hierarchy (shouldn't happen, defensive)
+
+    let targetSceneId: string;
+    let desiredParentId: string | null;
+    let referenceId: string | undefined;
+    let refPosition: "before" | "after" | undefined;
+
+    if (meta.kind === "scene") {
+      targetSceneId = meta.sceneId;
+      desiredParentId = null;
+    } else {
+      targetSceneId = meta.sceneId;
+      if (position === "inside") {
+        desiredParentId = meta.entityId;
+      } else {
+        desiredParentId = meta.parentId;
+        referenceId = meta.entityId;
+        refPosition = position;
+      }
+    }
+
+    if (draggedEntityId === desiredParentId) return; // can't become its own parent
+
+    if (targetSceneId === sourceSceneId) {
+      setEntityParent(draggedEntityId, desiredParentId, referenceId, refPosition);
+    } else {
+      moveEntityToScene(
+        draggedEntityId,
+        targetSceneId,
+        () => invalidateSceneCache(sourceSceneId, targetSceneId),
+        desiredParentId
+      );
+    }
+  };
+
   return (
     <div className="p-1">
       {sections.map((section) => (
-        <FolderTree key={section.id} node={section} getActions={getActions} defaultOpen />
+        <FolderTree
+          key={section.id}
+          node={section}
+          getActions={getActions}
+          defaultOpen
+          getDragId={section.id === "scenes" ? getEntityDragId : undefined}
+          onDropNode={section.id === "scenes" ? handleEntityDrop : undefined}
+        />
       ))}
 
       <Modal

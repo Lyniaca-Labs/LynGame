@@ -2,61 +2,6 @@
   "name": "main",
   "entities": [
     {
-      "id": "fallingBox",
-      "components": {
-        "Transform": {
-          "x": 300,
-          "y": 20,
-          "rotation": 0
-        },
-        "SpriteRenderer": {
-          "width": 100,
-          "height": 100,
-          "color": "#00ff00",
-          "sprite": "tree"
-        },
-        "Movement": {
-          "maxSpeed": 800,
-          "acceleration": 800,
-          "friction": 800,
-          "gravity": 980,
-          "gravityDirection": {
-            "x": 0,
-            "y": 1
-          },
-          "drag": 0,
-          "bounce": 0.3,
-          "mass": 1,
-          "velocity": {
-            "x": 0,
-            "y": 0
-          }
-        },
-        "Interactable": {
-          "width": 0,
-          "height": 0,
-          "offsetX": 0,
-          "offsetY": 0,
-          "cursor": "default",
-          "holdThreshold": 0.4,
-          "dragThreshold": 50,
-          "autoDimensions": true,
-          "onClick": "engine.callScript(\"test\", \"hello\")",
-          "onHoverEnter": null,
-          "onHoverExit": null,
-          "onHold": null,
-          "onDragStart": null,
-          "onDrag": null,
-          "onDragEnd": null
-        }
-      },
-      "scripts": [
-        "DoorScript",
-        "LogScript",
-        "InputScript"
-      ]
-    },
-    {
       "id": "enemy1",
       "prefab": "Enemy",
       "overrides": {
@@ -176,6 +121,62 @@
           "autoDimensions": true
         }
       }
+    },
+    {
+      "id": "fallingBox",
+      "components": {
+        "Transform": {
+          "x": 300,
+          "y": 20,
+          "rotation": 0,
+          "zIndex": 1
+        },
+        "SpriteRenderer": {
+          "width": 100,
+          "height": 100,
+          "color": "#00ff00",
+          "sprite": "tree"
+        },
+        "Movement": {
+          "maxSpeed": 800,
+          "acceleration": 800,
+          "friction": 800,
+          "gravity": 980,
+          "gravityDirection": {
+            "x": 0,
+            "y": 1
+          },
+          "drag": 0,
+          "bounce": 0.3,
+          "mass": 1,
+          "velocity": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        "Interactable": {
+          "width": 0,
+          "height": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "cursor": "default",
+          "holdThreshold": 0.4,
+          "dragThreshold": 50,
+          "autoDimensions": true,
+          "onClick": "engine.callScript(\"test\", \"hello\")",
+          "onHoverEnter": null,
+          "onHoverExit": null,
+          "onHold": null,
+          "onDragStart": null,
+          "onDrag": null,
+          "onDragEnd": null
+        }
+      },
+      "scripts": [
+        "DoorScript",
+        "LogScript",
+        "InputScript"
+      ]
     }
   ]
 }

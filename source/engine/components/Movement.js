@@ -3,15 +3,15 @@ import { Transform } from "./Transform.js";
 
 export class Movement extends Component {
   static schema = {
-    maxSpeed: { type: "number", default: 300 },
-    acceleration: { type: "number", default: 800 },
-    friction: { type: "number", default: 600 },
-    gravity: { type: "number", default: 0 },
-    gravityDirection: { type: "vector", default: { x: 0, y: 1 } },
-    drag: { type: "number", default: 0 },
-    bounce: { type: "number", default: 0 },
-    mass: { type: "number", default: 1 },
-    velocity: { type: "vector", default: { x: 0, y: 0 } },
+    maxSpeed: { type: "number", default: 300, description: "Clamps total velocity magnitude, in px/sec." },
+    acceleration: { type: "number", default: 800, description: "px/sec² applied by accelerateInDirection()." },
+    friction: { type: "number", default: 600, description: "px/sec² of deceleration applied when no force is active this frame." },
+    gravity: { type: "number", default: 0, description: "Constant px/sec² acceleration applied along gravityDirection." },
+    gravityDirection: { type: "vector", default: { x: 0, y: 1 }, description: "Direction gravity pulls in. Does not need to be pre-normalized." },
+    drag: { type: "number", default: 0, description: "Fraction of velocity lost per second, 0-1 (air resistance)." },
+    bounce: { type: "number", default: 0, description: "Restitution 0-1, reserved for a future collision system." },
+    mass: { type: "number", default: 1, description: "Scales force -> acceleration; applyForce()/gravity respect this." },
+    velocity: { type: "vector", default: { x: 0, y: 0 }, description: "Current velocity in px/sec. Can be read/set directly or via setVelocity()." },
   };
   
   constructor({

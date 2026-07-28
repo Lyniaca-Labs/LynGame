@@ -14,6 +14,72 @@ import {
   graphScriptsApi,
 } from "../api";
 
+// Returns `rootId` plus every descendant reachable through Entity.parentId,
+// root first — the unit of work for delete/duplicate/copy/move, since those
+// all need to carry a card's whole bg+art+text+icon subtree along together,
+// not just the one entity clicked.
+function collectSubtree(entities: Entity[], rootId: string): Entity[] {
+  const byParent = new Map<string, Entity[]>();
+  for (const e of entities) {
+    if (!e.parentId) continue;
+    const list = byParent.get(e.parentId) ?? [];
+    list.push(e);
+    byParent.set(e.parentId, list);
+  }
+
+  const root = entities.find((e) => e.id === rootId);
+  if (!root) return [];
+
+  const result: Entity[] = [];
+  const stack = [root];
+  while (stack.length) {
+    const e = stack.pop()!;
+    result.push(e);
+    stack.push(...(byParent.get(e.id) ?? []));
+  }
+  return result;
+}
+
+// Deep-clones `subtree` (as returned by collectSubtree, root first) with
+// fresh ids unique against `existingEntities`, remapping internal
+// parent/child links so the cloned subtree's shape is preserved. The
+// clone's root is re-parented to `newParentId`. Shared by duplicateEntity,
+// copyEntity/pasteEntity, and moveEntityToScene.
+function cloneSubtreeWithNewIds(
+  subtree: Entity[],
+  existingEntities: Entity[],
+  newParentId: string | null
+): { entities: Entity[]; newRootId: string } {
+  const existingIds = new Set(existingEntities.map((e) => e.id));
+  const idMap = new Map<string, string>();
+
+  for (const e of subtree) {
+    const base = e.id.replace(/_copy\d*$/, "");
+    let newId = `${base}_copy`;
+    let n = 1;
+    while (existingIds.has(newId) || idMap.has(newId)) {
+      n += 1;
+      newId = `${base}_copy${n}`;
+    }
+    existingIds.add(newId);
+    idMap.set(e.id, newId);
+  }
+
+  const rootOriginalId = subtree[0].id;
+  const entities = subtree.map((e) => {
+    const clone: Entity = structuredClone(e);
+    clone.id = idMap.get(e.id)!;
+    if (e.id === rootOriginalId) {
+      clone.parentId = newParentId ?? undefined;
+    } else if (clone.parentId && idMap.has(clone.parentId)) {
+      clone.parentId = idMap.get(clone.parentId);
+    }
+    return clone;
+  });
+
+  return { entities, newRootId: idMap.get(rootOriginalId)! };
+}
+
 export type InspectorTarget =
   | { kind: "scene"; sceneId: string }
   | { kind: "entity"; sceneId: string; entityId: string }
@@ -74,8 +140,26 @@ interface SceneEditorContextValue {
   addPrefabScript: (scriptName: string) => void;
   removePrefabScript: (index: number) => void;
 
-  addEntity: () => void;
-  deleteEntity: (entityId: string) => void;
+  addEntity: (parentId?: string | null) => void;
+  deleteEntity: (entityId: string) => void; // cascades to the entity's whole child subtree
+
+  // hierarchy: reparenting, duplicate, copy/paste, cross-scene move
+  setEntityParent: (
+    entityId: string,
+    parentId: string | null,
+    referenceId?: string,
+    position?: "before" | "after"
+  ) => void;
+  duplicateEntity: (entityId: string) => void;
+  entityClipboard: Entity[] | null;
+  copyEntity: (entityId: string) => void;
+  pasteEntity: (parentId?: string | null) => void;
+  moveEntityToScene: (
+    entityId: string,
+    targetSceneId: string,
+    onMoved?: () => void,
+    newParentId?: string | null
+  ) => Promise<void>;
 
   save: () => Promise<void>;
 
@@ -107,6 +191,12 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
 
   const [prefabCache, setPrefabCache] = useState<Record<string, PrefabData>>({});
   const [prefabDraft, setPrefabDraft] = useState<PrefabData | null>(null);
+
+  // In-memory clipboard for entity copy/paste — a plain ref-backed subtree
+  // snapshot (root + descendants), not tied to any one scene, so paste can
+  // target a different scene than the one that was copied. Mirrors the
+  // clipboard pattern in GraphEditor.tsx (copySelection/pasteClipboard).
+  const [entityClipboard, setEntityClipboard] = useState<Entity[] | null>(null);
 
   // Load the scene whenever the selected scene changes (regardless of
   // whether the target is the scene itself or an entity inside it).
@@ -411,7 +501,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     [updatePrefabDraft]
   );
 
-  const addEntity = useCallback(() => {
+  const addEntity = useCallback((parentId: string | null = null) => {
     if (!scene || !target || target.kind === "prefab") return;
 
     const existingIds = new Set(scene.entities.map((e) => e.id));
@@ -422,22 +512,179 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
       id = `entity${n}`;
     }
 
-    const newEntity: Entity = { id, components: { Transform: { x: 0, y: 0, rotation: 0 } } };
+    const newEntity: Entity = {
+      id,
+      components: { Transform: { x: 0, y: 0, rotation: 0 } },
+      parentId: parentId ?? undefined,
+    };
     setScene({ ...scene, entities: [...scene.entities, newEntity] });
     setDirty(true);
     // Jump straight to the new entity so it's ready to edit.
     setTarget({ kind: "entity", sceneId: target.sceneId, entityId: id });
   }, [scene, target]);
 
+  // Deletes `entityId` AND its whole descendant subtree — mirrors the
+  // engine's own Entity.destroy(), which cascades to children (see
+  // source/engine/types/Entity.js) — otherwise orphaned children would be
+  // left behind pointing at a parentId that no longer exists.
   const deleteEntity = useCallback((entityId: string) => {
-    setScene((prev) =>
-      prev ? { ...prev, entities: prev.entities.filter((e) => e.id !== entityId) } : prev
-    );
+    if (!scene) return;
+    const removedIds = new Set(collectSubtree(scene.entities, entityId).map((e) => e.id));
+    setScene({ ...scene, entities: scene.entities.filter((e) => !removedIds.has(e.id)) });
     setDirty(true);
     setTarget((prev) =>
-      prev?.kind === "entity" && prev.entityId === entityId ? { kind: "scene", sceneId: prev.sceneId } : prev
+      prev?.kind === "entity" && removedIds.has(prev.entityId) ? { kind: "scene", sceneId: prev.sceneId } : prev
     );
-  }, []);
+  }, [scene]);
+
+  // Reparents `entityId` under `parentId` (or to top-level if null). Refuses
+  // silently on a self-parent or a parent that's actually one of the
+  // entity's own descendants — both would create a cycle that
+  // getWorldTransform's ancestor walk would recurse into forever.
+  //
+  // Optionally also repositions the entity in the array relative to
+  // `referenceId` (`"before"`/`"after"` it) — this is what lets a drag-drop
+  // land as a specific sibling, not just "some child of this parent";
+  // array order otherwise only affects tree/inspector display order, not
+  // gameplay (draw order is Transform.zIndex, not array position).
+  const setEntityParent = useCallback(
+    (
+      entityId: string,
+      parentId: string | null,
+      referenceId?: string,
+      position?: "before" | "after"
+    ) => {
+      if (!scene || entityId === parentId) return;
+      if (parentId && collectSubtree(scene.entities, entityId).some((e) => e.id === parentId)) return;
+
+      let entities = scene.entities.map((e) =>
+        e.id === entityId ? { ...e, parentId: parentId ?? undefined } : e
+      );
+
+      if (referenceId && position && referenceId !== entityId) {
+        const moved = entities.find((e) => e.id === entityId);
+        const rest = entities.filter((e) => e.id !== entityId);
+        const refIndex = rest.findIndex((e) => e.id === referenceId);
+        if (moved && refIndex !== -1) {
+          rest.splice(position === "before" ? refIndex : refIndex + 1, 0, moved);
+          entities = rest;
+        }
+      }
+
+      setScene({ ...scene, entities });
+      setDirty(true);
+    },
+    [scene]
+  );
+
+  // Clones entityId + its whole subtree as new siblings (same parent as the
+  // original), with fresh ids and internal parent links remapped so the
+  // duplicated hierarchy's shape matches the original.
+  const duplicateEntity = useCallback((entityId: string) => {
+    if (!scene || !target || target.kind === "prefab") return;
+    const entity = scene.entities.find((e) => e.id === entityId);
+    if (!entity) return;
+
+    const subtree = collectSubtree(scene.entities, entityId);
+    const { entities: clones, newRootId } = cloneSubtreeWithNewIds(
+      subtree,
+      scene.entities,
+      entity.parentId ?? null
+    );
+
+    setScene({ ...scene, entities: [...scene.entities, ...clones] });
+    setDirty(true);
+    setTarget({ kind: "entity", sceneId: target.sceneId, entityId: newRootId });
+  }, [scene, target]);
+
+  const copyEntity = useCallback((entityId: string) => {
+    if (!scene) return;
+    const subtree = collectSubtree(scene.entities, entityId);
+    if (subtree.length) setEntityClipboard(structuredClone(subtree));
+  }, [scene]);
+
+  // Pastes the last copied subtree into the CURRENTLY open scene, optionally
+  // under `parentId`. Works across scenes (copy in scene A, switch to scene
+  // B, paste) since the clipboard is plain component state, not scoped to
+  // one scene's entities array.
+  const pasteEntity = useCallback((parentId: string | null = null) => {
+    if (!scene || !target || target.kind === "prefab" || !entityClipboard?.length) return;
+
+    const { entities: clones, newRootId } = cloneSubtreeWithNewIds(
+      entityClipboard,
+      scene.entities,
+      parentId
+    );
+
+    setScene({ ...scene, entities: [...scene.entities, ...clones] });
+    setDirty(true);
+    setTarget({ kind: "entity", sceneId: target.sceneId, entityId: newRootId });
+  }, [scene, target, entityClipboard]);
+
+  // Moves entityId + its subtree OUT of the currently open scene and INTO
+  // targetSceneId, persisting both scenes immediately (unlike every other
+  // mutator here, which only touches local draft state until save()) —
+  // this crosses two files, so leaving it as unsaved local-only state would
+  // risk losing the entity entirely if the tab closed mid-edit. `newParentId`
+  // re-parents the moved root under an existing entity in the destination
+  // scene (dropped "inside" it); omit/null to land top-level. Ids that
+  // collide with what's already there get suffixed.
+  const moveEntityToScene = useCallback(
+    async (
+      entityId: string,
+      targetSceneId: string,
+      onMoved?: () => void,
+      newParentId: string | null = null
+    ) => {
+      if (!scene || !currentProject || !target || target.kind === "prefab") return;
+      if (targetSceneId === target.sceneId) return;
+
+      const subtree = collectSubtree(scene.entities, entityId);
+      if (!subtree.length) return;
+
+      setSaving(true);
+      setError(null);
+      try {
+        const { scene: targetScene } = await projectsApi.getScene(currentProject, targetSceneId);
+        // Only honor newParentId if it actually exists in the destination
+        // scene — a stale/unresolvable target just falls back to top-level
+        // instead of producing a dangling parentId reference.
+        const resolvedParentId =
+          newParentId && targetScene.entities.some((e) => e.id === newParentId) ? newParentId : null;
+        const { entities: movedEntities } = cloneSubtreeWithNewIds(
+          subtree,
+          targetScene.entities,
+          resolvedParentId
+        );
+
+        await projectsApi.saveScene(currentProject, targetSceneId, {
+          ...targetScene,
+          entities: [...targetScene.entities, ...movedEntities],
+        });
+
+        const removedIds = new Set(subtree.map((e) => e.id));
+        const nextSourceScene: Scene = {
+          ...scene,
+          entities: scene.entities.filter((e) => !removedIds.has(e.id)),
+        };
+        await projectsApi.saveScene(currentProject, target.sceneId, nextSourceScene);
+
+        setScene(nextSourceScene);
+        setDirty(false);
+        setTarget((prev) =>
+          prev?.kind === "entity" && removedIds.has(prev.entityId)
+            ? { kind: "scene", sceneId: prev.sceneId }
+            : prev
+        );
+        onMoved?.();
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setSaving(false);
+      }
+    },
+    [scene, currentProject, target]
+  );
 
   const save = useCallback(async () => {
     if (!currentProject || !target) return;
@@ -666,6 +913,12 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         removePrefabScript,
         addEntity,
         deleteEntity,
+        setEntityParent,
+        duplicateEntity,
+        entityClipboard,
+        copyEntity,
+        pasteEntity,
+        moveEntityToScene,
         save,
 
         // need to make

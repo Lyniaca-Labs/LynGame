@@ -5,6 +5,8 @@ import { ShapeRenderer } from "../components/ShapeRenderer.js";
 import { TextRenderer } from "../components/TextRenderer.js";
 import { Camera } from "../components/Camera.js";
 import { Interactable } from "../components/Interactable.js";
+import { Anchor } from "../components/Anchor.js";
+import { Animator } from "../components/Animator.js";
 
 export const DEFAULT_COMPONENTS = {
   Interactable,
@@ -14,4 +16,6 @@ export const DEFAULT_COMPONENTS = {
   TextRenderer,
   Camera,
   Movement,
+  Anchor,
+  Animator,
 };

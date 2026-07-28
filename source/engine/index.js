@@ -8,7 +8,9 @@ import { SpriteRenderer } from "./components/SpriteRenderer.js";
 import { PrefabRegistry } from "./modules/PrefabRegistry.js";
 import AssetLoader from "./modules/AssetLoader.js";
 import { Scene } from "./types/Scene.js";
+import * as GUI from "./modules/GUI.js";
 export { LGTexture } from "./modules/TextureEngine.js";
+export * as GUI from "./modules/GUI.js";
 
 export class GameEngine {
   constructor(gameContainer, options = {}) {
@@ -30,6 +32,7 @@ export class GameEngine {
 
     this.prefabs = new PrefabRegistry(this);
     this.assets = new AssetLoader();
+    this.gui = GUI; // { layoutHand, layoutRow, layoutStack } — scripts call engine.gui.layoutHand(...) etc.
 
     this.startTime = Date.now();
     this._pausedElapsed = 0;
@@ -124,9 +127,21 @@ export class GameEngine {
       console.error(`Scene "${name}" not found`);
       return;
     }
-    for (const entity of [...this.entities]) {
-      this.removeEntity(entity.id);
+
+    // Bulk teardown instead of calling removeEntity() per-entity (which
+    // re-filters `this.entities` on every call, O(n^2) for n live entities —
+    // the more a scene had spawned before switching, the laggier the switch
+    // got). We're replacing the whole array anyway, so just flag everything
+    // destroyed and fire onDestroy once each.
+    const oldEntities = this.entities;
+    this.entities = [];
+    for (const entity of oldEntities) entity._destroyed = true;
+    for (const entity of oldEntities) {
+      for (const instance of entity.components.values()) {
+        instance.onDestroy?.(entity, this);
+      }
     }
+
     this.camera = null;
     this.currentScene = name;
     scene.load(this);
@@ -381,16 +396,28 @@ export class GameEngine {
   _update(dt) {
     this._cachedViewportSize = null;
 
+    // Snapshot the list once per frame. A script can call loadScene()/
+    // removeEntity() mid-loop, which reassigns `this.entities` to a brand
+    // new array — without this snapshot, the for-of below would keep
+    // iterating whatever `this.entities` currently points to (the NEW
+    // scene's entities), running the OLD scene's still-in-progress script
+    // pass against them (e.g. an old-scene spawner script would spawn into
+    // the new scene). We iterate this frozen `entities` list instead, and
+    // skip anything flagged `_destroyed` along the way.
+    const entities = [...this.entities];
+
     // 1. Scripts + every component EXCEPT Camera/Interactable run first.
     //    This is where Movement lives, so gravity/velocity resolve transform.y
     //    for this frame before anything reads it for camera-follow or hit-testing.
     //    (Camera and Interactable are excluded here and ticked explicitly below,
     //    in the order they actually depend on each other.)
-    for (const entity of this.entities) {
+    for (const entity of entities) {
+      if (entity._destroyed) continue;
       const camera = entity.getComponent("Camera");
       const interactable = entity.getComponent("Interactable");
 
       for (const script of entity.scripts) script(entity, this, dt);
+      if (entity._destroyed) continue; // a script above may have switched scenes / destroyed this entity
       for (const component of entity.components.values()) {
         if (component === camera || component === interactable) continue;
         component.onTick?.(entity, this, dt);
@@ -398,7 +425,8 @@ export class GameEngine {
     }
 
     // 2. Camera follows this frame's FINAL transform (post-Movement).
-    for (const entity of this.entities) {
+    for (const entity of entities) {
+      if (entity._destroyed) continue;
       entity.getComponent("Camera")?.onTick?.(entity, this, dt);
     }
 
@@ -406,7 +434,8 @@ export class GameEngine {
     //    Edge-triggered only: press-start, drag-start/drag/drag-end, click.
     const events = this.input.drainPointerEvents();
     for (const event of events) {
-      for (const entity of this.entities) {
+      for (const entity of entities) {
+        if (entity._destroyed) continue;
         entity.getComponent("Interactable")?.handlePointerEvent?.(entity, this, event);
       }
     }
@@ -415,7 +444,8 @@ export class GameEngine {
     //    (hover can change with no new events if the box moves under a still
     //    cursor; hold accumulates by dt regardless of events), so they need a
     //    per-frame pass against the same final transform + camera as above.
-    for (const entity of this.entities) {
+    for (const entity of entities) {
+      if (entity._destroyed) continue;
       entity.getComponent("Interactable")?.onTick?.(entity, this, dt);
     }
   }
@@ -426,8 +456,18 @@ export class GameEngine {
     if (!gameLayer) return;
     gameLayer.clear();
 
-    for (const entity of this.entities) {
-      const transform = entity.getComponent(Transform);
+    // Stable sort by Transform.zIndex so cards/UI painted later (higher
+    // zIndex) land on top — e.g. hand fanning, or bumping a dragged card's
+    // zIndex so it draws above the rest of the hand while held.
+    const drawOrder = [...this.entities].sort((a, b) => {
+      const za = a.getComponent(Transform)?.zIndex ?? 0;
+      const zb = b.getComponent(Transform)?.zIndex ?? 0;
+      return za - zb;
+    });
+
+    for (const entity of drawOrder) {
+      if (entity._destroyed) continue;
+      const transform = entity.getWorldTransform(this);
       if (!transform) continue;
 
       for (const component of entity.components.values()) {
