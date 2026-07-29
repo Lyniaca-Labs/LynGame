@@ -6,17 +6,16 @@ top of that file). Completed work with implementation detail lives in
 
 ## Next Session: Feature Expansion
 
-Two feature areas were scoped out for a dedicated design pass next session
+One feature area was scoped out for a dedicated design pass next session
 (brainstorm → spec → plan, not just a quick pass):
 
 - **Pixel art editor features** — pick from the candidate list under
   [Pixel Art Editor](#pixel-art-editor) below (zoom/pan, color scheme
   tools, opacity, brush size, etc.) and design the ones worth building.
-- **TODO/Trello board extension** — a new drag-and-drop board extension
-  alongside the existing `source/extensions/*` ones (pixel-art,
-  sfx-generator), for organizing ideas visually instead of as a flat
-  markdown list. Needs a real design pass (data model, drag/drop
-  interactions, relationship to this roadmap file).
+
+(The other item that used to be listed here, a TODO/Trello board
+extension, went through its own design pass and shipped — see
+`source/extensions/board/` and Editor Extensions below.)
 
 ---
 
@@ -26,24 +25,25 @@ Two feature areas were scoped out for a dedicated design pass next session
 
 ## Pixel Art Editor
 
-- [ ] allow zooming out and panning
-- [ ] automatic color scheme detection
-- [ ] tool that changes your entire sprite to fit a new color scheme
-- [ ] color scheme generator (like coolors.co)
-- [ ] ability to actually change colors
-- [ ] ability to change opacity
-- [ ] change brush size
-- [ ] just overall good pixel art tools
+- [x] allow zooming out and panning
+- [x] automatic color scheme detection
+- [x] tool that changes your entire sprite to fit a new color scheme
+- [x] color scheme generator (like coolors.co)
+- [x] ability to actually change colors
+- [x] ability to change opacity
+- [x] change brush size
+- [x] just overall good pixel art tools
 
 ## Spritesheets
 
 - [ ] SpriteSheets — faster card art iteration than one texture per card
-- [ ] spritesheet partitioner
+- [ ] spritesheet partitioner (extension)
   - [ ] load asset -> select which frames are keyed at indexes -> save as a new asset
   - [ ] needs spritesheet support -> should kinda work like animation clips
 
 ## Open Bugs
 
+- [ ] there should be an ability to import a pallete into pixel art editor and also ability to use a certain pallete for applying to sprite / ability to edit the colors in generated pallete
 - [ ] switching projects does not fully refresh everything
 - [ ] node editor wires / edges are laggy (defer)
 - [ ] need checkbox component for editor
@@ -57,6 +57,7 @@ Two feature areas were scoped out for a dedicated design pass next session
 ## Graphics Framework
 
 - [ ] ability to query in engine with name.child.subchild and name.child.subchild:component or :component.property
+- [ ] ability to rotate around a point / other entity. transform.centerpoint (relative / absolute)
 - [ ] layout component for entities -> like flexbox / grid, will auto format children
 - [ ] debug mode that shows bounding box
 - [ ] icons for premade components
@@ -159,7 +160,7 @@ extension instead of needing engine/editor changes.
 - [ ] Tilemap creator
 - [ ] voice to synth
 - [ ] visual Animation editor
-- [ ] TODO/Trello board (see [Next Session](#next-session-feature-expansion) above)
+- [x] TODO/Trello board (`source/extensions/board/`)
 - [ ] google magenta tensorflow running in browser for music generation
 - [ ] drums too
 
