@@ -1,7 +1,7 @@
 // Inspector.tsx — full file
 
 import { ReactNode, useEffect, useState } from "react";
-import { Trash2, RefreshCw, X, Pencil } from "lucide-react";
+import { Trash2, RefreshCw, X, Pencil, ChevronDown, ChevronRight } from "lucide-react";
 import { Container } from "../../ui/Container";
 import { Select, SelectOption } from "../../ui/Select";
 import { Button } from "../../ui/Button";
@@ -1057,10 +1057,17 @@ function OverrideComponentPanel({
       defaultValue: values[key],
     }));
 
+  const [collapsed, setCollapsed] = useState(false);
+
   return (
     <div className="rounded border border-[var(--color-border)] p-2">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text)]">
+      <div className={collapsed ? "flex items-center justify-between" : "mb-2 flex items-center justify-between"}>
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text)]"
+        >
+          {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
           {componentName}
           {hasOverride && (
             <span
@@ -1068,7 +1075,7 @@ function OverrideComponentPanel({
               title="Overridden"
             />
           )}
-        </span>
+        </button>
         {hasOverride && (
           <button
             type="button"
@@ -1081,20 +1088,22 @@ function OverrideComponentPanel({
           </button>
         )}
       </div>
-      <div className="space-y-1.5">
-        {fieldDefs.map((def) => (
-          <SchemaField
-            key={def.key}
-            label={def.key}
-            description={def.description}
-            options={def.options}
-            type={def.type}
-            value={values[def.key] ?? def.defaultValue}
-            componentRegistry={componentRegistry}
-            onChange={(v) => onFieldChange(entityId, componentName, def.key, v)}
-          />
-        ))}
-      </div>
+      {!collapsed && (
+        <div className="space-y-1.5">
+          {fieldDefs.map((def) => (
+            <SchemaField
+              key={def.key}
+              label={def.key}
+              description={def.description}
+              options={def.options}
+              type={def.type}
+              value={values[def.key] ?? def.defaultValue}
+              componentRegistry={componentRegistry}
+              onChange={(v) => onFieldChange(entityId, componentName, def.key, v)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1138,10 +1147,19 @@ function ComponentPanel({
       defaultValue: values[key],
     }));
 
+  const [collapsed, setCollapsed] = useState(false);
+
   return (
     <div className="rounded border border-[var(--color-border)] p-2">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-medium text-[var(--color-text)]">{componentName}</span>
+      <div className={collapsed ? "flex items-center justify-between" : "mb-2 flex items-center justify-between"}>
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text)]"
+        >
+          {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+          {componentName}
+        </button>
         <button
           type="button"
           onClick={onRemove}
@@ -1151,20 +1169,22 @@ function ComponentPanel({
           <Trash2 size={12} />
         </button>
       </div>
-      <div className="space-y-1.5">
-        {fieldDefs.map((def) => (
-          <SchemaField
-            key={def.key}
-            options={def.options}
-            label={def.key}
-            type={def.type}
-            description={def.description}
-            value={values[def.key] ?? def.defaultValue}
-            componentRegistry={componentRegistry}
-            onChange={(v) => onFieldChange(entityId, componentName, def.key, v)}
-          />
-        ))}
-      </div>
+      {!collapsed && (
+        <div className="space-y-1.5">
+          {fieldDefs.map((def) => (
+            <SchemaField
+              key={def.key}
+              options={def.options}
+              label={def.key}
+              type={def.type}
+              description={def.description}
+              value={values[def.key] ?? def.defaultValue}
+              componentRegistry={componentRegistry}
+              onChange={(v) => onFieldChange(entityId, componentName, def.key, v)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

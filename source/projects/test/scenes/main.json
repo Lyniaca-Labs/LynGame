@@ -37,6 +37,9 @@
         "Transform": {
           "x": 101,
           "y": 150
+        },
+        "Opacity": {
+          "value": 0.2
         }
       },
       "scripts": [

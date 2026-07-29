@@ -108,7 +108,7 @@ LATER
   - [x] codemirror code editor should be based on selected theme
   - [ ] get open in vscode working
   - [x] should be able to put components on a prefab instance, seperate from overrides
-  - [ ] ability to collapse components in inspector
+  - [x] ability to collapse components in inspector — chevron toggle on each `ComponentPanel`/`OverrideComponentPanel` header (`source/client/src/layout/sections/Inspector.tsx`), local state, resets to expanded per session
   - [ ] undo / redo
   - [ ] visual editor and context menu in scene
     - [x] script visual editor
@@ -184,6 +184,8 @@ LATER
 - [ ] Common gameplay components
 - [ ] Reusable asset library
 - [ ] Built-in icon pack
+- [ ] text to speech support
+- [ ] container system
 
 ---
 
@@ -229,6 +231,7 @@ as its own extension instead of needing engine/editor changes.
 - [ ] Sprite creator
 - [ ] Texture creator
 - [ ] Tilemap creator
+- [ ] voice to synth 
 - [x] Audio creator — `source/extensions/sfx-generator/` (sfxr-style synth: waveform/envelope/frequency/vibrato/arpeggio/duty/repeat/phaser/filters, presets + randomize/mutate, saves a real .wav into the project's assets)
 - [x] Pixel art editor — `source/extensions/pixel-art/` (first extension, built as the system's example/proof of concept)
 - [ ] visual Animation editor

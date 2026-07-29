@@ -7,6 +7,7 @@ import { Camera } from "../components/Camera.js";
 import { Interactable } from "../components/Interactable.js";
 import { Anchor } from "../components/Anchor.js";
 import { Animator } from "../components/Animator.js";
+import { Opacity } from "../components/Opacity.js";
 
 export const DEFAULT_COMPONENTS = {
   Interactable,
@@ -18,4 +19,5 @@ export const DEFAULT_COMPONENTS = {
   Movement,
   Anchor,
   Animator,
+  Opacity,
 };

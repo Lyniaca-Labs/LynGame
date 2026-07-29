@@ -111,12 +111,19 @@
         <option value="24">24×24</option>
         <option value="32">32×32</option>
         <option value="48">48×48</option>
+        <option value="custom" id="customSizeOption" style="display:none">Custom</option>
       </select>
     </label>
 
     <input type="color" id="colorPicker" value="#4f9eff" title="Custom color" />
     <button id="eraserBtn" title="Eraser">Eraser</button>
     <button id="clearBtn" title="Clear the whole canvas">Clear</button>
+
+    <label>Open
+      <select id="openSelect">
+        <option value="">Load existing…</option>
+      </select>
+    </label>
 
     <span style="flex:1"></span>
 
@@ -149,6 +156,8 @@
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");
   const gridSizeSelect = document.getElementById("gridSize");
+  const customSizeOption = document.getElementById("customSizeOption");
+  const openSelect = document.getElementById("openSelect");
   const colorPicker = document.getElementById("colorPicker");
   const eraserBtn = document.getElementById("eraserBtn");
   const clearBtn = document.getElementById("clearBtn");
@@ -158,26 +167,39 @@
   const swatchesEl = document.getElementById("swatches");
 
   const CELL_DISPLAY_SIZE = 20; // on-screen px per pixel-art cell
-  let gridSize = parseInt(gridSizeSelect.value, 10);
+  let gridW = parseInt(gridSizeSelect.value, 10);
+  let gridH = gridW;
   let cells = [];
   let selectedColor = colorPicker.value;
   let eraserActive = false;
   let painting = false;
   let paintingErase = false; // right-click / eraser-tool paint = erase this stroke
 
+  const stripExt = (name) => name.replace(/\.png$/i, "");
+
+  // Square canvas from a preset/typed size — the common "start a new sprite" path.
   function resetGrid(size) {
-    gridSize = size;
-    cells = Array.from({ length: size * size }, () => null); // null = transparent
-    canvas.width = size * CELL_DISPLAY_SIZE;
-    canvas.height = size * CELL_DISPLAY_SIZE;
+    loadGrid(size, size, Array.from({ length: size * size }, () => null));
+    customSizeOption.style.display = "none";
+    gridSizeSelect.value = String(size);
+  }
+
+  // Arbitrary WxH grid, populated from `data` (row-major, null = transparent) —
+  // used both by resetGrid() and by opening an existing (possibly non-square) asset.
+  function loadGrid(w, h, data) {
+    gridW = w;
+    gridH = h;
+    cells = data;
+    canvas.width = w * CELL_DISPLAY_SIZE;
+    canvas.height = h * CELL_DISPLAY_SIZE;
     render();
   }
 
   function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (let y = 0; y < gridSize; y++) {
-      for (let x = 0; x < gridSize; x++) {
-        const color = cells[y * gridSize + x];
+    for (let y = 0; y < gridH; y++) {
+      for (let x = 0; x < gridW; x++) {
+        const color = cells[y * gridW + x];
         if (!color) continue;
         ctx.fillStyle = color;
         ctx.fillRect(x * CELL_DISPLAY_SIZE, y * CELL_DISPLAY_SIZE, CELL_DISPLAY_SIZE, CELL_DISPLAY_SIZE);
@@ -186,11 +208,13 @@
     // grid lines
     ctx.strokeStyle = "rgba(255,255,255,0.06)";
     ctx.lineWidth = 1;
-    for (let i = 0; i <= gridSize; i++) {
+    for (let i = 0; i <= gridW; i++) {
       ctx.beginPath();
       ctx.moveTo(i * CELL_DISPLAY_SIZE + 0.5, 0);
       ctx.lineTo(i * CELL_DISPLAY_SIZE + 0.5, canvas.height);
       ctx.stroke();
+    }
+    for (let i = 0; i <= gridH; i++) {
       ctx.beginPath();
       ctx.moveTo(0, i * CELL_DISPLAY_SIZE + 0.5);
       ctx.lineTo(canvas.width, i * CELL_DISPLAY_SIZE + 0.5);
@@ -202,8 +226,8 @@
     const rect = canvas.getBoundingClientRect();
     const x = Math.floor((clientX - rect.left) / CELL_DISPLAY_SIZE);
     const y = Math.floor((clientY - rect.top) / CELL_DISPLAY_SIZE);
-    if (x < 0 || y < 0 || x >= gridSize || y >= gridSize) return;
-    cells[y * gridSize + x] = erase ? null : selectedColor;
+    if (x < 0 || y < 0 || x >= gridW || y >= gridH) return;
+    cells[y * gridW + x] = erase ? null : selectedColor;
     render();
   }
 
@@ -221,7 +245,10 @@
   canvas.addEventListener("pointerup", () => { painting = false; });
   canvas.addEventListener("pointerleave", () => { painting = false; });
 
-  gridSizeSelect.addEventListener("change", () => resetGrid(parseInt(gridSizeSelect.value, 10)));
+  gridSizeSelect.addEventListener("change", () => {
+    if (gridSizeSelect.value === "custom") return; // set programmatically only, not user-selectable
+    resetGrid(parseInt(gridSizeSelect.value, 10));
+  });
   colorPicker.addEventListener("input", () => {
     selectedColor = colorPicker.value;
     eraserActive = false;
@@ -233,7 +260,7 @@
     eraserBtn.classList.toggle("active", eraserActive);
   });
   clearBtn.addEventListener("click", () => {
-    if (confirm("Clear the whole canvas?")) resetGrid(gridSize);
+    if (confirm("Clear the whole canvas?")) loadGrid(gridW, gridH, Array.from({ length: gridW * gridH }, () => null));
   });
 
   PALETTE.forEach((color) => {
@@ -269,12 +296,12 @@
     // Export at native (1px-per-cell) resolution, not the zoomed-in display
     // size, so the saved asset is the actual pixel-art dimensions.
     const exportCanvas = document.createElement("canvas");
-    exportCanvas.width = gridSize;
-    exportCanvas.height = gridSize;
+    exportCanvas.width = gridW;
+    exportCanvas.height = gridH;
     const exportCtx = exportCanvas.getContext("2d");
-    for (let y = 0; y < gridSize; y++) {
-      for (let x = 0; x < gridSize; x++) {
-        const color = cells[y * gridSize + x];
+    for (let y = 0; y < gridH; y++) {
+      for (let x = 0; x < gridW; x++) {
+        const color = cells[y * gridW + x];
         if (!color) continue;
         exportCtx.fillStyle = color;
         exportCtx.fillRect(x, y, 1, 1);
@@ -305,13 +332,105 @@
         { type: "EXTENSION_ASSET_SAVED", extension: "pixel-art", project, filename: data.filename },
         "*"
       );
+      refreshOpenList(data.filename);
     } catch (err) {
       statusEl.textContent = err instanceof Error ? err.message : String(err);
       statusEl.className = "status error";
     }
   });
 
-  resetGrid(gridSize);
+  // --- Open existing art ---
+
+  async function refreshOpenList(selectFilename) {
+    if (!project) return;
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(project)}/assets`);
+      const data = await res.json();
+      const pngFiles = (data.files ?? []).filter((f) => f.toLowerCase().endsWith(".png"));
+
+      openSelect.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Load existing…";
+      openSelect.appendChild(placeholder);
+      for (const file of pngFiles) {
+        const opt = document.createElement("option");
+        opt.value = file;
+        opt.textContent = stripExt(file);
+        openSelect.appendChild(opt);
+      }
+      if (selectFilename) openSelect.value = selectFilename;
+    } catch {
+      // asset list is a convenience — silently skip if it can't be fetched
+    }
+  }
+
+  async function openAsset(filename) {
+    statusEl.textContent = "Loading…";
+    statusEl.className = "status";
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(project)}/assets/raw/${encodeURIComponent(filename)}`);
+      if (!res.ok) throw new Error("Failed to load asset");
+      const blob = await res.blob();
+      const bitmap = await createImageBitmap(blob);
+      const w = bitmap.width;
+      const h = bitmap.height;
+
+      const tmp = document.createElement("canvas");
+      tmp.width = w;
+      tmp.height = h;
+      const tctx = tmp.getContext("2d");
+      tctx.drawImage(bitmap, 0, 0);
+      const pixels = tctx.getImageData(0, 0, w, h).data;
+
+      const data = new Array(w * h);
+      for (let i = 0; i < w * h; i++) {
+        const a = pixels[i * 4 + 3];
+        if (a === 0) {
+          data[i] = null;
+          continue;
+        }
+        const r = pixels[i * 4];
+        const g = pixels[i * 4 + 1];
+        const b = pixels[i * 4 + 2];
+        data[i] = a === 255 ? rgbToHex(r, g, b) : `rgba(${r},${g},${b},${(a / 255).toFixed(3)})`;
+      }
+
+      loadGrid(w, h, data);
+
+      // Only a square opened at one of the preset sizes maps back onto the
+      // dropdown cleanly; anything else gets a synthetic "Custom" entry so
+      // the true (possibly non-square) resolution stays visible and exact.
+      const presetSizes = ["8", "16", "24", "32", "48"];
+      if (w === h && presetSizes.includes(String(w))) {
+        customSizeOption.style.display = "none";
+        gridSizeSelect.value = String(w);
+      } else {
+        customSizeOption.textContent = `Custom (${w}×${h})`;
+        customSizeOption.style.display = "";
+        gridSizeSelect.value = "custom";
+      }
+
+      filenameInput.value = stripExt(filename);
+      statusEl.textContent = `Opened ${filename}`;
+      statusEl.className = "status ok";
+    } catch (err) {
+      statusEl.textContent = err instanceof Error ? err.message : String(err);
+      statusEl.className = "status error";
+    }
+  }
+
+  function rgbToHex(r, g, b) {
+    return "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+  }
+
+  openSelect.addEventListener("change", () => {
+    const filename = openSelect.value;
+    if (filename) openAsset(filename);
+  });
+
+  refreshOpenList();
+  resetGrid(gridW);
 </script>
 </body>
 </html>

@@ -5,6 +5,7 @@ import { PerformanceMonitor } from "./modules/PerformanceMonitor.js";
 import { DEFAULT_COMPONENTS } from "./types/DefaultComponents.js";
 import { Transform } from "./components/Transform.js";
 import { SpriteRenderer } from "./components/SpriteRenderer.js";
+import { Opacity } from "./components/Opacity.js";
 import { PrefabRegistry } from "./modules/PrefabRegistry.js";
 import AssetLoader from "./modules/AssetLoader.js";
 import { AudioModule } from "./modules/Audio.js";
@@ -548,9 +549,18 @@ export class GameEngine {
       const transform = entity.getWorldTransform(this);
       if (!transform) continue;
 
+      const opacity = entity.getComponent(Opacity)?.value;
+      const hasOpacity = opacity !== undefined && opacity !== 1;
+      if (hasOpacity) {
+        gameLayer.ctx.save();
+        gameLayer.ctx.globalAlpha = opacity;
+      }
+
       for (const component of entity.components.values()) {
         component.render?.(gameLayer.ctx, transform, entity, this);
       }
+
+      if (hasOpacity) gameLayer.ctx.restore();
     }
   }
 }
