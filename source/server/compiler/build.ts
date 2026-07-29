@@ -50,7 +50,16 @@ export function buildProject(projectName: string): string {
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(outDir, { recursive: true });
 
-  fs.cpSync(engineSrc, path.join(outDir, "engine"), { recursive: true });
+  // test/ and package.json are dev-only (Node smoke tests, module-type
+  // marker) — never needed by a shipped game, same reasoning as excluding
+  // .extensions/ from the project copy just below.
+  fs.cpSync(engineSrc, path.join(outDir, "engine"), {
+    recursive: true,
+    filter: (src) => {
+      const base = path.basename(src);
+      return base !== "test" && base !== "package.json";
+    },
+  });
   // .extensions/ holds editor-tool data (e.g. the board extension's
   // boards) — not game content, so it's excluded from the shipped build.
   fs.cpSync(projectSrc, path.join(outDir, "game"), {

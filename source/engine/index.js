@@ -1,11 +1,12 @@
 import { Layer } from "./types/Layer.js";
-import { Entity } from "./types/Entity.js";
+import { Entity, resolveEntityQuery } from "./types/Entity.js";
 import { Input } from "./modules/Input.js";
 import { PerformanceMonitor } from "./modules/PerformanceMonitor.js";
 import { DEFAULT_COMPONENTS } from "./types/DefaultComponents.js";
 import { Transform } from "./components/Transform.js";
 import { SpriteRenderer } from "./components/SpriteRenderer.js";
 import { Opacity } from "./components/Opacity.js";
+import { Collision } from "./components/Collision.js";
 import { PrefabRegistry } from "./modules/PrefabRegistry.js";
 import AssetLoader from "./modules/AssetLoader.js";
 import { AudioModule } from "./modules/Audio.js";
@@ -257,6 +258,16 @@ export class GameEngine {
     return this.entities.find((e) => e.id === id);
   }
 
+  /**
+   * The standard way to look up an entity, a component on it, or a property
+   * of that component, by path — see resolveEntityQuery in types/Entity.js
+   * for the exact syntax. This is the canonical lookup other components
+   * (Camera, Follow) resolve their entity-reference fields through.
+   */
+  query(path) {
+    return resolveEntityQuery(this.entities, path);
+  }
+
   getViewportSize() {
     if (!this._cachedViewportSize) {
       this._cachedViewportSize = {
@@ -485,31 +496,51 @@ export class GameEngine {
     // skip anything flagged `_destroyed` along the way.
     const entities = [...this.entities];
 
-    // 1. Scripts + every component EXCEPT Camera/Interactable run first.
-    //    This is where Movement lives, so gravity/velocity resolve transform.y
-    //    for this frame before anything reads it for camera-follow or hit-testing.
-    //    (Camera and Interactable are excluded here and ticked explicitly below,
-    //    in the order they actually depend on each other.)
+    // 1. Scripts + every component EXCEPT Camera/Interactable/Collision/Follow
+    //    run first. This is where Movement lives, so gravity/velocity resolve
+    //    transform.y for this frame before anything reads it for collision,
+    //    follow, camera-follow, or hit-testing. (Camera and Interactable were
+    //    already pulled into their own explicit passes below; Collision and
+    //    Follow join them for the same reason — they need this frame's FINAL
+    //    Movement-resolved positions, not whatever order component Maps
+    //    happen to iterate in.)
     for (const entity of entities) {
       if (entity._destroyed) continue;
       const camera = entity.getComponent("Camera");
       const interactable = entity.getComponent("Interactable");
+      const collision = entity.getComponent("Collision");
+      const follow = entity.getComponent("Follow");
 
       for (const script of entity.scripts) script(entity, this, dt);
       if (entity._destroyed) continue; // a script above may have switched scenes / destroyed this entity
       for (const component of entity.components.values()) {
-        if (component === camera || component === interactable) continue;
+        if (component === camera || component === interactable || component === collision || component === follow) continue;
         component.onTick?.(entity, this, dt);
       }
     }
 
-    // 2. Camera follows this frame's FINAL transform (post-Movement).
+    // 2. Collision: detect + resolve overlaps using this frame's final
+    //    Movement-resolved positions, before Follow/Camera read them.
+    const collidables = entities.filter((e) => !e._destroyed && e.getComponent("Collision"));
+    for (let i = 0; i < collidables.length; i++) {
+      for (let j = i + 1; j < collidables.length; j++) {
+        Collision.checkPair(collidables[i], collidables[j], this);
+      }
+    }
+
+    // 3. Follow: reads this frame's post-collision transforms.
+    for (const entity of entities) {
+      if (entity._destroyed) continue;
+      entity.getComponent("Follow")?.onTick?.(entity, this, dt);
+    }
+
+    // 4. Camera follows this frame's FINAL transform (post-Movement/Collision/Follow).
     for (const entity of entities) {
       if (entity._destroyed) continue;
       entity.getComponent("Camera")?.onTick?.(entity, this, dt);
     }
 
-    // 3. Pointer events hit-test against this frame's final transform + camera.
+    // 5. Pointer events hit-test against this frame's final transform + camera.
     //    Edge-triggered only: press-start, drag-start/drag/drag-end, click.
     const events = this.input.drainPointerEvents();
     for (const event of events) {
@@ -519,7 +550,7 @@ export class GameEngine {
       }
     }
 
-    // 4. Interactable's own onTick: hover + hold. Both are continuous/time-based
+    // 6. Interactable's own onTick: hover + hold. Both are continuous/time-based
     //    (hover can change with no new events if the box moves under a still
     //    cursor; hold accumulates by dt regardless of events), so they need a
     //    per-frame pass against the same final transform + camera as above.

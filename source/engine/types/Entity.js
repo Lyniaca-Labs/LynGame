@@ -48,12 +48,14 @@ export class Entity {
    * Looks up a descendant by name path, e.g. `getChild("icon")` or, for a
    * grandchild, `getChild("description.badge")` — each segment matches a
    * child's `childName` (set from a prefab's children key, or passed as the
-   * second argument to addChild). Returns undefined if any segment is missing.
+   * second argument to addChild), falling back to the child's own `id` when
+   * `childName` was never set (e.g. ad-hoc scene-level parentId children).
+   * Returns undefined if any segment is missing.
    */
   getChild(path) {
     let current = this;
     for (const segment of path.split(".")) {
-      current = current.children.find((c) => c.childName === segment);
+      current = current.children.find((c) => (c.childName ?? c.id) === segment);
       if (!current) return undefined;
     }
     return current;
@@ -219,4 +221,38 @@ export class Entity {
     }
     return { width, height };
   }
+}
+
+/**
+ * Engine-level counterpart to Entity.query() — resolves a path from the
+ * root of the entity list rather than from a single entity's descendants.
+ * Same syntax: "name", "name.child.subchild", ":Component", ":Component.prop",
+ * "name.child:Component.prop".
+ *
+ * Entity ids may legitimately contain literal dots (e.g. "enemy1.dot"), so
+ * an exact id match on the full entity-path segment always wins before any
+ * dot-splitting is attempted.
+ */
+export function resolveEntityQuery(entities, path) {
+  const colonIndex = path.indexOf(":");
+  const entityPath = colonIndex === -1 ? path : path.slice(0, colonIndex);
+  const suffix = colonIndex === -1 ? "" : path.slice(colonIndex);
+
+  if (entityPath === "") {
+    return undefined; // ":Component" with no entity segment has no engine-level meaning
+  }
+
+  let root = entities.find((e) => e.id === entityPath);
+  if (!root) {
+    const dotIndex = entityPath.indexOf(".");
+    const rootId = dotIndex === -1 ? entityPath : entityPath.slice(0, dotIndex);
+    root = entities.find((e) => e.id === rootId);
+    if (!root) return undefined;
+    if (dotIndex !== -1) {
+      root = root.getChild(entityPath.slice(dotIndex + 1));
+      if (!root) return undefined;
+    }
+  }
+
+  return suffix ? root.query(suffix) : root;
 }
