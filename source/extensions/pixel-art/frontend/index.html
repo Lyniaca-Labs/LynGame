@@ -174,6 +174,29 @@
   import { setCell } from "./js/grid.mjs";
   import { brushCells } from "./js/paint.mjs";
   import { createPalette, addColor, uniqueColors, loadPalette, savePalette } from "./js/palette.mjs";
+  import { createUndoStack, pushSnapshot, undo, redo, resetUndoStack } from "./js/undo.mjs";
+
+  const undoStack = createUndoStack();
+
+  window.addEventListener("keydown", (e) => {
+    if (document.activeElement.tagName === "INPUT") return;
+    const key = e.key.toLowerCase();
+    if (e.ctrlKey && key === "z" && !e.shiftKey) {
+      e.preventDefault();
+      const prev = undo(undoStack, cells);
+      if (prev) {
+        cells = prev;
+        render();
+      }
+    } else if (e.ctrlKey && (key === "y" || (key === "z" && e.shiftKey))) {
+      e.preventDefault();
+      const next = redo(undoStack, cells);
+      if (next) {
+        cells = next;
+        render();
+      }
+    }
+  });
 
   const opacityInput = document.getElementById("opacity");
   const brushSizeInput = document.getElementById("brushSize");
@@ -264,6 +287,7 @@
     cells = data;
     canvas.width = w * CELL_DISPLAY_SIZE;
     canvas.height = h * CELL_DISPLAY_SIZE;
+    resetUndoStack(undoStack);
     render();
     centerView();
   }
@@ -316,6 +340,7 @@
     if (spaceHeld || e.button === 1) return;
     painting = true;
     paintingErase = eraserActive || e.button === 2;
+    pushSnapshot(undoStack, cells);
     if (!paintingErase) {
       palette = addColor(palette, currentColor());
       savePalette(localStorage, project, palette);
