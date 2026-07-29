@@ -23,6 +23,7 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow-x: hidden;
   }
   header {
     display: flex;
@@ -32,6 +33,7 @@
     border-bottom: 1px solid var(--border);
     background: var(--bg-elevated);
     flex-wrap: wrap;
+    min-width: 0;
   }
   header strong { font-size: 13px; }
   label { color: var(--text-faint); display: flex; align-items: center; gap: 4px; }
@@ -115,7 +117,7 @@
     border-top: 1px solid var(--border);
     flex-wrap: wrap;
   }
-  .status { color: var(--text-faint); }
+  .status { color: var(--text-faint); overflow-wrap: break-word; min-width: 0; }
   .status.error { color: #ff6b6b; }
   .status.ok { color: #4ade80; }
 
@@ -136,8 +138,10 @@
   .wave-buttons { display: flex; gap: 4px; margin-bottom: 8px; }
   .wave-buttons button { flex: 1; padding: 4px 2px; font-size: 10px; }
   canvas.piano-roll { max-width: 100%; background: var(--bg-inset); border: 1px solid var(--border); border-radius: 6px; }
-  .transport { display: flex; gap: 8px; align-items: center; }
+  .transport { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .transport button { padding: 8px 18px; font-size: 13px; }
+  .include-toggle { margin-left: 10px; font-size: 11px; cursor: pointer; }
+  .include-toggle input { cursor: pointer; }
   .duration { color: var(--text-faint); font-size: 11px; }
 
   /* ---- drum step grid ---- */
@@ -326,6 +330,8 @@
             <div class="transport">
               <button id="playTrackBtn" class="primary">▶ Play</button>
               <span class="duration" id="trackDuration"></span>
+              <label class="include-toggle"><input type="checkbox" id="includeMelody" checked /> Melody</label>
+              <label class="include-toggle"><input type="checkbox" id="includeDrums" checked /> Drums</label>
             </div>
           </div>
         </div>
@@ -614,6 +620,10 @@
       seed,
     });
 
+    // The notes underneath any in-flight (playing or paused) audio just
+    // changed — stop it rather than let a "Resume" later play back stale,
+    // no-longer-reflected audio.
+    stopMelodyPlayback();
     drawPianoRoll();
     updateMelodyDuration();
   }
@@ -763,14 +773,40 @@
   // ---- playback ----
   let melodyAudioCtx = null;
   let melodyCurrentSource = null;
+  let melodyIsPlaying = false;
+  let melodyIsPaused = false;
 
   function ensureMelodyAudioCtx() {
     if (!melodyAudioCtx) melodyAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
     return melodyAudioCtx;
   }
 
+  function updateMelodyPlayButton() {
+    playMelodyBtn.textContent = melodyIsPlaying ? "⏸ Pause" : melodyIsPaused ? "▶ Resume" : "▶ Play";
+  }
+
+  function stopMelodyPlayback() {
+    if (melodyCurrentSource) { try { melodyCurrentSource.stop(); } catch {} }
+    melodyCurrentSource = null;
+    melodyIsPlaying = false;
+    melodyIsPaused = false;
+    updateMelodyPlayButton();
+  }
+
   function playMelody() {
     if (!melodyState.notes.length) return;
+
+    // Resuming from a pause: just un-suspend the AudioContext — the
+    // in-flight BufferSource picks up exactly where it left off, which is
+    // what a real pause/resume should feel like (not a restart).
+    if (melodyIsPaused && melodyAudioCtx) {
+      melodyAudioCtx.resume();
+      melodyIsPlaying = true;
+      melodyIsPaused = false;
+      updateMelodyPlayButton();
+      return;
+    }
+
     const stepDurationSec = currentStepDurationSec();
     const samples = renderLeadVoice(melodyState.notes, melodyState.synthParams, SR, stepDurationSec);
     if (!samples.length) return;
@@ -782,11 +818,36 @@
     const source = ac.createBufferSource();
     source.buffer = buffer;
     source.connect(ac.destination);
+    source.onended = () => {
+      // Only reset playback state if this is still the active source — a
+      // stale source's "ended" (from being replaced/stopped) must not
+      // clobber the state of whatever is now playing.
+      if (melodyCurrentSource === source) {
+        melodyIsPlaying = false;
+        melodyIsPaused = false;
+        updateMelodyPlayButton();
+      }
+    };
     source.start();
     melodyCurrentSource = source;
+    melodyIsPlaying = true;
+    melodyIsPaused = false;
+    updateMelodyPlayButton();
     melodyDurationEl.textContent = `${(samples.length / SR).toFixed(2)}s`;
   }
-  playMelodyBtn.addEventListener("click", playMelody);
+
+  function pauseMelody() {
+    if (!melodyAudioCtx || !melodyIsPlaying) return;
+    melodyAudioCtx.suspend();
+    melodyIsPlaying = false;
+    melodyIsPaused = true;
+    updateMelodyPlayButton();
+  }
+
+  playMelodyBtn.addEventListener("click", () => {
+    if (melodyIsPlaying) pauseMelody();
+    else playMelody();
+  });
 
   // ---- save ----
   saveMelodyBtn.addEventListener("click", async () => {
@@ -1351,23 +1412,35 @@
   }
 
   // ---- mixdown ----
+  const includeMelodyCheckbox = document.getElementById("includeMelody");
+  const includeDrumsCheckbox = document.getElementById("includeDrums");
+  // Re-render (not just re-mix a cached buffer) whenever a toggle changes,
+  // so Play always reflects exactly what Save would produce.
+  includeMelodyCheckbox.addEventListener("change", () => { if (trackState.arrangement) playTrack(); });
+  includeDrumsCheckbox.addEventListener("change", () => { if (trackState.arrangement) playTrack(); });
+
   function renderFullTrack() {
     const stepDurationSec = currentTrackStepDurationSec();
     const sections = trackState.arrangement.sections;
+    const buffers = [];
 
-    const allNotes = sections.flatMap((s) => s.melodyNotes);
-    const leadBuffer = renderLeadVoice(allNotes, melodyState.synthParams, SR, stepDurationSec);
-
-    const combinedGrid = {};
-    for (const voice of KIT_VOICES) {
-      combinedGrid[voice] = [];
-      for (const section of sections) {
-        combinedGrid[voice] = combinedGrid[voice].concat(section.drumGrid[voice] || []);
-      }
+    if (includeMelodyCheckbox.checked) {
+      const allNotes = sections.flatMap((s) => s.melodyNotes);
+      buffers.push(renderLeadVoice(allNotes, melodyState.synthParams, SR, stepDurationSec));
     }
-    const drumBuffer = renderDrumKit(combinedGrid, drumState.voiceParams, SR, stepDurationSec, drumState.swing);
 
-    return mixBuffers([leadBuffer, drumBuffer]);
+    if (includeDrumsCheckbox.checked) {
+      const combinedGrid = {};
+      for (const voice of KIT_VOICES) {
+        combinedGrid[voice] = [];
+        for (const section of sections) {
+          combinedGrid[voice] = combinedGrid[voice].concat(section.drumGrid[voice] || []);
+        }
+      }
+      buffers.push(renderDrumKit(combinedGrid, drumState.voiceParams, SR, stepDurationSec, drumState.swing));
+    }
+
+    return mixBuffers(buffers);
   }
 
   // ---- playback ----
@@ -1382,10 +1455,14 @@
   function playTrack() {
     if (!trackState.arrangement) return;
     const samples = renderFullTrack();
-    if (!samples.length) return;
+    if (trackCurrentSource) { try { trackCurrentSource.stop(); } catch {} }
+    trackCurrentSource = null;
+    if (!samples.length) {
+      trackDurationEl.textContent = "0.00s";
+      return;
+    }
 
     const ac = ensureTrackAudioCtx();
-    if (trackCurrentSource) { try { trackCurrentSource.stop(); } catch {} }
     const buffer = ac.createBuffer(1, samples.length, SR);
     buffer.copyToChannel(samples, 0);
     const source = ac.createBufferSource();
@@ -1412,6 +1489,11 @@
     }
     if (!trackState.arrangement) {
       statusTrackEl.textContent = "Nothing generated yet.";
+      statusTrackEl.className = "status error";
+      return;
+    }
+    if (!includeMelodyCheckbox.checked && !includeDrumsCheckbox.checked) {
+      statusTrackEl.textContent = "Enable Melody or Drums to save.";
       statusTrackEl.className = "status error";
       return;
     }
