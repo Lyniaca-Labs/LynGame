@@ -287,7 +287,7 @@ function EditorLayoutContent() {
             title="Viewport"
             bodyClassName="relative p-0"
             headerActions={
-              <div className="flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] p-0.5">
+              <div className="flex items-center gap-1 rounded border border-[var(--color-border)] p-0.5">
                 <Button
                   size="sm"
                   variant={viewportTab === "editor" ? "accent" : "ghost"}

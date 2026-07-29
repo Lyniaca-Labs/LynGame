@@ -86,7 +86,7 @@ export function DeleteProjectModal({
           placeholder={projectName}
           monospace
         />
-        {error && <span className="text-xs text-red-500">{error}</span>}
+        {error && <span className="text-xs text-[var(--color-danger)]">{error}</span>}
       </div>
     </Modal>
   );

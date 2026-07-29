@@ -274,7 +274,7 @@ export function CodeFileEditor({
             Loading…
           </div>
         ) : error ? (
-          <div className="flex h-full items-center justify-center px-3 text-center text-xs text-red-500">
+          <div className="flex h-full items-center justify-center px-3 text-center text-xs text-[var(--color-danger)]">
             {error}
           </div>
         ) : (

@@ -177,8 +177,8 @@ function ResizeHandle({
     >
       <div
         className={cn(
-          "bg-transparent transition-colors group-hover:bg-slate-600",
-          dragging && "bg-slate-400",
+          "bg-transparent transition-colors group-hover:bg-[var(--color-border-strong)]",
+          dragging && "bg-[var(--color-accent)]",
           axis === "x" ? "mx-auto h-full w-px" : "my-auto h-px w-full"
         )}
       />

@@ -85,7 +85,7 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={title ? "modal-title" : undefined}
         className={cn(
-          "flex max-h-[90vh] w-full flex-col rounded-[var(--radius-md)] border border-[var(--color-border)]",
+          "flex max-h-[90vh] w-full flex-col rounded-md border border-[var(--color-border)]",
           "bg-[var(--color-bg-elevated)] shadow-[var(--shadow-panel)]",
           sizeClasses[size],
           className

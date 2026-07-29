@@ -6,8 +6,8 @@ import { cn } from "../../ui/cn";
 const LEVEL_STYLES: Record<LogLevel, string> = {
   log: "text-[var(--color-text)]",
   info: "text-[var(--color-accent)]",
-  warn: "text-yellow-500",
-  error: "text-red-500",
+  warn: "text-[var(--color-warning)]",
+  error: "text-[var(--color-danger)]",
 };
 
 export function GameConsolePanel() {

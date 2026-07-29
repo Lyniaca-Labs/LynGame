@@ -238,7 +238,7 @@ export function Select({
     <div ref={rootRef} className={cn("relative inline-block w-64", className)}>
       <div
         className={cn(
-          "flex items-center gap-2 rounded-[var(--radius-md)] border bg-[var(--color-bg-elevated)] px-3 py-1.5",
+          "flex items-center gap-2 rounded-md border bg-[var(--color-bg-elevated)] px-3 py-1.5",
           "border-[var(--color-border)] transition-colors",
           open && "border-[var(--color-text-faint)]",
           disabled && "cursor-not-allowed opacity-40"
@@ -288,7 +288,7 @@ export function Select({
               transform: menuRect.openUpward ? "translateY(-100%)" : undefined,
             }}
             className={cn(
-              "z-50 overflow-hidden rounded-[var(--radius-md)]",
+              "z-50 overflow-hidden rounded-md",
               "border border-[var(--color-border)] bg-[var(--color-bg-elevated)]",
               "shadow-[var(--shadow-panel)]"
             )}

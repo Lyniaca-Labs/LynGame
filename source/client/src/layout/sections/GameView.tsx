@@ -332,7 +332,7 @@ function Message({
   return (
     <div
       className={`flex h-full items-center justify-center p-3 text-center text-xs ${tone === "error"
-          ? "text-red-500"
+          ? "text-[var(--color-danger)]"
           : "text-[var(--color-text-faint)]"
         }`}
     >

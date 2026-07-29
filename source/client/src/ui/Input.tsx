@@ -34,7 +34,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 
         <div
           className={cn(
-            "flex items-center rounded-[var(--radius-sm)] border bg-[var(--color-bg-inset)]",
+            "flex items-center rounded border bg-[var(--color-bg-inset)]",
             "focus-within:ring-2 focus-within:ring-[var(--color-accent)]",
             error ? "border-[var(--color-danger)]" : "border-[var(--color-border)]"
           )}

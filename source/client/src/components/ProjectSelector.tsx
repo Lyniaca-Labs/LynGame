@@ -88,7 +88,7 @@ export function ProjectSelector({ currentProject, onSelect }: ProjectSelectorPro
         />
       )}
 
-      {listError && <span className="text-xs text-red-500">{listError}</span>}
+      {listError && <span className="text-xs text-[var(--color-danger)]">{listError}</span>}
 
       {creating ? (
         <div className="flex items-center gap-1">

@@ -1,9 +1,8 @@
-# Engine Roadmap
+# Engine Roadmap (DEPRECATED)
 
-next: 
-- go through my css and actually use the variables in all of my components instead of hardcoding them
-- more pixel art features
-- organize TODO better / make a new todo file and deprecate this one
+> **This file is deprecated.** Active tracking has moved to
+> [`docs/ROADMAP.md`](./ROADMAP.md). Kept around as a historical archive of
+> completed work and implementation notes — do not add new items here.
 
 ## ULTRA PRIORITY (3-Day Jam: Card Game / Time-Strategy / Deck Builder)
 

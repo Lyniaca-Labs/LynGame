@@ -159,7 +159,7 @@ export function DropdownMenu({
                 visibility: position ? "visible" : "hidden",
               }}
               className={cn(
-                "z-50 min-w-[11rem] overflow-visible rounded-[var(--radius-md)] select-none",
+                "z-50 min-w-[11rem] overflow-visible rounded-md select-none",
                 "border border-[var(--color-border)] bg-[var(--color-bg-elevated)]",
                 "py-1 shadow-[var(--shadow-panel)]",
                 className
@@ -271,7 +271,7 @@ export function DropdownSubmenu({
           role="menu"
           className={cn(
             "absolute left-full top-0 z-50 ml-1 min-w-[11rem]",
-            "rounded-[var(--radius-md)] border border-[var(--color-border)]",
+            "rounded-md border border-[var(--color-border)]",
             "bg-[var(--color-bg-elevated)] py-1 shadow-[var(--shadow-panel)]"
           )}
         >

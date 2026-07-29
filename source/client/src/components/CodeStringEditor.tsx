@@ -213,7 +213,7 @@ export function CodeStringEditor({
 
       <div className="relative flex-1 overflow-hidden">
         {error && (
-          <div className="border-b border-[var(--color-border)] px-3 py-1 text-xs text-red-500">{error}</div>
+          <div className="border-b border-[var(--color-border)] px-3 py-1 text-xs text-[var(--color-danger)]">{error}</div>
         )}
         <CodeMirror
           value={value}

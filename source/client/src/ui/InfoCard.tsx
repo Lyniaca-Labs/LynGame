@@ -95,7 +95,7 @@ export function InfoCard({ description, side = "bottom", className }: InfoCardPr
               transform: side === "top" ? "translateY(-100%)" : undefined,
             }}
             className={cn(
-              "z-[9999] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-2.5 py-2",
+              "z-[9999] rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-2.5 py-2",
               "text-xs leading-relaxed text-[var(--color-text-muted)] shadow-[var(--shadow-panel)]"
             )}
           >
