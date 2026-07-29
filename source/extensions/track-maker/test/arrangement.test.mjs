@@ -1,7 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SECTION_ORDER, energyForSection, buildArrangement, generateArrangement } from "../frontend/js/arrangement.mjs";
-import { KIT_VOICES } from "../frontend/js/drums.mjs";
+import {
+  SECTION_ORDER,
+  energyForSection,
+  buildArrangement,
+  generateArrangement,
+  applyEnergyToMelodyParams,
+  applyEnergyToDrumParams,
+  scaleVelocity,
+} from "../frontend/js/arrangement.mjs";
+import { generateMelody } from "../frontend/js/melody.mjs";
+import { generateDrumPattern, KIT_VOICES } from "../frontend/js/drums.mjs";
 
 test("energyForSection returns modifiers for every section type in SECTION_ORDER", () => {
   for (const type of new Set(SECTION_ORDER)) {
@@ -55,6 +64,76 @@ test("generateArrangement is deterministic for a given seed", () => {
   const a = generateArrangement(ARR_BASE);
   const b = generateArrangement(ARR_BASE);
   assert.deepEqual(a, b);
+});
+
+test("applyEnergyToMelodyParams/applyEnergyToDrumParams/scaleVelocity are exported and match generateArrangement's internal scaling", () => {
+  // These are exported (Fix Round 1) specifically so index.html's per-section
+  // "regenerate" action can replicate generateArrangement's per-type energy
+  // shaping instead of falling back to raw/unscaled params.
+  const rawMelodyParams = { registerLowOctave: 0, registerHighOctave: 1, density: 0.5, jump: 0.3, syncopation: 0.2, restProb: 0.2 };
+  const rawDrumParams = { style: "fourOnFloor", density: 0.6, syncopation: 0.2 };
+
+  for (const type of new Set(SECTION_ORDER)) {
+    const energy = energyForSection(type);
+
+    const scaledMelody = applyEnergyToMelodyParams(rawMelodyParams, energy);
+    assert.equal(scaledMelody.density, Math.max(0.05, Math.min(1, rawMelodyParams.density * energy.densityMult)));
+    assert.equal(scaledMelody.registerLowOctave, rawMelodyParams.registerLowOctave + energy.registerShift);
+    assert.equal(scaledMelody.registerHighOctave, rawMelodyParams.registerHighOctave + energy.registerShift);
+
+    const scaledDrum = applyEnergyToDrumParams(rawDrumParams, energy);
+    assert.equal(scaledDrum.density, Math.max(0.05, Math.min(1, rawDrumParams.density * energy.densityMult)));
+    assert.equal(scaledDrum.style, rawDrumParams.style); // untouched fields pass through
+
+    const notes = [{ startStep: 0, lengthSteps: 1, midi: 60, velocity: 0.5 }];
+    const scaledNotes = scaleVelocity(notes, energy.velocityMult);
+    assert.equal(scaledNotes[0].velocity, Math.max(0, Math.min(1, 0.5 * energy.velocityMult)));
+  }
+});
+
+test("regression: a regenerated section (index.html's regenerateSection flow) stays energy-scaled per its type, not raw/unscaled", () => {
+  // Mirrors exactly what index.html's regenerateSection() does: call
+  // generateMelody/generateDrumPattern directly (not generateArrangement),
+  // but pass params through applyEnergyToMelodyParams/applyEnergyToDrumParams
+  // and velocities through scaleVelocity first. Before the Fix Round 1 fix,
+  // regenerateSection skipped this and used raw melodyState/drumState params
+  // unconditionally, so a "chorus" section regenerated indistinguishably
+  // from a "verse" one.
+  const rootMidi = 60, scaleName = "major", stepsPerBar = 8, bars = 4, seed = 99;
+  const rawMelodyParams = { registerLowOctave: 0, registerHighOctave: 1, density: 0.5, jump: 0.3, syncopation: 0.2, restProb: 0.1 };
+  const rawDrumParams = { style: "fourOnFloor", density: 0.6, syncopation: 0.2 };
+
+  function regenerateSectionLikeIndexHtml(type, sectionSeed) {
+    const energy = energyForSection(type);
+    const sectionMelodyParams = applyEnergyToMelodyParams(rawMelodyParams, energy);
+    const rawNotes = generateMelody({ rootMidi, scaleName, bars, stepsPerBar, ...sectionMelodyParams, seed: sectionSeed });
+    const notes = scaleVelocity(rawNotes, energy.velocityMult);
+
+    const sectionDrumParams = applyEnergyToDrumParams(rawDrumParams, energy);
+    const { grid } = generateDrumPattern({ bars, stepsPerBar, ...sectionDrumParams, seed: sectionSeed + 1 });
+
+    return { notes, grid, energy };
+  }
+
+  const chorus = regenerateSectionLikeIndexHtml("chorus", seed);
+  const outro = regenerateSectionLikeIndexHtml("outro", seed);
+
+  // chorus energy (densityMult 1.15, velocityMult 1.1) is strictly louder
+  // than outro energy (densityMult 0.45, velocityMult 0.6) per arrangement.mjs's
+  // ENERGY table, so an average-velocity comparison should reflect that scaling
+  // rather than both landing on the same raw/unscaled distribution.
+  assert.ok(chorus.energy.velocityMult > outro.energy.velocityMult);
+  const chorusAvgVel = chorus.notes.reduce((a, n) => a + n.velocity, 0) / (chorus.notes.length || 1);
+  const outroAvgVel = outro.notes.reduce((a, n) => a + n.velocity, 0) / (outro.notes.length || 1);
+  assert.ok(chorusAvgVel > outroAvgVel, `expected chorus avg velocity (${chorusAvgVel}) > outro avg velocity (${outroAvgVel})`);
+
+  // And explicitly confirm the scaling actually took effect vs. raw params:
+  // recompute chorus with NO energy scaling and show its velocities differ
+  // from the energy-scaled version (proves scaleVelocity/applyEnergy* are
+  // doing real work, not silently no-op-ing).
+  const rawChorusNotes = generateMelody({ rootMidi, scaleName, bars, stepsPerBar, ...rawMelodyParams, seed });
+  const rawAvgVel = rawChorusNotes.reduce((a, n) => a + n.velocity, 0) / (rawChorusNotes.length || 1);
+  assert.notEqual(chorusAvgVel, rawAvgVel);
 });
 
 test("generateArrangement sections are not identical to each other (arrangement has variation)", () => {

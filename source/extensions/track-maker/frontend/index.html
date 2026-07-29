@@ -332,7 +332,7 @@
   import { WAVEFORMS, renderLeadVoice, DEFAULT_DRUM_VOICE_PARAMS, renderDrumKit } from "./js/synth.mjs";
   import { DRUM_PATTERN_STYLES, KIT_VOICES, generateDrumPattern } from "./js/drums.mjs";
   import { encodeWav, bufferToDataUrl } from "./js/wav.mjs";
-  import { generateArrangement } from "./js/arrangement.mjs";
+  import { generateArrangement, energyForSection, applyEnergyToMelodyParams, applyEnergyToDrumParams, scaleVelocity } from "./js/arrangement.mjs";
   import { mixBuffers } from "./js/mix.mjs";
 
   const SR = 44100;
@@ -1093,13 +1093,35 @@
   const statusTrackEl = document.getElementById("status-track");
 
   // ---- length readout ----
+  // `<input type="number" max="256">` only enforces its `max` via spinner
+  // clicks — a value typed directly (or pasted) bypasses it entirely, so the
+  // JS-side clamp below is the only real guard against a runaway render
+  // (plan's Global Constraints: "a few hundred bars max"). Read through this
+  // helper everywhere targetBars is consumed, never `targetBarsInput.value`
+  // directly.
+  const TARGET_BARS_MIN = 1;
+  const TARGET_BARS_MAX = 256;
+
+  function getClampedTargetBars() {
+    const raw = parseInt(targetBarsInput.value, 10);
+    const fallback = Number.isFinite(raw) ? raw : TARGET_BARS_MIN;
+    return Math.min(TARGET_BARS_MAX, Math.max(TARGET_BARS_MIN, fallback));
+  }
+
   function updateTargetDuration() {
     const tempo = parseFloat(tempoInput.value) || 120;
-    const targetBars = parseInt(targetBarsInput.value, 10) || 0;
+    const targetBars = getClampedTargetBars();
     const secondsPerBar = (60 / tempo) * 4; // 4/4 time: a bar is always 4 quarter notes
     targetDurationEl.textContent = `(${(targetBars * secondsPerBar).toFixed(1)}s)`;
   }
   targetBarsInput.addEventListener("input", updateTargetDuration);
+  // Snap the visible field back to the clamped value once the user commits
+  // (blur/Enter), so a typed out-of-range number doesn't silently linger in
+  // the UI while a different value is what actually gets generated.
+  targetBarsInput.addEventListener("change", () => {
+    targetBarsInput.value = String(getClampedTargetBars());
+    updateTargetDuration();
+  });
   updateTargetDuration();
 
   // ---- generation ----
@@ -1130,7 +1152,7 @@
         density: drumState.density,
         syncopation: drumState.syncopation,
       },
-      targetBars: Number(targetBarsInput.value),
+      targetBars: getClampedTargetBars(),
       seed,
     });
     renderSectionList();
@@ -1174,27 +1196,41 @@
     const stepsPerBar = melodyState.stepsPerBar;
     const sectionSeed = Date.now() % 100000;
 
-    const rawNotes = generateMelody({
-      rootMidi,
-      scaleName,
-      bars: section.bars,
-      stepsPerBar,
+    // Apply the same per-type energy shaping generateArrangement uses
+    // internally, so a regenerated section stays as audibly distinct
+    // (density/register/velocity) as a freshly-generated one of that type,
+    // rather than reverting to raw unscaled melodyState/drumState values.
+    const energy = energyForSection(section.type);
+    const rawMelodyParams = {
       registerLowOctave: melodyState.registerLowOctave,
       registerHighOctave: melodyState.registerHighOctave,
       density: melodyState.density,
       jump: melodyState.jump,
       syncopation: melodyState.syncopation,
       restProb: melodyState.restProb,
-      seed: sectionSeed,
-    });
-    section.melodyNotes = rawNotes.map((n) => ({ ...n, startStep: n.startStep + section.startStep }));
-
-    const rawPattern = generateDrumPattern({
+    };
+    const sectionMelodyParams = applyEnergyToMelodyParams(rawMelodyParams, energy);
+    const rawNotes = generateMelody({
+      rootMidi,
+      scaleName,
       bars: section.bars,
       stepsPerBar,
+      ...sectionMelodyParams,
+      seed: sectionSeed,
+    });
+    const scaledNotes = scaleVelocity(rawNotes, energy.velocityMult);
+    section.melodyNotes = scaledNotes.map((n) => ({ ...n, startStep: n.startStep + section.startStep }));
+
+    const rawDrumParams = {
       style: drumState.style,
       density: drumState.density,
       syncopation: drumState.syncopation,
+    };
+    const sectionDrumParams = applyEnergyToDrumParams(rawDrumParams, energy);
+    const rawPattern = generateDrumPattern({
+      bars: section.bars,
+      stepsPerBar,
+      ...sectionDrumParams,
       seed: sectionSeed + 1,
     });
     section.drumGrid = rawPattern.grid;

@@ -32,7 +32,11 @@ export function buildArrangement({ targetBars, sectionBars = 4 }) {
   return sections;
 }
 
-function applyEnergyToMelodyParams(melodyParams, energy) {
+// Exported so callers (e.g. index.html's per-section "regenerate" action) can
+// apply the exact same per-type energy shaping that generateArrangement uses
+// internally, without duplicating the multiplier math. Generation logic here
+// is unchanged from before these exports were added.
+export function applyEnergyToMelodyParams(melodyParams, energy) {
   return {
     ...melodyParams,
     density: Math.max(0.05, Math.min(1, melodyParams.density * energy.densityMult)),
@@ -41,14 +45,14 @@ function applyEnergyToMelodyParams(melodyParams, energy) {
   };
 }
 
-function applyEnergyToDrumParams(drumParams, energy) {
+export function applyEnergyToDrumParams(drumParams, energy) {
   return {
     ...drumParams,
     density: Math.max(0.05, Math.min(1, drumParams.density * energy.densityMult)),
   };
 }
 
-function scaleVelocity(notes, mult) {
+export function scaleVelocity(notes, mult) {
   return notes.map((n) => ({ ...n, velocity: Math.max(0, Math.min(1, n.velocity * mult)) }));
 }
 
