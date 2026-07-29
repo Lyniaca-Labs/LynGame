@@ -23,7 +23,7 @@ test("euclideanRhythm clamps pulses to [0, steps]", () => {
 });
 
 test("generateDrumPattern produces a full grid at the requested length", () => {
-  const pattern = generateDrumPattern({ bars: 2, stepsPerBar: 16, style: "fourOnFloor", density: 0.5, swing: 0, syncopation: 0, seed: 1 });
+  const pattern = generateDrumPattern({ bars: 2, stepsPerBar: 16, style: "fourOnFloor", density: 0.5, syncopation: 0, seed: 1 });
   assert.equal(pattern.steps, 32);
   for (const voice of KIT_VOICES) {
     assert.ok(Array.isArray(pattern.grid[voice]));
@@ -32,14 +32,21 @@ test("generateDrumPattern produces a full grid at the requested length", () => {
 });
 
 test("generateDrumPattern is deterministic for a given seed", () => {
-  const params = { bars: 4, stepsPerBar: 16, style: "breakbeat", density: 0.6, swing: 0.2, syncopation: 0.3, seed: 55 };
+  const params = { bars: 4, stepsPerBar: 16, style: "breakbeat", density: 0.6, syncopation: 0.3, seed: 55 };
   assert.deepEqual(generateDrumPattern(params), generateDrumPattern(params));
 });
 
 test("fourOnFloor style puts a kick on every downbeat step (step % (stepsPerBar/4) === 0) at density 1", () => {
   const stepsPerBar = 16;
-  const pattern = generateDrumPattern({ bars: 1, stepsPerBar, style: "fourOnFloor", density: 1, swing: 0, syncopation: 0, seed: 2 });
+  const pattern = generateDrumPattern({ bars: 1, stepsPerBar, style: "fourOnFloor", density: 1, syncopation: 0, seed: 2 });
   for (let s = 0; s < stepsPerBar; s += stepsPerBar / 4) {
     assert.equal(pattern.grid.kick[s], true, `expected kick at step ${s}`);
   }
+});
+
+test("silence-preserving: voices with 0 base pulses stay silent even at high syncopation", () => {
+  // boomBap.clap has 0 base pulses and should stay silent (or nearly so) even with syncopation=1
+  const pattern = generateDrumPattern({ bars: 8, stepsPerBar: 16, style: "boomBap", density: 1, syncopation: 1, seed: 99 });
+  const clapHits = pattern.grid.clap.filter(Boolean).length;
+  assert.ok(clapHits <= 2, `expected clap to stay silent, but got ${clapHits} hits out of ${pattern.grid.clap.length} steps`);
 });

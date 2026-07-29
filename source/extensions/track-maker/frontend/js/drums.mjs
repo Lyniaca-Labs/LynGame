@@ -25,22 +25,23 @@ export function euclideanRhythm(pulses, steps) {
   return out;
 }
 
-export function generateDrumPattern({ bars, stepsPerBar, style, density, swing, syncopation, seed }) {
+export function generateDrumPattern({ bars, stepsPerBar, style, density, syncopation, seed }) {
   const totalSteps = bars * stepsPerBar;
   const rng = createRng(seed);
   const styleDef = DRUM_PATTERN_STYLES[style];
   const grid = {};
 
   for (const voice of KIT_VOICES) {
-    const basePulsesPerBar = Math.round(styleDef[voice].pulses * (stepsPerBar / 16) * density);
-    const perBar = euclideanRhythm(basePulsesPerBar, stepsPerBar);
+    const basePulsesPerBar = styleDef[voice].pulses;
+    const scaledPulsesPerBar = Math.round(basePulsesPerBar * (stepsPerBar / 16) * density);
+    const perBar = euclideanRhythm(scaledPulsesPerBar, stepsPerBar);
     const full = [];
     for (let b = 0; b < bars; b++) {
       for (let s = 0; s < stepsPerBar; s++) {
         let hit = perBar[s];
-        // syncopation randomly nudges a small fraction of off-hits on,
-        // and on-hits off, without changing the overall onset count much.
-        if (rng() < syncopation * 0.15) hit = !hit;
+        // syncopation randomly nudges a small fraction of on-hits off and nearby steps on,
+        // but only for voices with non-zero base pulses (keeps explicitly silent voices silent).
+        if (basePulsesPerBar > 0 && rng() < syncopation * 0.15) hit = !hit;
         full.push(hit);
       }
     }
