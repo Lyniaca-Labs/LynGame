@@ -139,6 +139,15 @@
   .transport { display: flex; gap: 8px; align-items: center; }
   .transport button { padding: 8px 18px; font-size: 13px; }
   .duration { color: var(--text-faint); font-size: 11px; }
+
+  /* ---- drum step grid ---- */
+  .grid-scroll { width: 100%; overflow-x: auto; }
+  table#drumGrid { border-collapse: collapse; }
+  table#drumGrid td { border: 1px solid var(--border); }
+  table#drumGrid td.voice-label { color: var(--text-faint); padding: 0 8px; text-align: right; white-space: nowrap; }
+  table#drumGrid td.step { width: 18px; height: 18px; background: var(--bg-inset); cursor: pointer; }
+  table#drumGrid td.step:hover { background: var(--border); }
+  table#drumGrid td.step.on { background: var(--accent); }
 </style>
 </head>
 <body>
@@ -234,7 +243,45 @@
     </section>
 
     <section class="panel hidden" id="panel-drums">
-      <div class="body"></div>
+      <div class="body">
+        <div class="split">
+          <div class="side-panel">
+            <div>
+              <h4>Style</h4>
+              <div class="mood-row" id="drumStyleRow"></div>
+            </div>
+            <fieldset>
+              <legend>Pattern</legend>
+              <div id="drumParams"></div>
+              <div class="row">
+                <label>Steps/Bar</label>
+                <select id="drumStepsPerBar">
+                  <option value="8">8</option>
+                  <option value="16" selected>16</option>
+                  <option value="32">32</option>
+                </select>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Voice</legend>
+              <div class="row">
+                <label>Voice</label>
+                <select id="drumVoiceSelect"></select>
+              </div>
+              <div id="drumVoiceParams"></div>
+            </fieldset>
+          </div>
+          <div class="main-panel">
+            <div class="grid-scroll">
+              <table id="drumGrid"></table>
+            </div>
+            <div class="transport">
+              <button id="playDrumsBtn" class="primary">▶ Play</button>
+              <span class="duration" id="drumsDuration"></span>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="panel-footer">
         <input type="text" id="filename-drums" placeholder="my_drums" />
         <button id="save-drums" class="primary">Save to Assets</button>
@@ -255,7 +302,8 @@
 <script type="module">
   import { MOODS, moodToParams, generateMelody } from "./js/melody.mjs";
   import { noteNameToMidi, scaleDegreeToMidi, SCALES } from "./js/theory.mjs";
-  import { WAVEFORMS, renderLeadVoice } from "./js/synth.mjs";
+  import { WAVEFORMS, renderLeadVoice, DEFAULT_DRUM_VOICE_PARAMS, renderDrumKit } from "./js/synth.mjs";
+  import { DRUM_PATTERN_STYLES, KIT_VOICES, generateDrumPattern } from "./js/drums.mjs";
   import { encodeWav, bufferToDataUrl } from "./js/wav.mjs";
 
   const SR = 44100;
@@ -294,15 +342,16 @@
   reseedBtn.addEventListener("click", () => {
     seedInput.value = Math.floor(Math.random() * 1e9);
     regenerateMelody();
+    regenerateDrums();
   });
 
   keySelect.addEventListener("change", () => regenerateMelody());
   scaleSelect.addEventListener("change", () => regenerateMelody());
-  seedInput.addEventListener("change", () => regenerateMelody());
-  tempoInput.addEventListener("change", () => updateMelodyDuration());
+  seedInput.addEventListener("change", () => { regenerateMelody(); regenerateDrums(); });
+  tempoInput.addEventListener("change", () => { updateMelodyDuration(); updateDrumsDuration(); });
 
   // ---- Save button handlers (placeholders for tabs not yet wired) ----
-  const saveButtons = ["drums", "track"];
+  const saveButtons = ["track"];
 
   saveButtons.forEach((tab) => {
     const saveBtn = document.getElementById(`save-${tab}`);
@@ -757,6 +806,262 @@
   const defaultMoodBtn = moodRowEl.querySelector('[data-mood="calm"]');
   if (defaultMoodBtn) defaultMoodBtn.click();
   else regenerateMelody();
+
+  // ============================================================
+  // ---- Drums tab ----
+  // ============================================================
+
+  function styleLabel(key) {
+    return key.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
+  }
+
+  const DRUM_VOICE_PARAM_FIELDS = [
+    { key: "basePitchHz", label: "Base Pitch Hz", min: 40, max: 8000, step: 1, decimals: 0 },
+    { key: "pitchDecay", label: "Pitch Decay", min: 0, max: 0.2, step: 0.001, decimals: 3 },
+    { key: "ampDecay", label: "Amp Decay", min: 0, max: 1, step: 0.01, decimals: 2 },
+    { key: "toneNoiseMix", label: "Tone/Noise Mix", min: 0, max: 1, step: 0.01, decimals: 2 },
+    { key: "clickAmount", label: "Click Amount", min: 0, max: 1, step: 0.01, decimals: 2 },
+  ];
+
+  const drumState = {
+    style: "fourOnFloor",
+    density: 0.7,
+    swing: 0.1,
+    syncopation: 0.2,
+    bars: 4,
+    stepsPerBar: 16,
+    grid: {},
+    voiceParams: structuredClone(DEFAULT_DRUM_VOICE_PARAMS),
+  };
+
+  const drumSliderRefs = {};
+  const drumParamsEl = document.getElementById("drumParams");
+  const drumStyleRowEl = document.getElementById("drumStyleRow");
+  const drumStepsPerBarSelect = document.getElementById("drumStepsPerBar");
+  const drumGridTable = document.getElementById("drumGrid");
+  const drumVoiceSelect = document.getElementById("drumVoiceSelect");
+  const drumVoiceParamsEl = document.getElementById("drumVoiceParams");
+  const playDrumsBtn = document.getElementById("playDrumsBtn");
+  const drumsDurationEl = document.getElementById("drumsDuration");
+  const filenameDrumsInput = document.getElementById("filename-drums");
+  const saveDrumsBtn = document.getElementById("save-drums");
+  const statusDrumsEl = document.getElementById("status-drums");
+
+  // ---- style presets ----
+  Object.keys(DRUM_PATTERN_STYLES).forEach((style) => {
+    const btn = document.createElement("button");
+    btn.className = "mood-btn";
+    btn.dataset.style = style;
+    btn.textContent = styleLabel(style);
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#drumStyleRow .mood-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      drumState.style = style;
+      regenerateDrums();
+    });
+    drumStyleRowEl.appendChild(btn);
+  });
+
+  // ---- pattern sliders ----
+  buildSliderRow(drumParamsEl, {
+    key: "density", label: "Density", min: 0, max: 1, step: 0.01,
+    value: drumState.density, decimals: 2, refs: drumSliderRefs,
+    onChange: (v) => { drumState.density = v; regenerateDrums(); },
+  });
+  buildSliderRow(drumParamsEl, {
+    key: "swing", label: "Swing", min: 0, max: 1, step: 0.01,
+    value: drumState.swing, decimals: 2, refs: drumSliderRefs,
+    onChange: (v) => { drumState.swing = v; },
+  });
+  buildSliderRow(drumParamsEl, {
+    key: "syncopation", label: "Syncopation", min: 0, max: 1, step: 0.01,
+    value: drumState.syncopation, decimals: 2, refs: drumSliderRefs,
+    onChange: (v) => { drumState.syncopation = v; regenerateDrums(); },
+  });
+  buildSliderRow(drumParamsEl, {
+    key: "bars", label: "Bars", min: 1, max: 16, step: 1,
+    value: drumState.bars, decimals: 0, refs: drumSliderRefs,
+    onChange: (v) => { drumState.bars = v; regenerateDrums(); },
+  });
+
+  drumStepsPerBarSelect.addEventListener("change", () => {
+    drumState.stepsPerBar = parseInt(drumStepsPerBarSelect.value, 10);
+    regenerateDrums();
+  });
+
+  // ---- voice select + per-voice synth params ----
+  KIT_VOICES.forEach((voice) => {
+    const opt = document.createElement("option");
+    opt.value = voice;
+    opt.textContent = voice;
+    drumVoiceSelect.appendChild(opt);
+  });
+
+  const drumVoiceSliderRefs = {};
+  DRUM_VOICE_PARAM_FIELDS.forEach((field) => {
+    buildSliderRow(drumVoiceParamsEl, {
+      key: field.key, label: field.label, min: field.min, max: field.max, step: field.step,
+      value: drumState.voiceParams[KIT_VOICES[0]][field.key], decimals: field.decimals, refs: drumVoiceSliderRefs,
+      onChange: (v) => { drumState.voiceParams[drumVoiceSelect.value][field.key] = v; },
+    });
+  });
+
+  function loadVoiceParamsIntoSliders(voice) {
+    const voiceParams = drumState.voiceParams[voice];
+    for (const field of DRUM_VOICE_PARAM_FIELDS) {
+      const ref = drumVoiceSliderRefs[field.key];
+      if (!ref) continue;
+      ref.input.value = String(voiceParams[field.key]);
+      ref.valEl.textContent = Number(voiceParams[field.key]).toFixed(ref.decimals);
+    }
+  }
+
+  drumVoiceSelect.addEventListener("change", () => {
+    loadVoiceParamsIntoSliders(drumVoiceSelect.value);
+  });
+
+  // ---- generation ----
+  function currentDrumStepDurationSec() {
+    const tempo = parseFloat(tempoInput.value) || 120;
+    return 60 / tempo / (drumState.stepsPerBar / 4);
+  }
+
+  function regenerateDrums() {
+    const seed = parseInt(seedInput.value, 10) || 0;
+
+    const { grid } = generateDrumPattern({
+      bars: drumState.bars,
+      stepsPerBar: drumState.stepsPerBar,
+      style: drumState.style,
+      density: drumState.density,
+      syncopation: drumState.syncopation,
+      seed,
+    });
+    drumState.grid = grid;
+
+    renderDrumGridTable();
+    updateDrumsDuration();
+  }
+
+  function updateDrumsDuration() {
+    if (!drumState.bars) {
+      drumsDurationEl.textContent = "0.00s";
+      return;
+    }
+    const stepDurationSec = currentDrumStepDurationSec();
+    const totalSteps = drumState.bars * drumState.stepsPerBar;
+    const seconds = totalSteps * stepDurationSec;
+    drumsDurationEl.textContent = `${seconds.toFixed(2)}s`;
+  }
+
+  // ---- step grid ----
+  function renderDrumGridTable() {
+    drumGridTable.innerHTML = "";
+    const totalSteps = drumState.bars * drumState.stepsPerBar;
+
+    KIT_VOICES.forEach((voice) => {
+      const tr = document.createElement("tr");
+
+      const labelTd = document.createElement("td");
+      labelTd.className = "voice-label";
+      labelTd.textContent = voice;
+      tr.appendChild(labelTd);
+
+      const hits = drumState.grid[voice] || [];
+      for (let step = 0; step < totalSteps; step++) {
+        const td = document.createElement("td");
+        td.className = "step";
+        if (hits[step]) td.classList.add("on");
+        td.addEventListener("click", () => {
+          const on = !drumState.grid[voice][step];
+          drumState.grid[voice][step] = on;
+          td.classList.toggle("on", on);
+        });
+        tr.appendChild(td);
+      }
+
+      drumGridTable.appendChild(tr);
+    });
+  }
+
+  // ---- playback ----
+  let drumsAudioCtx = null;
+  let drumsCurrentSource = null;
+
+  function ensureDrumsAudioCtx() {
+    if (!drumsAudioCtx) drumsAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return drumsAudioCtx;
+  }
+
+  function playDrums() {
+    if (!drumState.bars) return;
+    const stepDurationSec = currentDrumStepDurationSec();
+    const samples = renderDrumKit(drumState.grid, drumState.voiceParams, SR, stepDurationSec, drumState.swing);
+    if (!samples.length) return;
+
+    const ac = ensureDrumsAudioCtx();
+    if (drumsCurrentSource) { try { drumsCurrentSource.stop(); } catch {} }
+    const buffer = ac.createBuffer(1, samples.length, SR);
+    buffer.copyToChannel(samples, 0);
+    const source = ac.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ac.destination);
+    source.start();
+    drumsCurrentSource = source;
+    drumsDurationEl.textContent = `${(samples.length / SR).toFixed(2)}s`;
+  }
+  playDrumsBtn.addEventListener("click", playDrums);
+
+  // ---- save ----
+  saveDrumsBtn.addEventListener("click", async () => {
+    const filename = filenameDrumsInput.value.trim();
+    if (!project) {
+      statusDrumsEl.textContent = "No project — open this from the editor.";
+      statusDrumsEl.className = "status error";
+      return;
+    }
+    if (!filename) {
+      statusDrumsEl.textContent = "Enter a filename first.";
+      statusDrumsEl.className = "status error";
+      return;
+    }
+    if (!drumState.bars) {
+      statusDrumsEl.textContent = "Nothing generated yet.";
+      statusDrumsEl.className = "status error";
+      return;
+    }
+
+    statusDrumsEl.textContent = "Saving…";
+    statusDrumsEl.className = "status";
+
+    try {
+      const stepDurationSec = currentDrumStepDurationSec();
+      const samples = renderDrumKit(drumState.grid, drumState.voiceParams, SR, stepDurationSec, drumState.swing);
+      const wavBuffer = encodeWav(samples, SR);
+      const dataUrl = bufferToDataUrl(wavBuffer);
+      const res = await fetch("/api/extensions/track-maker/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project, filename, dataUrl }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Save failed");
+
+      statusDrumsEl.textContent = `Saved ${data.filename}`;
+      statusDrumsEl.className = "status ok";
+      window.parent.postMessage(
+        { type: "EXTENSION_ASSET_SAVED", extension: "track-maker", project, filename: data.filename },
+        "*"
+      );
+    } catch (err) {
+      statusDrumsEl.textContent = err instanceof Error ? err.message : String(err);
+      statusDrumsEl.className = "status error";
+    }
+  });
+
+  // ---- seed a default style so the tab isn't empty on load ----
+  const defaultStyleBtn = drumStyleRowEl.querySelector('[data-style="fourOnFloor"]');
+  if (defaultStyleBtn) defaultStyleBtn.click();
+  else regenerateDrums();
 </script>
 </body>
 </html>
