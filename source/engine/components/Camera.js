@@ -5,7 +5,7 @@ export class Camera extends Component {
     zoom: { type: "number", default: 1, description: "Camera zoom level. 1 = normal, >1 = zoomed in." },
     offset: { type: "vector", default: { x: 0, y: 0 }, description: "Pixel offset from the followed entity's position." },
     bounds: { type: "object", default: null, description: "Optional world bounds clamping where the camera can look." },
-    target: { type: "string", default: null, description: "Id of the entity this camera follows. Set via follow()/followEntity(); defaults to the entity this Camera is attached to." },
+    target: { type: "entity", default: null, description: "Id/query path of the entity this camera follows. Set via follow()/followEntity(); defaults to the entity this Camera is attached to." },
   };
 
   constructor(overrides = {}) {
@@ -21,7 +21,7 @@ export class Camera extends Component {
 
   onTick(entity, engine, dt) {
     if (typeof this.target === "string") {
-      this.target = engine.getEntity(this.target);
+      this.target = engine.query(this.target) ?? this.target;
     }
 
     const { x, y } = this.calculatePosition(entity, engine, dt);
