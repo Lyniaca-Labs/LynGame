@@ -1,4 +1,5 @@
 import { createCard, createColumn, createBoard, listBoards, loadBoard, saveBoard, deleteBoard } from "./store.mjs";
+import { moveItem } from "./reorder.mjs";
 
 export function initBoardApp(els) {
   const state = {
@@ -7,6 +8,9 @@ export function initBoardApp(els) {
     board: null,
     saveTimer: null,
   };
+
+  let dragCard = null;
+  let dragColumnId = null;
 
   if (!state.project) {
     els.main.innerHTML = '<p style="padding:16px;color:var(--text-faint)">No project — open this from the editor.</p>';
@@ -95,6 +99,85 @@ export function initBoardApp(els) {
     return state.board.columns.find((c) => c.id === columnId);
   }
 
+  function moveCard(fromColumnId, cardId, toColumnId, toIndex) {
+    const fromColumn = findColumn(fromColumnId);
+    const cardIndex = fromColumn.cards.findIndex((c) => c.id === cardId);
+    if (cardIndex < 0) return;
+
+    if (fromColumnId === toColumnId) {
+      const adjustedIndex = toIndex > cardIndex ? toIndex - 1 : toIndex;
+      fromColumn.cards = moveItem(fromColumn.cards, cardIndex, adjustedIndex);
+    } else {
+      const [card] = fromColumn.cards.splice(cardIndex, 1);
+      findColumn(toColumnId).cards.splice(toIndex, 0, card);
+    }
+    scheduleSave();
+    renderColumns();
+  }
+
+  function attachCardDragHandlers() {
+    els.main.querySelectorAll('[data-role="card"]').forEach((el) => {
+      el.addEventListener("dragstart", (e) => {
+        dragCard = { columnId: el.dataset.columnId, cardId: el.dataset.cardId };
+        el.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+      });
+      el.addEventListener("dragend", () => {
+        el.classList.remove("dragging");
+        dragCard = null;
+      });
+    });
+
+    els.main.querySelectorAll('[data-role="column-body"]').forEach((body) => {
+      body.addEventListener("dragover", (e) => {
+        if (dragCard) e.preventDefault();
+      });
+      body.addEventListener("drop", (e) => {
+        if (!dragCard) return;
+        e.preventDefault();
+        const targetColumnId = body.dataset.columnId;
+        const cardEls = Array.from(body.querySelectorAll('[data-role="card"]'));
+        let insertIndex = cardEls.length;
+        for (let i = 0; i < cardEls.length; i++) {
+          const rect = cardEls[i].getBoundingClientRect();
+          if (e.clientY < rect.top + rect.height / 2) {
+            insertIndex = i;
+            break;
+          }
+        }
+        moveCard(dragCard.columnId, dragCard.cardId, targetColumnId, insertIndex);
+      });
+    });
+  }
+
+  function attachColumnDragHandlers() {
+    els.main.querySelectorAll('[data-role="column-handle"]').forEach((handle) => {
+      handle.addEventListener("dragstart", (e) => {
+        dragColumnId = handle.dataset.columnId;
+        e.dataTransfer.effectAllowed = "move";
+      });
+      handle.addEventListener("dragend", () => { dragColumnId = null; });
+    });
+
+    els.main.querySelectorAll(".column").forEach((columnEl) => {
+      columnEl.addEventListener("dragover", (e) => {
+        if (dragColumnId && e.target.closest(".column-header")) e.preventDefault();
+      });
+      columnEl.addEventListener("drop", (e) => {
+        if (!dragColumnId || !e.target.closest(".column-header")) return;
+        e.preventDefault();
+        const targetColumnId = columnEl.dataset.columnId;
+        if (targetColumnId === dragColumnId) return;
+        const fromIndex = state.board.columns.findIndex((c) => c.id === dragColumnId);
+        const toIndex = state.board.columns.findIndex((c) => c.id === targetColumnId);
+        state.board.columns = moveItem(state.board.columns, fromIndex, toIndex);
+        dragColumnId = null;
+        scheduleSave();
+        renderColumns();
+      });
+    });
+  }
+
   function renderHeader() {
     els.header.innerHTML = `
       <select id="boardSelect">
@@ -176,6 +259,9 @@ export function initBoardApp(els) {
         addColumnInput.value = "";
       }
     });
+
+    attachCardDragHandlers();
+    attachColumnDragHandlers();
   }
 
   function addCard(columnId, title) {
