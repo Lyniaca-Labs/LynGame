@@ -148,6 +148,12 @@
   table#drumGrid td.step { width: 18px; height: 18px; background: var(--bg-inset); cursor: pointer; }
   table#drumGrid td.step:hover { background: var(--border); }
   table#drumGrid td.step.on { background: var(--accent); }
+
+  /* ---- track section list ---- */
+  #sectionList { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+  .section-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--bg-inset); border: 1px solid var(--border); border-radius: 6px; }
+  .section-row span { flex: 1; }
+  .section-row button { padding: 2px 8px; }
 </style>
 </head>
 <body>
@@ -290,7 +296,28 @@
     </section>
 
     <section class="panel hidden" id="panel-track">
-      <div class="body"></div>
+      <div class="body">
+        <div class="split">
+          <div class="side-panel">
+            <fieldset>
+              <legend>Arrangement</legend>
+              <div class="row">
+                <label>Length (bars)</label>
+                <input type="number" id="targetBars" value="32" min="1" max="256" />
+                <span class="duration" id="targetDuration"></span>
+              </div>
+              <button id="generateArrangementBtn" class="primary">Generate Arrangement</button>
+            </fieldset>
+          </div>
+          <div class="main-panel">
+            <div id="sectionList"></div>
+            <div class="transport">
+              <button id="playTrackBtn" class="primary">▶ Play</button>
+              <span class="duration" id="trackDuration"></span>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="panel-footer">
         <input type="text" id="filename-track" placeholder="my_track" />
         <button id="save-track" class="primary">Save to Assets</button>
@@ -305,6 +332,8 @@
   import { WAVEFORMS, renderLeadVoice, DEFAULT_DRUM_VOICE_PARAMS, renderDrumKit } from "./js/synth.mjs";
   import { DRUM_PATTERN_STYLES, KIT_VOICES, generateDrumPattern } from "./js/drums.mjs";
   import { encodeWav, bufferToDataUrl } from "./js/wav.mjs";
+  import { generateArrangement } from "./js/arrangement.mjs";
+  import { mixBuffers } from "./js/mix.mjs";
 
   const SR = 44100;
   const params = new URLSearchParams(location.search);
@@ -348,23 +377,7 @@
   keySelect.addEventListener("change", () => regenerateMelody());
   scaleSelect.addEventListener("change", () => regenerateMelody());
   seedInput.addEventListener("change", () => { regenerateMelody(); regenerateDrums(); });
-  tempoInput.addEventListener("change", () => { updateMelodyDuration(); updateDrumsDuration(); });
-
-  // ---- Save button handlers (placeholders for tabs not yet wired) ----
-  const saveButtons = ["track"];
-
-  saveButtons.forEach((tab) => {
-    const saveBtn = document.getElementById(`save-${tab}`);
-    const statusEl = document.getElementById(`status-${tab}`);
-
-    saveBtn.addEventListener("click", () => {
-      if (!project) {
-        statusEl.textContent = "No project — open this from the editor.";
-        statusEl.className = "status error";
-      }
-      // Real save wiring comes in later tasks
-    });
-  });
+  tempoInput.addEventListener("change", () => { updateMelodyDuration(); updateDrumsDuration(); updateTargetDuration(); updateTrackDuration(); });
 
   // ============================================================
   // ---- Melody tab ----
@@ -1062,6 +1075,315 @@
   const defaultStyleBtn = drumStyleRowEl.querySelector('[data-style="fourOnFloor"]');
   if (defaultStyleBtn) defaultStyleBtn.click();
   else regenerateDrums();
+
+  // ============================================================
+  // ---- Track tab ----
+  // ============================================================
+
+  const trackState = { targetBars: 32, arrangement: null };
+
+  const targetBarsInput = document.getElementById("targetBars");
+  const targetDurationEl = document.getElementById("targetDuration");
+  const generateArrangementBtn = document.getElementById("generateArrangementBtn");
+  const sectionListEl = document.getElementById("sectionList");
+  const playTrackBtn = document.getElementById("playTrackBtn");
+  const trackDurationEl = document.getElementById("trackDuration");
+  const filenameTrackInput = document.getElementById("filename-track");
+  const saveTrackBtn = document.getElementById("save-track");
+  const statusTrackEl = document.getElementById("status-track");
+
+  // ---- length readout ----
+  function updateTargetDuration() {
+    const tempo = parseFloat(tempoInput.value) || 120;
+    const targetBars = parseInt(targetBarsInput.value, 10) || 0;
+    const secondsPerBar = (60 / tempo) * 4; // 4/4 time: a bar is always 4 quarter notes
+    targetDurationEl.textContent = `(${(targetBars * secondsPerBar).toFixed(1)}s)`;
+  }
+  targetBarsInput.addEventListener("input", updateTargetDuration);
+  updateTargetDuration();
+
+  // ---- generation ----
+  function currentTrackStepDurationSec() {
+    const tempo = parseFloat(tempoInput.value) || 120;
+    return 60 / tempo / (melodyState.stepsPerBar / 4);
+  }
+
+  function generateArrangementTrack() {
+    const rootMidi = noteNameToMidi(keySelect.value, 4);
+    const scaleName = scaleSelect.value;
+    const seed = parseInt(seedInput.value, 10) || 0;
+
+    trackState.arrangement = generateArrangement({
+      rootMidi,
+      scaleName,
+      stepsPerBar: melodyState.stepsPerBar,
+      melodyParams: {
+        registerLowOctave: melodyState.registerLowOctave,
+        registerHighOctave: melodyState.registerHighOctave,
+        density: melodyState.density,
+        jump: melodyState.jump,
+        syncopation: melodyState.syncopation,
+        restProb: melodyState.restProb,
+      },
+      drumParams: {
+        style: drumState.style,
+        density: drumState.density,
+        syncopation: drumState.syncopation,
+      },
+      targetBars: Number(targetBarsInput.value),
+      seed,
+    });
+    renderSectionList();
+  }
+  generateArrangementBtn.addEventListener("click", generateArrangementTrack);
+
+  // ---- section list editing ----
+  // Recomputes every section's absolute startStep (and shifts its melodyNotes'
+  // startStep to match) after any reordering/regenerate/duplicate/remove edit.
+  // drumGrid arrays stay section-relative (they're concatenated per-voice in
+  // order at render time), so only startStep + melodyNotes need shifting.
+  function recomputeSectionOffsets() {
+    const stepsPerBar = melodyState.stepsPerBar;
+    let startStep = 0;
+    for (const section of trackState.arrangement.sections) {
+      const delta = startStep - section.startStep;
+      if (delta !== 0) {
+        section.melodyNotes = section.melodyNotes.map((n) => ({ ...n, startStep: n.startStep + delta }));
+      }
+      section.startStep = startStep;
+      startStep += section.bars * stepsPerBar;
+    }
+    trackState.arrangement.totalSteps = startStep;
+  }
+
+  function moveSection(index, direction) {
+    const sections = trackState.arrangement.sections;
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= sections.length) return;
+    const tmp = sections[index];
+    sections[index] = sections[newIndex];
+    sections[newIndex] = tmp;
+    recomputeSectionOffsets();
+    renderSectionList();
+  }
+
+  function regenerateSection(index) {
+    const section = trackState.arrangement.sections[index];
+    const rootMidi = noteNameToMidi(keySelect.value, 4);
+    const scaleName = scaleSelect.value;
+    const stepsPerBar = melodyState.stepsPerBar;
+    const sectionSeed = Date.now() % 100000;
+
+    const rawNotes = generateMelody({
+      rootMidi,
+      scaleName,
+      bars: section.bars,
+      stepsPerBar,
+      registerLowOctave: melodyState.registerLowOctave,
+      registerHighOctave: melodyState.registerHighOctave,
+      density: melodyState.density,
+      jump: melodyState.jump,
+      syncopation: melodyState.syncopation,
+      restProb: melodyState.restProb,
+      seed: sectionSeed,
+    });
+    section.melodyNotes = rawNotes.map((n) => ({ ...n, startStep: n.startStep + section.startStep }));
+
+    const rawPattern = generateDrumPattern({
+      bars: section.bars,
+      stepsPerBar,
+      style: drumState.style,
+      density: drumState.density,
+      syncopation: drumState.syncopation,
+      seed: sectionSeed + 1,
+    });
+    section.drumGrid = rawPattern.grid;
+
+    recomputeSectionOffsets();
+    renderSectionList();
+  }
+
+  function duplicateSection(index) {
+    const sections = trackState.arrangement.sections;
+    const original = sections[index];
+    const clone = {
+      type: original.type,
+      bars: original.bars,
+      startStep: original.startStep,
+      melodyNotes: original.melodyNotes.map((n) => ({ ...n })),
+      drumGrid: Object.fromEntries(
+        Object.entries(original.drumGrid).map(([voice, hits]) => [voice, hits.slice()])
+      ),
+    };
+    sections.splice(index + 1, 0, clone);
+    recomputeSectionOffsets();
+    renderSectionList();
+  }
+
+  function removeSection(index) {
+    const sections = trackState.arrangement.sections;
+    if (sections.length <= 1) return; // guard: never remove the last section
+    sections.splice(index, 1);
+    recomputeSectionOffsets();
+    renderSectionList();
+  }
+
+  function renderSectionList() {
+    sectionListEl.innerHTML = "";
+    if (!trackState.arrangement) {
+      updateTrackDuration();
+      return;
+    }
+
+    trackState.arrangement.sections.forEach((section, index) => {
+      const row = document.createElement("div");
+      row.className = "section-row";
+
+      const label = document.createElement("span");
+      label.textContent = `${section.type} · ${section.bars} bars`;
+      row.appendChild(label);
+
+      const upBtn = document.createElement("button");
+      upBtn.dataset.action = "up";
+      upBtn.textContent = "↑";
+      upBtn.addEventListener("click", () => moveSection(index, -1));
+      row.appendChild(upBtn);
+
+      const downBtn = document.createElement("button");
+      downBtn.dataset.action = "down";
+      downBtn.textContent = "↓";
+      downBtn.addEventListener("click", () => moveSection(index, 1));
+      row.appendChild(downBtn);
+
+      const regenBtn = document.createElement("button");
+      regenBtn.dataset.action = "regenerate";
+      regenBtn.textContent = "🔁";
+      regenBtn.addEventListener("click", () => regenerateSection(index));
+      row.appendChild(regenBtn);
+
+      const dupBtn = document.createElement("button");
+      dupBtn.dataset.action = "duplicate";
+      dupBtn.textContent = "⧉";
+      dupBtn.addEventListener("click", () => duplicateSection(index));
+      row.appendChild(dupBtn);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.dataset.action = "remove";
+      removeBtn.textContent = "✕";
+      removeBtn.addEventListener("click", () => removeSection(index));
+      row.appendChild(removeBtn);
+
+      sectionListEl.appendChild(row);
+    });
+
+    updateTrackDuration();
+  }
+
+  function updateTrackDuration() {
+    if (!trackState.arrangement || !trackState.arrangement.sections.length) {
+      trackDurationEl.textContent = "0.00s";
+      return;
+    }
+    const stepDurationSec = currentTrackStepDurationSec();
+    const seconds = trackState.arrangement.totalSteps * stepDurationSec;
+    trackDurationEl.textContent = `${seconds.toFixed(2)}s`;
+  }
+
+  // ---- mixdown ----
+  function renderFullTrack() {
+    const stepDurationSec = currentTrackStepDurationSec();
+    const sections = trackState.arrangement.sections;
+
+    const allNotes = sections.flatMap((s) => s.melodyNotes);
+    const leadBuffer = renderLeadVoice(allNotes, melodyState.synthParams, SR, stepDurationSec);
+
+    const combinedGrid = {};
+    for (const voice of KIT_VOICES) {
+      combinedGrid[voice] = [];
+      for (const section of sections) {
+        combinedGrid[voice] = combinedGrid[voice].concat(section.drumGrid[voice] || []);
+      }
+    }
+    const drumBuffer = renderDrumKit(combinedGrid, drumState.voiceParams, SR, stepDurationSec, drumState.swing);
+
+    return mixBuffers([leadBuffer, drumBuffer]);
+  }
+
+  // ---- playback ----
+  let trackAudioCtx = null;
+  let trackCurrentSource = null;
+
+  function ensureTrackAudioCtx() {
+    if (!trackAudioCtx) trackAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return trackAudioCtx;
+  }
+
+  function playTrack() {
+    if (!trackState.arrangement) return;
+    const samples = renderFullTrack();
+    if (!samples.length) return;
+
+    const ac = ensureTrackAudioCtx();
+    if (trackCurrentSource) { try { trackCurrentSource.stop(); } catch {} }
+    const buffer = ac.createBuffer(1, samples.length, SR);
+    buffer.copyToChannel(samples, 0);
+    const source = ac.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ac.destination);
+    source.start();
+    trackCurrentSource = source;
+    trackDurationEl.textContent = `${(samples.length / SR).toFixed(2)}s`;
+  }
+  playTrackBtn.addEventListener("click", playTrack);
+
+  // ---- save ----
+  saveTrackBtn.addEventListener("click", async () => {
+    const filename = filenameTrackInput.value.trim();
+    if (!project) {
+      statusTrackEl.textContent = "No project — open this from the editor.";
+      statusTrackEl.className = "status error";
+      return;
+    }
+    if (!filename) {
+      statusTrackEl.textContent = "Enter a filename first.";
+      statusTrackEl.className = "status error";
+      return;
+    }
+    if (!trackState.arrangement) {
+      statusTrackEl.textContent = "Nothing generated yet.";
+      statusTrackEl.className = "status error";
+      return;
+    }
+
+    statusTrackEl.textContent = "Saving…";
+    statusTrackEl.className = "status";
+
+    try {
+      const samples = renderFullTrack();
+      const wavBuffer = encodeWav(samples, SR);
+      const dataUrl = bufferToDataUrl(wavBuffer);
+      const res = await fetch("/api/extensions/track-maker/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project, filename, dataUrl }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Save failed");
+
+      statusTrackEl.textContent = `Saved ${data.filename}`;
+      statusTrackEl.className = "status ok";
+      window.parent.postMessage(
+        { type: "EXTENSION_ASSET_SAVED", extension: "track-maker", project, filename: data.filename },
+        "*"
+      );
+    } catch (err) {
+      statusTrackEl.textContent = err instanceof Error ? err.message : String(err);
+      statusTrackEl.className = "status error";
+    }
+  });
+
+  // ---- generate a default arrangement so the tab isn't empty on load ----
+  generateArrangementTrack();
 </script>
 </body>
 </html>
