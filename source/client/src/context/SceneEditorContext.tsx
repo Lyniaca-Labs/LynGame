@@ -120,6 +120,14 @@ interface SceneEditorContextValue {
     field: string,
     value: unknown
   ) => void;
+  // Same as updateComponentField, but merges several fields in as a single
+  // history entry — used by the scene canvas so dragging an entity (which
+  // touches both x and y) undoes in one Ctrl+Z instead of two.
+  setComponentFields: (
+    entityId: string,
+    componentName: string,
+    fields: Record<string, unknown>
+  ) => void;
   addComponent: (entityId: string, componentName: string) => void;
   removeComponent: (entityId: string, componentName: string) => void;
 
@@ -377,6 +385,19 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         components: {
           ...e.components,
           [componentName]: { ...e.components?.[componentName], [field]: value },
+        },
+      }));
+    },
+    [updateEntity]
+  );
+
+  const setComponentFields = useCallback(
+    (entityId: string, componentName: string, fields: Record<string, unknown>) => {
+      updateEntity(entityId, (e) => ({
+        ...e,
+        components: {
+          ...e.components,
+          [componentName]: { ...e.components?.[componentName], ...fields },
         },
       }));
     },
@@ -1030,6 +1051,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         clear,
         renameEntity,
         updateComponentField,
+        setComponentFields,
         addComponent,
         removeComponent,
         setEntityPrefab,

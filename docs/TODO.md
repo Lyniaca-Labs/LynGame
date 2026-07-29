@@ -2,6 +2,11 @@
 
 ## ULTRA PRIORITY (3-Day Jam: Card Game / Time-Strategy / Deck Builder)
 
+- [x] show preview on edit before you have to click on it — the new Scene Canvas (see "Editor/Game viewport split" below) renders every entity's thumbnail up front, not just the selected one
+- [x] have camera panning — drag empty space in the Scene Canvas to pan around; "Center view" button resets it (`source/client/src/layout/sections/SceneCanvas.tsx`)
+- [x] show icons next to entities on hover that represent special components (camera, animation, collision (not implemented yet but just an example)) — `source/client/src/lib/entityIcons.tsx`, used by both the Explorer tree and the Scene Canvas's entity boxes. Camera's icon is persistent (always visible); Interactable/Animator/Anchor show on hover. Collision has no component yet, so no icon for it.
+- [x] when you run it it should take you out of edit mode automatically — pressing Run now switches the Viewport to the "Game" tab (`EditorLayout.tsx`'s `runGame`)
+
 ### Must-have to build the game at all
 - [x] Text components / font loading — card names, costs, stats, descriptions
 - [x] Event component (click, hold, drag/release) — picking up & playing cards
@@ -67,8 +72,8 @@ LATER
   - [x] dropdown type for component schema -> dropdown options (`type: "select"` + `options: [{value,label}]`, used by Interactable.cursor and Anchor.anchor)
   - [ ] ability to turn off antialiasing in config / set frame rate and tick speed
   - [x] tooltips, descriptions, and usage everywhere, proper documentation (every built-in component field now has a `description`, rendered as a native tooltip in the Inspector)
-  - [ ] custom cursor support
-  - [ ] editor dragging and dropping
+  - [x] custom cursor support (`Interactable.cursor` — select field, CSS cursor applied on hover)
+  - [x] editor dragging and dropping — Scene Canvas: drag an entity's box to move it (drags Transform.x/y), arrow keys nudge it 1px (10px w/ Shift), corner-panel one-click pins it via the Anchor component (`source/client/src/layout/sections/SceneCanvas.tsx`)
   - [x] keyframes for animation
   - [x] camera component -> attaches to entity, can set isactive on camera component and it will turn off all others in scene and attach to scene
   - [x] stop reshipping LGEngine with every single texture
@@ -88,8 +93,8 @@ LATER
   - [x] code editor
   - [x] ability to move entities around, around scenes, duplicate, copy, paste
   - [ ] little icons for tabs on explorer
-    - [ ] camera icon for cameras
-    - [ ] entity icon for entities
+    - [x] camera icon for cameras (+ Interactable/Animator/Anchor icons — `source/client/src/lib/entityIcons.tsx`)
+    - [ ] entity icon for entities (generic default icon; only "special" components have one so far)
     - [ ] hitbox entity evnetually
   - [x] can edit prefabs
   - [ ] export project to zip (with a node live server. Can use node or python, or powershell (ps1) to run)
@@ -142,7 +147,7 @@ LATER
 - [ ] Debug mode
 - [ ] Error handling
 - [x] Performance monitor
-- [ ] Live preview
+- [x] Live preview — Scene Canvas tab shows a live, editable layout of every entity in the open scene without building/running (`source/client/src/layout/sections/SceneCanvas.tsx`)
 - [ ] custom styling / border radius changes (separate from theme) -> "Softness"
 
 ---
@@ -160,7 +165,7 @@ LATER
 - [ ] Following/math utilities
 - [ ] Audio system
 - [x] GUI helper/system (`Anchor` component + `engine.gui` module — see ULTRA PRIORITY entry above)
-- [ ] Y-offset Z-level sorting
+- [x] Y-offset Z-level sorting
 - [x] Global scene switching
 - [x] Global script calls
 - [ ] have ai go through and make full documentation of app, components, handlers, etc... (info buttons)
@@ -170,7 +175,7 @@ LATER
 ## Prefabs & Components
 
 - [x] Prefab system
-- [ ] Entity inheritance
+- [x] Entity inheritance
 - [ ] Common gameplay components
 - [ ] Reusable asset library
 - [ ] Built-in icon pack

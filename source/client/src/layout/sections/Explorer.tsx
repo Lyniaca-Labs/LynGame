@@ -35,6 +35,7 @@ import ScriptGraph from "../../components/graphs/ScriptGraph";
 import { GraphValue } from "../../components/graphs/GraphEditor";
 import TextureGraph from "../../components/graphs/TextureGraph";
 import { renderCompiledTexture } from "../../lib/texturePreview";
+import { presentComponentIcons } from "../../lib/entityIcons";
 
 export function Explorer() {
   return (
@@ -82,6 +83,18 @@ type EntityNodeMeta =
   | { kind: "entity"; sceneId: string; entityId: string; parentId: string | null }
   | { kind: "scene"; sceneId: string };
 
+// Small badges marking which "special" components an entity carries (see
+// lib/entityIcons.tsx — shared with the scene canvas's entity boxes so both
+// places agree on the same icon/tooltip/persistence per component).
+function entityBadges(entity: Entity): TreeNodeBadge[] {
+  return presentComponentIcons(entity).map((c) => ({
+    id: c.key,
+    icon: <c.icon size={11} className="text-[var(--color-text-faint)]" />,
+    tooltip: c.tooltip,
+    persistent: c.persistent,
+  }));
+}
+
 // Turns a scene's flat entities array (Entity.parentId links) into nested
 // TreeNodes for FolderTree — which already has collapse/expand built in, so
 // nesting a card's children under it is enough to get a collapsible
@@ -121,6 +134,7 @@ function buildEntityTree(
       label: e.id,
       onClick: () => openEntity(sceneId, e.id),
       children: children?.length ? children.map(buildNode) : undefined,
+      badges: entityBadges(e),
       meta,
     };
   };

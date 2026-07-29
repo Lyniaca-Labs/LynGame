@@ -63,6 +63,21 @@ export class GameEngine {
     window.unPauseGame = () => this.unpause();
     window.getEntityPreview = (id, opts) => this.getEntityPreview(id, opts);
 
+    // Editor "click to select" support: when the parent editor turns this
+    // on, a raw click anywhere in the game view hit-tests every entity
+    // (independent of Interactable/onClick — most entities don't have one)
+    // and reports the topmost hit back, so clicking something in the actual
+    // running game can select its counterpart in the editor's Explorer.
+    // Off by default so a standalone build never pays for the listener.
+    this._editorPicking = false;
+    this.gameContainer.addEventListener("pointerdown", (e) => {
+      if (!this._editorPicking) return;
+      const rect = this.gameContainer.getBoundingClientRect();
+      const entity = this.pickEntityAt(e.clientX - rect.left, e.clientY - rect.top);
+      if (entity) {
+        window.parent.postMessage({ type: "ENTITY_PICKED", id: entity.id }, "*");
+      }
+    });
 
     window.addEventListener("keydown", (e) => {
       if (!(e.ctrlKey || e.metaKey)) return;
@@ -84,6 +99,10 @@ export class GameEngine {
           { type: "ENTITY_PREVIEW_RESULT", requestId, dataUrl },
           "*"
         );
+      }
+
+      if (event.data?.type === "EDITOR_ENABLE_PICKING") {
+        this._editorPicking = !!event.data.enabled;
       }
     });
   }
@@ -241,6 +260,56 @@ export class GameEngine {
       };
     }
     return this._cachedViewportSize;
+  }
+
+  // --- editor picking ---
+
+  /**
+   * Hit-tests every entity's bounding box (Transform + SpriteRenderer/
+   * ShapeRenderer/TextRenderer dimensions, same source Interactable uses)
+   * against a screen-space point and returns the topmost match — highest
+   * Transform.zIndex first, same order things are drawn in _render(), so
+   * "topmost" here means "what you'd actually see at that pixel".
+   * Screen->world conversion matches Interactable._screenToWorld exactly
+   * (camera offset applied unless the transform is `fixed`).
+   *
+   * @returns {Entity|null}
+   */
+  pickEntityAt(screenX, screenY) {
+    const camera = this.camera;
+
+    const drawOrder = [...this.entities].sort((a, b) => {
+      const za = a.getComponent(Transform)?.zIndex ?? 0;
+      const zb = b.getComponent(Transform)?.zIndex ?? 0;
+      return za - zb;
+    });
+
+    for (let i = drawOrder.length - 1; i >= 0; i--) {
+      const entity = drawOrder[i];
+      if (entity._destroyed) continue;
+
+      const transform = entity.getWorldTransform(this);
+      if (!transform) continue;
+
+      const { width, height } = entity.getDimensions();
+      if (!width || !height) continue;
+
+      const offsetX = !transform.fixed && camera ? camera.x : 0;
+      const offsetY = !transform.fixed && camera ? camera.y : 0;
+      const worldX = screenX + offsetX;
+      const worldY = screenY + offsetY;
+
+      const left = transform.x - width / 2;
+      const right = transform.x + width / 2;
+      const top = transform.y - height / 2;
+      const bottom = transform.y + height / 2;
+
+      if (worldX >= left && worldX <= right && worldY >= top && worldY <= bottom) {
+        return entity;
+      }
+    }
+
+    return null;
   }
 
   // --- previews ---

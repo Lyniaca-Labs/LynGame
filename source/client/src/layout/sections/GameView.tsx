@@ -9,6 +9,10 @@ interface GameViewProps {
   buildVersion: number;
   isBuilding: boolean;
   error: string | null;
+  // Fired when the player clicks something in the running game and the
+  // engine's editor-picking hit test finds an entity under the cursor —
+  // lets the editor select that entity's counterpart in the Explorer.
+  onEntityPicked?: (entityId: string) => void;
 }
 
 export interface EntityPreviewOptions {
@@ -31,7 +35,7 @@ const PREVIEW_RETRY_INTERVAL_MS = 400;
 
 export const GameView = forwardRef<GameViewHandle, GameViewProps>(
   function GameView(
-    { project, gameUrl, buildUrl, buildVersion, isBuilding, error },
+    { project, gameUrl, buildUrl, buildVersion, isBuilding, error, onEntityPicked },
     ref
   ) {
     const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -43,6 +47,12 @@ export const GameView = forwardRef<GameViewHandle, GameViewProps>(
     const previewReadyPromise = useRef<Promise<void>>(Promise.resolve());
 
     const { setIframeWindow, clear } = useGameConsole();
+
+    // Kept as a ref (not a dep) so the message-listener effect below, which
+    // only wants to attach once, doesn't need to re-subscribe every time
+    // the parent passes a new callback identity.
+    const onEntityPickedRef = useRef(onEntityPicked);
+    onEntityPickedRef.current = onEntityPicked;
 
     const pendingPreviews = useRef(
       new Map<
@@ -103,6 +113,11 @@ export const GameView = forwardRef<GameViewHandle, GameViewProps>(
         // so we can see whether the engine is responding at all.
         if (e.data?.type) {
           // console.log("[preview-debug] window received message:", e.data);
+        }
+
+        if (e.data?.type === "ENTITY_PICKED") {
+          if (e.data.id) onEntityPickedRef.current?.(e.data.id);
+          return;
         }
 
         if (e.data?.type !== "ENTITY_PREVIEW_RESULT") {
@@ -237,9 +252,12 @@ export const GameView = forwardRef<GameViewHandle, GameViewProps>(
     );
 
     const handleLoad = () => {
-      setIframeWindow(
-        iframeRef.current?.contentWindow ?? null
-      );
+      const win = iframeRef.current?.contentWindow ?? null;
+      setIframeWindow(win);
+      // Click-to-select: let the running game report which entity was
+      // clicked so the editor can select its counterpart. Harmless in a
+      // standalone build (message is only ever sent from this editor).
+      win?.postMessage({ type: "EDITOR_ENABLE_PICKING", enabled: true }, "*");
     };
 
     // The preview iframe is rendered unconditionally, below, so that

@@ -21,6 +21,10 @@
           "sprite": "new.texture",
           "width": 32,
           "height": 32
+        },
+        "Transform": {
+          "x": 101,
+          "y": 150
         }
       },
       "scripts": [
@@ -134,8 +138,8 @@
       "id": "fallingBox",
       "components": {
         "Transform": {
-          "x": 300,
-          "y": 20,
+          "x": 178,
+          "y": 157,
           "rotation": 0,
           "zIndex": 1
         },

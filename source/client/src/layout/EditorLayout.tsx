@@ -5,6 +5,8 @@ import {
   Save as SaveIcon,
   Settings as SettingsIcon,
   FolderCog,
+  LayoutGrid,
+  Gamepad2,
 } from "lucide-react";
 
 import { useProject } from "../context/ProjectContext";
@@ -25,6 +27,7 @@ import { ProjectSettingsModal } from "../components/ProjectSettingsModal";
 import { ProjectSelector } from "../components/ProjectSelector";
 import { AnimationClipEditorModal } from "../components/AnimationClipEditorModal";
 import { GameView, type GameViewHandle } from "./sections/GameView";
+import { SceneCanvas } from "./sections/SceneCanvas";
 import { OutputPanel } from "./sections/OutputPanel";
 
 // Ctrl+Z/Y should defer to a locally-focused editor's own undo (GraphEditor's
@@ -44,6 +47,8 @@ export function EditorLayout() {
 function EditorLayoutContent() {
   const { currentProject, projectData, openProject, deleteProject } = useProject();
   const {
+    scene,
+    openEntity,
     save,
     dirty,
     saving: sceneSaving,
@@ -69,6 +74,13 @@ function EditorLayoutContent() {
   const [isBuilding, setIsBuilding] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
+
+  // "Editor" = the scene canvas (lay out entities, no build/run required).
+  // "Game" = the actual running build. Keeping them as separate views
+  // (instead of one overlaying the other) is the "separation between
+  // editor and actual view" — what you edit and what you play are never
+  // the same pixels.
+  const [viewportTab, setViewportTab] = useState<"editor" | "game">("editor");
 
   const gameViewRef = useRef<GameViewHandle>(null);
   window.gameViewRef = gameViewRef as React.RefObject<GameViewHandle>;
@@ -96,6 +108,9 @@ function EditorLayoutContent() {
       if (result.url) {
         setGameUrl(result.url);
         setIsPaused(false);
+        // Running the game is exactly when you stop laying things out and
+        // start playing — jump the viewport over automatically.
+        setViewportTab("game");
       } else {
         setBuildError(result.error ?? "Build failed");
       }
@@ -140,6 +155,15 @@ function EditorLayoutContent() {
     await save();
     await build();
     window.dispatchEvent(new Event("entity-preview-refresh"));
+  };
+
+  // Clicking something in the actually-running game selects its counterpart
+  // in the Explorer/Inspector — only if it's actually part of the scene
+  // that's currently open for editing (the running game may have navigated
+  // to a different scene at runtime via loadScene()).
+  const handleEntityPicked = (entityId: string) => {
+    if (!scene?.entities.some((e) => e.id === entityId)) return;
+    openEntity(scene.name, entityId);
   };
 
   const togglePause = () => {
@@ -246,16 +270,50 @@ function EditorLayoutContent() {
         </Resizable>
 
         <div className="flex-1 min-w-0">
-          <Container title="Viewport">
-            <GameView
-              ref={gameViewRef}
-              project={currentProject}
-              gameUrl={gameUrl}
-              buildUrl={buildUrl}
-              buildVersion={buildVersion}
-              isBuilding={isBuilding}
-              error={buildError}
-            />
+          <Container
+            title="Viewport"
+            bodyClassName="relative p-0"
+            headerActions={
+              <div className="flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] p-0.5">
+                <Button
+                  size="sm"
+                  variant={viewportTab === "editor" ? "accent" : "ghost"}
+                  onClick={() => setViewportTab("editor")}
+                  title="Editor view: lay out entities, drag/nudge/pin — no build or run required"
+                >
+                  <LayoutGrid size={14} />
+                  Editor
+                </Button>
+                <Button
+                  size="sm"
+                  variant={viewportTab === "game" ? "accent" : "ghost"}
+                  onClick={() => setViewportTab("game")}
+                  title="Game view: the actual running build"
+                >
+                  <Gamepad2 size={14} />
+                  Game
+                </Button>
+              </div>
+            }
+          >
+            {/* Both stay mounted so switching tabs never tears down the
+                running iframe (and its game/preview state) or the canvas's
+                own local drag state. */}
+            <div className={viewportTab === "game" ? "h-full w-full" : "hidden"}>
+              <GameView
+                ref={gameViewRef}
+                project={currentProject}
+                gameUrl={gameUrl}
+                buildUrl={buildUrl}
+                buildVersion={buildVersion}
+                isBuilding={isBuilding}
+                error={buildError}
+                onEntityPicked={handleEntityPicked}
+              />
+            </div>
+            <div className={viewportTab === "editor" ? "h-full w-full" : "hidden"}>
+              <SceneCanvas gameViewRef={gameViewRef as React.RefObject<GameViewHandle>} />
+            </div>
           </Container>
         </div>
 
