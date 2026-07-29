@@ -80,6 +80,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Plus, Search, Trash2, X } from "lucide-react";
+import { Checkbox } from "../../ui/Checkbox";
 
 // ---------------------------------------------------------------------------
 // Public types — the registry shape extensions author against.
@@ -422,12 +423,12 @@ function GraphFieldEditor({
         />
       )}
       {field.type === "boolean" && (
-        <input
-          type="checkbox"
+        <Checkbox
           className="nodrag"
           checked={Boolean(value)}
           disabled={disabled}
-          onChange={(e) => onChange(e.target.checked)}
+          onChange={(checked) => onChange(checked)}
+          size="sm"
         />
       )}
       {field.type === "color" && (

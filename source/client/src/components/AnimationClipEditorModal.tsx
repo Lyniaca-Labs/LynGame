@@ -4,6 +4,7 @@ import { Trash2 } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { Select, SelectOption } from "../ui/Select";
+import { Checkbox } from "../ui/Checkbox";
 import { animationsApi, AnimatorClip, AnimatorTrack, AnimatorKeyframe, ComponentDefinition } from "../api";
 
 const EASING_OPTIONS: SelectOption[] = [
@@ -140,10 +141,10 @@ export function AnimationClipEditorModal({
             </label>
             <label className="flex items-center gap-2 text-xs">
               <FieldLabel label="loop" />
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={Boolean(clip.loop)}
-                onChange={(e) => updateClip({ ...clip, loop: e.target.checked })}
+                onChange={(checked) => updateClip({ ...clip, loop: checked })}
+                size="sm"
               />
             </label>
           </div>

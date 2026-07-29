@@ -2,20 +2,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { Compartment } from "@codemirror/state";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { tags as t } from "@lezer/highlight";
-import { javascript } from "@codemirror/lang-javascript";
-import { json } from "@codemirror/lang-json";
+import { syntaxHighlighting } from "@codemirror/language";
 import {
   ExternalLink, Save, Loader2, WrapText, ZoomIn, ZoomOut, Wand2, X
 } from "lucide-react";
-import * as prettier from "prettier/standalone";
-import * as babelPlugin from "prettier/plugins/babel";
-import * as estreePlugin from "prettier/plugins/estree";
-import * as tsPlugin from "prettier/plugins/typescript";
 import { Button } from "../ui/Button";
 import { projectsApi, EditableFolder } from "../api";
 import { cn } from "../ui/cn";
+import {
+  buildEditorTheme,
+  codeMirrorBasicSetup,
+  FONT_SIZE_MAX,
+  FONT_SIZE_MIN,
+  formatSource,
+  languageExtension,
+  languageFromFilename,
+  syntaxTheme,
+  useIsDarkTheme,
+} from "./codeEditor/shared";
 
 type CodeFolder = Extract<EditableFolder, "components" | "scripts">;
 
@@ -30,86 +34,6 @@ export interface CodeFileEditorProps {
   showOpenInVSCode?: boolean;
   className?: string;
 }
-
-function languageExtension(filename: string) {
-  if (filename.endsWith(".json")) return json();
-  const typescript = filename.endsWith(".ts") || filename.endsWith(".tsx");
-  const jsx = filename.endsWith(".tsx") || filename.endsWith(".jsx");
-  return javascript({ typescript, jsx });
-}
-
-async function formatSource(filename: string, source: string): Promise<string> {
-  if (filename.endsWith(".json")) {
-    return JSON.stringify(JSON.parse(source), null, 2);
-  }
-  const isTs = filename.endsWith(".ts") || filename.endsWith(".tsx");
-  return prettier.format(source, {
-    parser: isTs ? "typescript" : "babel",
-    plugins: [babelPlugin, estreePlugin, tsPlugin],
-    semi: true,
-    singleQuote: false,
-  });
-}
-
-function isDarkTheme(): boolean {
-  return (document.documentElement.dataset.theme ?? "").includes("dark");
-}
-
-function useIsDarkTheme(): boolean {
-  const [dark, setDark] = useState(isDarkTheme);
-  useEffect(() => {
-    const observer = new MutationObserver(() => setDark(isDarkTheme()));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
-  }, []);
-  return dark;
-}
-
-function buildEditorTheme(dark: boolean, fontSize: number) {
-  return EditorView.theme(
-    {
-      "&": {
-        backgroundColor: "var(--color-bg-elevated)",
-        color: "var(--color-text)",
-        height: "100%",
-        fontSize: `${fontSize}px`,
-      },
-      ".cm-content": {
-        fontFamily: "var(--font-mono, monospace)",
-        caretColor: "var(--color-text)",
-      },
-      ".cm-gutters": {
-        backgroundColor: "var(--color-bg-elevated)",
-        color: "var(--color-text-faint)",
-        borderRight: "1px solid var(--color-border)",
-      },
-      ".cm-activeLine": { backgroundColor: "var(--color-border)" },
-      ".cm-activeLineGutter": { backgroundColor: "var(--color-border)" },
-      "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-        backgroundColor: "var(--color-accent-secondary)",
-        opacity: 0.35,
-      },
-    },
-    { dark }
-  );
-}
-
-const syntaxTheme = HighlightStyle.define([
-  { tag: t.keyword, color: "var(--color-accent)" },
-  { tag: t.string, color: "var(--color-success)" },
-  { tag: t.number, color: "var(--color-warning)" },
-  { tag: t.comment, color: "var(--color-text-faint)", fontStyle: "italic" },
-  { tag: t.function(t.variableName), color: "var(--color-accent-strong)" },
-  { tag: t.variableName, color: "var(--color-text)" },
-  { tag: t.propertyName, color: "var(--color-accent-secondary)" },
-  { tag: t.typeName, color: "var(--color-accent-strong)" },
-  { tag: t.operator, color: "var(--color-text-muted)" },
-  { tag: t.bracket, color: "var(--color-text-muted)" },
-  { tag: t.invalid, color: "var(--color-danger)" },
-]);
-
-const FONT_SIZE_MIN = 10;
-const FONT_SIZE_MAX = 22;
 
 export function CodeFileEditor({
   project,
@@ -194,7 +118,7 @@ export function CodeFileEditor({
     setFormatting(true);
     setError(null);
     try {
-      const formatted = await formatSource(filename, value);
+      const formatted = await formatSource(languageFromFilename(filename), value);
       setValue(formatted);
     } catch (err) {
       setError(`Format failed: ${(err as Error).message}`);
@@ -283,7 +207,7 @@ export function CodeFileEditor({
             height="100%"
             theme={editorTheme}
             extensions={[
-              languageExtension(filename),
+              languageExtension(languageFromFilename(filename)),
               themeCompartment.of(syntaxHighlighting(syntaxTheme)),
               ...(wordWrap ? [EditorView.lineWrapping] : []),
             ]}
@@ -291,17 +215,7 @@ export function CodeFileEditor({
               setValue(v);
               onChange?.(v);
             }}
-            basicSetup={{
-              lineNumbers: true,
-              foldGutter: true,
-              highlightActiveLine: true,
-              highlightActiveLineGutter: true,
-              autocompletion: true,
-              bracketMatching: true,
-              closeBrackets: true,
-              highlightSelectionMatches: true,
-              searchKeymap: true,
-            }}
+            basicSetup={codeMirrorBasicSetup}
           />
         )}
       </div>

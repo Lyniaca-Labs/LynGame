@@ -284,6 +284,16 @@ function ExplorerFiles() {
 
   const [isCodeDirty, setIsCodeDirty] = useState(false);
 
+  // sceneEntities is keyed only by sceneId, and openCodeFile/openGraphScript
+  // point at a project-relative path — without this reset, switching to a
+  // project with a same-named scene or file keeps showing the previous
+  // project's cached/open content.
+  useEffect(() => {
+    setSceneEntities({});
+    setOpenCodeFile(null);
+    setOpenGraphScript(null);
+    setIsCodeDirty(false);
+  }, [currentProject]);
 
   useEffect(() => {
     if (!openGraphScript || !currentProject) {

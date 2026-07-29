@@ -345,6 +345,24 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
   const openClipEditor = useCallback((name: string) => setEditingClipName(name), []);
   const closeClipEditor = useCallback(() => setEditingClipName(null), []);
 
+  // Reset every project-scoped piece of state when switching projects.
+  // Without this, target/prefabCache/entityClipboard/undo history from the
+  // previous project leak into the new one — most visibly, a scene or
+  // prefab in the new project that happens to share a name with one already
+  // cached would keep showing the OLD project's data instead of refetching.
+  useEffect(() => {
+    setTarget(null);
+    setScene(null);
+    setDirty(false);
+    setPrefabCache({});
+    setPrefabDraft(null);
+    setEntityClipboard(null);
+    setEditingClipName(null);
+    sceneHistoryRef.current = { past: [], future: [] };
+    prefabHistoryRef.current = { past: [], future: [] };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProject]);
+
   function pushSceneSnapshot(snapshot: Scene) {
     const h = sceneHistoryRef.current;
     h.past.push(structuredClone(snapshot));

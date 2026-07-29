@@ -43,11 +43,14 @@ extension, went through its own design pass and shipped — see
 
 ## Open Bugs
 
-- [ ] there should be an ability to import a pallete into pixel art editor and also ability to use a certain pallete for applying to sprite / ability to edit the colors in generated pallete
-- [ ] switching projects does not fully refresh everything
+- [x] switching projects does not fully refresh everything
+- [x] need checkbox component for editor
+- [x] standardize the code editor modal
+
+## Defer Bugs
+
 - [ ] node editor wires / edges are laggy (defer)
-- [ ] need checkbox component for editor
-- [ ] standardize the code editor modal
+- [ ] there should be an ability to import a pallete into pixel art editor and also ability to use a certain pallete for applying to sprite / ability to edit the colors in generated pallete
 - [ ] graph editor laggy when panning around
   - [ ] also have connector dots come slightly out and bigger
   - [ ] replace moving lines with arrows
@@ -158,7 +161,7 @@ extension instead of needing engine/editor changes.
 - [ ] Sprite creator
 - [ ] Texture creator
 - [ ] Tilemap creator
-- [ ] voice to synth
+- [ ] voice to notes / music
 - [ ] visual Animation editor
 - [x] TODO/Trello board (`source/extensions/board/`)
 - [ ] google magenta tensorflow running in browser for music generation

@@ -3,102 +3,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { Compartment } from "@codemirror/state";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { tags as t } from "@lezer/highlight";
-import { javascript } from "@codemirror/lang-javascript";
-import { json } from "@codemirror/lang-json";
+import { syntaxHighlighting } from "@codemirror/language";
 import { Save, WrapText, ZoomIn, ZoomOut, Wand2, X } from "lucide-react";
-import * as prettier from "prettier/standalone";
-import * as babelPlugin from "prettier/plugins/babel";
-import * as estreePlugin from "prettier/plugins/estree";
-import * as tsPlugin from "prettier/plugins/typescript";
 import { Button } from "../ui/Button";
 import { cn } from "../ui/cn";
+import {
+  buildEditorTheme,
+  codeMirrorBasicSetup,
+  CodeLanguage,
+  FONT_SIZE_MAX,
+  FONT_SIZE_MIN,
+  formatSource,
+  languageExtension,
+  syntaxTheme,
+  useIsDarkTheme,
+} from "./codeEditor/shared";
 
-export type CodeStringLanguage = "js" | "jsx" | "ts" | "tsx" | "json";
+export type CodeStringLanguage = CodeLanguage;
 
-export interface CodeStringEditorProps {
-  value: string;
-  language?: CodeStringLanguage;
-  title?: string;
-  onSave: (newText: string) => void;
-  onClose: () => void;
-  className?: string;
-}
-
-function languageExtension(lang: CodeStringLanguage) {
-  if (lang === "json") return json();
-  return javascript({ typescript: lang === "ts" || lang === "tsx", jsx: lang === "jsx" || lang === "tsx" });
-}
-
-async function formatSource(lang: CodeStringLanguage, source: string): Promise<string> {
-  if (lang === "json") return JSON.stringify(JSON.parse(source), null, 2);
-  return prettier.format(source, {
-    parser: lang === "ts" || lang === "tsx" ? "typescript" : "babel",
-    plugins: [babelPlugin, estreePlugin, tsPlugin],
-    semi: true,
-    singleQuote: false,
-  });
-}
-
-function isDarkTheme(): boolean {
-  return (document.documentElement.dataset.theme ?? "").includes("dark");
-}
-
-function useIsDarkTheme(): boolean {
-  const [dark, setDark] = useState(isDarkTheme);
-  useEffect(() => {
-    const observer = new MutationObserver(() => setDark(isDarkTheme()));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
-  }, []);
-  return dark;
-}
-
-function buildEditorTheme(dark: boolean, fontSize: number) {
-  return EditorView.theme(
-    {
-      "&": {
-        backgroundColor: "var(--color-bg-elevated)",
-        color: "var(--color-text)",
-        height: "100%",
-        fontSize: `${fontSize}px`,
-      },
-      ".cm-content": { fontFamily: "var(--font-mono, monospace)", caretColor: "var(--color-text)" },
-      ".cm-gutters": {
-        backgroundColor: "var(--color-bg-elevated)",
-        color: "var(--color-text-faint)",
-        borderRight: "1px solid var(--color-border)",
-      },
-      ".cm-activeLine": { backgroundColor: "var(--color-border)" },
-      ".cm-activeLineGutter": { backgroundColor: "var(--color-border)" },
-      "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-        backgroundColor: "var(--color-accent-secondary)",
-        opacity: 0.35,
-      },
-    },
-    { dark }
-  );
-}
-
-const syntaxTheme = HighlightStyle.define([
-  { tag: t.keyword, color: "var(--color-accent)" },
-  { tag: t.string, color: "var(--color-success)" },
-  { tag: t.number, color: "var(--color-warning)" },
-  { tag: t.comment, color: "var(--color-text-faint)", fontStyle: "italic" },
-  { tag: t.function(t.variableName), color: "var(--color-accent-strong)" },
-  { tag: t.variableName, color: "var(--color-text)" },
-  { tag: t.propertyName, color: "var(--color-accent-secondary)" },
-  { tag: t.typeName, color: "var(--color-accent-strong)" },
-  { tag: t.operator, color: "var(--color-text-muted)" },
-  { tag: t.bracket, color: "var(--color-text-muted)" },
-  { tag: t.invalid, color: "var(--color-danger)" },
-]);
-
-const FONT_SIZE_MIN = 10;
-const FONT_SIZE_MAX = 22;
-
-// components/CodeStringEditor.tsx  (only the changed bits)
 export interface CodeStringEditorProps {
   value: string;
   language?: CodeStringLanguage;
@@ -226,17 +148,7 @@ export function CodeStringEditor({
             ...(wordWrap ? [EditorView.lineWrapping] : []),
           ]}
           onChange={setValue}
-          basicSetup={{
-            lineNumbers: true,
-            foldGutter: true,
-            highlightActiveLine: true,
-            highlightActiveLineGutter: true,
-            autocompletion: true,
-            bracketMatching: true,
-            closeBrackets: true,
-            highlightSelectionMatches: true,
-            searchKeymap: true,
-          }}
+          basicSetup={codeMirrorBasicSetup}
         />
       </div>
     </div>

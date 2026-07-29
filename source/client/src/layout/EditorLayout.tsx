@@ -145,8 +145,16 @@ function EditorLayoutContent() {
     }
   };
 
+  // Otherwise a running game / stale build from the previous project keeps
+  // showing in the Game viewport tab after switching projects.
   useEffect(() => {
+    setBuildUrl(null);
+    setGameUrl(null);
+    setBuildError(null);
+    setIsPaused(false);
+    setViewportTab("editor");
     build();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject]);
 
 

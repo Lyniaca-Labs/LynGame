@@ -5,6 +5,7 @@ import { Trash2, RefreshCw, X, Pencil, ChevronDown, ChevronRight } from "lucide-
 import { Container } from "../../ui/Container";
 import { Select, SelectOption } from "../../ui/Select";
 import { Button } from "../../ui/Button";
+import { Checkbox } from "../../ui/Checkbox";
 import { useSceneEditor } from "../../context/SceneEditorContext";
 import { useProject } from "../../context/ProjectContext";
 import { Entity, ComponentDefinition, ComponentFieldDefinition, PrefabData, PrefabChildData } from "../../api";
@@ -1339,7 +1340,7 @@ function SchemaField({
         />
       )}
       {type === "boolean" && (
-        <input type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} />
+        <Checkbox checked={Boolean(value)} onChange={(checked) => onChange(checked)} size="sm" />
       )}
       {type === "color" && (
         <input
