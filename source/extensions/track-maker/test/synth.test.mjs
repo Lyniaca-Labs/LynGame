@@ -137,3 +137,48 @@ test("renderDrumKit output stays within [-1, 1] with multiple simultaneous voice
   const out = renderDrumKit(grid, DEFAULT_DRUM_VOICE_PARAMS, SR, 0.25, 0.3);
   for (const s of out) assert.ok(s >= -1 && s <= 1);
 });
+
+test("renderLeadVoice with glideTime=0 (default) behaves identically to no legato (backward compatible)", () => {
+  const notes = [
+    { startStep: 0, lengthSteps: 2, midi: 60, velocity: 1 },
+    { startStep: 2, lengthSteps: 2, midi: 64, velocity: 1 },
+  ];
+  const withoutGlide = renderLeadVoice(notes, LEAD_PARAMS, SR, 0.25);
+  const withZeroGlide = renderLeadVoice(notes, { ...LEAD_PARAMS, glideTime: 0 }, SR, 0.25);
+  assert.deepEqual(withoutGlide, withZeroGlide);
+});
+
+test("renderLeadVoice legato: back-to-back notes glide pitch smoothly instead of re-attacking", () => {
+  const notes = [
+    { startStep: 0, lengthSteps: 4, midi: 60, velocity: 1 },
+    { startStep: 4, lengthSteps: 4, midi: 67, velocity: 1 },
+  ];
+  const stepDurationSec = 0.25;
+  const params = { ...LEAD_PARAMS, glideTime: 0.05 };
+  const out = renderLeadVoice(notes, params, SR, stepDurationSec);
+
+  // No hard silence/attack dip at the join between the two notes — with
+  // legato, amplitude should stay roughly at sustain level right across
+  // the boundary instead of dropping to (near) zero and ramping back up.
+  const joinSample = Math.floor(4 * stepDurationSec * SR);
+  const around = out.subarray(joinSample - 50, joinSample + 50);
+  const rms = (arr) => Math.sqrt(arr.reduce((a, v) => a + v * v, 0) / (arr.length || 1));
+  assert.ok(rms(around) > 0.3, `expected sustained energy across the legato join, got rms=${rms(around)}`);
+});
+
+test("renderLeadVoice legato: a non-adjacent note (gap or different pitch start) does not glide", () => {
+  const notes = [
+    { startStep: 0, lengthSteps: 2, midi: 60, velocity: 1 },
+    { startStep: 3, lengthSteps: 2, midi: 67, velocity: 1 }, // gap at step 2
+  ];
+  const stepDurationSec = 0.25;
+  // Zero release so note 1's tail doesn't bleed into the gap we're checking.
+  const params = { ...LEAD_PARAMS, release: 0, glideTime: 0.05 };
+  const out = renderLeadVoice(notes, params, SR, stepDurationSec);
+  // Should still produce a valid, in-range buffer; the gap step is silent.
+  for (const s of out) assert.ok(s >= -1 && s <= 1);
+  const gapStart = Math.floor(2 * stepDurationSec * SR) + 10;
+  const gapEnd = Math.floor(3 * stepDurationSec * SR) - 10;
+  const rms = (arr) => Math.sqrt(arr.reduce((a, v) => a + v * v, 0) / (arr.length || 1));
+  assert.ok(rms(out.subarray(gapStart, gapEnd)) < 0.05);
+});

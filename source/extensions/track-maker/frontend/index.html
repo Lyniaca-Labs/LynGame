@@ -177,6 +177,18 @@
       </select>
     </label>
 
+    <label>Octave
+      <select id="octave">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4" selected>4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+      </select>
+    </label>
+
     <label>Scale
       <select id="scale">
         <option value="major" selected>major</option>
@@ -340,6 +352,7 @@
   const project = params.get("project") || "";
 
   const keySelect = document.getElementById("key");
+  const octaveSelect = document.getElementById("octave");
   const scaleSelect = document.getElementById("scale");
   const tempoInput = document.getElementById("tempo");
   const seedInput = document.getElementById("seed");
@@ -375,6 +388,7 @@
   });
 
   keySelect.addEventListener("change", () => regenerateMelody());
+  octaveSelect.addEventListener("change", () => regenerateMelody());
   scaleSelect.addEventListener("change", () => regenerateMelody());
   seedInput.addEventListener("change", () => { regenerateMelody(); regenerateDrums(); });
   tempoInput.addEventListener("change", () => { updateMelodyDuration(); updateDrumsDuration(); updateTargetDuration(); updateTrackDuration(); });
@@ -439,6 +453,7 @@
       filterCutoff: 1,
       vibratoDepth: 0,
       vibratoRate: 5,
+      glideTime: 0.04,
     },
     notes: [],
   };
@@ -568,6 +583,11 @@
     value: melodyState.synthParams.vibratoRate, decimals: 1, refs: synthSliderRefs,
     onChange: (v) => { melodyState.synthParams.vibratoRate = v; },
   });
+  buildSliderRow(synthParamsEl, {
+    key: "glideTime", label: "Glide (Legato)", min: 0, max: 0.3, step: 0.01,
+    value: melodyState.synthParams.glideTime, decimals: 2, refs: synthSliderRefs,
+    onChange: (v) => { melodyState.synthParams.glideTime = v; },
+  });
 
   // ---- generation ----
   function currentStepDurationSec() {
@@ -576,7 +596,7 @@
   }
 
   function regenerateMelody() {
-    const rootMidi = noteNameToMidi(keySelect.value, 4);
+    const rootMidi = noteNameToMidi(keySelect.value, parseInt(octaveSelect.value, 10));
     const scaleName = scaleSelect.value;
     const seed = parseInt(seedInput.value, 10) || 0;
 
@@ -616,7 +636,7 @@
     const minDegree = melodyState.registerLowOctave * scaleLen;
     const maxDegree = melodyState.registerHighOctave * scaleLen + (scaleLen - 1);
     const rowCount = Math.max(1, maxDegree - minDegree + 1);
-    const rootMidi = noteNameToMidi(keySelect.value, 4);
+    const rootMidi = noteNameToMidi(keySelect.value, parseInt(octaveSelect.value, 10));
 
     const rows = [];
     const midiToRow = new Map();
@@ -1131,7 +1151,7 @@
   }
 
   function generateArrangementTrack() {
-    const rootMidi = noteNameToMidi(keySelect.value, 4);
+    const rootMidi = noteNameToMidi(keySelect.value, parseInt(octaveSelect.value, 10));
     const scaleName = scaleSelect.value;
     const seed = parseInt(seedInput.value, 10) || 0;
 
@@ -1191,7 +1211,7 @@
 
   function regenerateSection(index) {
     const section = trackState.arrangement.sections[index];
-    const rootMidi = noteNameToMidi(keySelect.value, 4);
+    const rootMidi = noteNameToMidi(keySelect.value, parseInt(octaveSelect.value, 10));
     const scaleName = scaleSelect.value;
     const stepsPerBar = melodyState.stepsPerBar;
     const sectionSeed = Date.now() % 100000;
@@ -1209,18 +1229,9 @@
       syncopation: melodyState.syncopation,
       restProb: melodyState.restProb,
     };
-    const sectionMelodyParams = applyEnergyToMelodyParams(rawMelodyParams, energy);
-    const rawNotes = generateMelody({
-      rootMidi,
-      scaleName,
-      bars: section.bars,
-      stepsPerBar,
-      ...sectionMelodyParams,
-      seed: sectionSeed,
-    });
-    const scaledNotes = scaleVelocity(rawNotes, energy.velocityMult);
-    section.melodyNotes = scaledNotes.map((n) => ({ ...n, startStep: n.startStep + section.startStep }));
-
+    // Drums first, same as generateArrangement, so the melody can lock its
+    // note onsets to the drum pattern's accented (kick/snare) steps instead
+    // of drifting independently against it.
     const rawDrumParams = {
       style: drumState.style,
       density: drumState.density,
@@ -1234,6 +1245,20 @@
       seed: sectionSeed + 1,
     });
     section.drumGrid = rawPattern.grid;
+    const accentSteps = rawPattern.grid.kick.map((k, i) => k || rawPattern.grid.snare[i]);
+
+    const sectionMelodyParams = applyEnergyToMelodyParams(rawMelodyParams, energy);
+    const rawNotes = generateMelody({
+      rootMidi,
+      scaleName,
+      bars: section.bars,
+      stepsPerBar,
+      ...sectionMelodyParams,
+      seed: sectionSeed,
+      accentSteps,
+    });
+    const scaledNotes = scaleVelocity(rawNotes, energy.velocityMult);
+    section.melodyNotes = scaledNotes.map((n) => ({ ...n, startStep: n.startStep + section.startStep }));
 
     recomputeSectionOffsets();
     renderSectionList();

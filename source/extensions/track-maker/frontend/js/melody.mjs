@@ -1,4 +1,4 @@
-import { createRng, randRange, randInt } from "./rng.mjs";
+import { createRng, randRange, randInt, pick } from "./rng.mjs";
 import { SCALES, scaleDegreeToMidi } from "./theory.mjs";
 
 export const MOODS = {
@@ -14,16 +14,32 @@ export function moodToParams(moodName) {
   return { ...MOODS[moodName] };
 }
 
+// Musically-common note lengths (in steps at a 16-steps-per-bar grid);
+// scaled proportionally for other subdivisions. Picking from a small set
+// instead of an arbitrary random length keeps the generated rhythm feeling
+// like a groove instead of an erratic run of odd durations.
+const LENGTH_CHOICES_16 = [1, 2, 3, 4, 6, 8, 12, 16];
+
 // Walks step-by-step across the phrase. At each step, probabilistically
-// starts a new note (biased by density/syncopation) or continues a rest;
-// each new note's scale degree is a bounded random walk from the previous
-// note's degree (bounded by `jump`) so melodies stay mostly stepwise with
-// occasional leaps, and degree is clamped to the requested register.
+// starts a new note (biased by density/syncopation, and by `accentSteps`
+// if given — see below) or continues a rest; each new note's scale degree
+// is a bounded random walk from the previous note's degree (bounded by
+// `jump`, and biased toward small steps via a two-sample average so
+// melodies stay mostly stepwise with occasional leaps rather than an
+// erratic zig-zag), and degree is clamped to the requested register.
+//
+// `accentSteps` is an optional boolean[totalSteps] (section-relative, same
+// indexing as a drum pattern's grid) marking steps where the drum pattern
+// already has a strong hit (e.g. kick or snare). When provided, note
+// onsets are biased to land on those steps too, so a generated melody
+// rhythmically locks in with whatever drum pattern it's paired with
+// instead of drifting independently against it.
 export function generateMelody(params) {
   const {
     rootMidi, scaleName, bars, stepsPerBar,
     registerLowOctave, registerHighOctave,
     density, jump, syncopation, restProb, seed,
+    accentSteps,
   } = params;
 
   const scaleLen = SCALES[scaleName].length;
@@ -31,14 +47,25 @@ export function generateMelody(params) {
   const maxDegree = registerHighOctave * scaleLen + (scaleLen - 1);
   const totalSteps = bars * stepsPerBar;
 
+  // Quarter-note pulse for this subdivision (e.g. every 4th step at 16
+  // steps/bar) — a much more musically meaningful "strong beat" than a
+  // fixed step-parity check, and it's the same pulse a typical drum
+  // pattern's kick/snare line up with.
+  const pulseSteps = Math.max(1, Math.round(stepsPerBar / 4));
+  const lengthScale = stepsPerBar / 16;
+  const lengthChoices = LENGTH_CHOICES_16
+    .map((l) => Math.max(1, Math.round(l * lengthScale)))
+    .filter((l, i, arr) => arr.indexOf(l) === i);
+
   const rng = createRng(seed);
   const notes = [];
   let currentDegree = randInt(rng, minDegree, maxDegree);
   let step = 0;
 
   while (step < totalSteps) {
-    const onStrongBeat = step % 2 === 0;
-    const onsetChance = onStrongBeat ? density : density * (0.4 + syncopation * 0.6);
+    const onStrongBeat = step % pulseSteps === 0;
+    let onsetChance = onStrongBeat ? density : density * (0.4 + syncopation * 0.6);
+    if (accentSteps && accentSteps[step]) onsetChance = Math.min(1, onsetChance + 0.35);
     const startsNote = rng() < onsetChance && rng() >= restProb;
 
     if (!startsNote) {
@@ -47,12 +74,23 @@ export function generateMelody(params) {
     }
 
     const maxJumpDegrees = 1 + Math.round(jump * 4);
-    let nextDegree = currentDegree + randInt(rng, -maxJumpDegrees, maxJumpDegrees);
+    // Average two uniform picks instead of one: biases the interval walk
+    // toward small steps (triangular-ish distribution) while still
+    // allowing an occasional full-size leap, which reads as a much more
+    // "flowing" contour than a uniform random walk.
+    const walkA = randInt(rng, -maxJumpDegrees, maxJumpDegrees);
+    const walkB = randInt(rng, -maxJumpDegrees, maxJumpDegrees);
+    let nextDegree = currentDegree + Math.round((walkA + walkB) / 2);
     nextDegree = Math.max(minDegree, Math.min(maxDegree, nextDegree));
     currentDegree = nextDegree;
 
     const maxLen = Math.max(1, Math.min(stepsPerBar, totalSteps - step));
-    const lengthSteps = Math.max(1, Math.min(maxLen, randInt(rng, 1, Math.max(1, Math.round((1 - density) * stepsPerBar) + 1))));
+    const eligibleLengths = lengthChoices.filter((l) => l <= maxLen);
+    if (!eligibleLengths.length) eligibleLengths.push(maxLen);
+    // Higher density leans toward the shorter end of the eligible lengths
+    // (more, busier notes); lower density leans longer (sparser, held notes).
+    const shortHalf = eligibleLengths.slice(0, Math.max(1, Math.ceil(eligibleLengths.length / 2)));
+    const lengthSteps = rng() < density ? pick(rng, shortHalf) : pick(rng, eligibleLengths);
     const midi = scaleDegreeToMidi(rootMidi, scaleName, currentDegree);
     const velocity = Math.min(1, Math.max(0.4, randRange(rng, 0.6, 1)));
 

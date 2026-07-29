@@ -65,21 +65,25 @@ export function generateArrangement({ rootMidi, scaleName, stepsPerBar, melodyPa
     const energy = energyForSection(def.type);
     const sectionSeed = seed + index * 1000;
 
-    const sectionMelodyParams = applyEnergyToMelodyParams(melodyParams, energy);
-    const rawNotes = generateMelody({
-      rootMidi, scaleName, bars: def.bars, stepsPerBar,
-      ...sectionMelodyParams, seed: sectionSeed,
-    });
-    const melodyNotes = scaleVelocity(rawNotes, energy.velocityMult).map((n) => ({
-      ...n,
-      startStep: n.startStep + startStep,
-    }));
-
+    // Drums are generated first so the melody can be handed an accent mask
+    // (kick/snare hit steps) and lock its note onsets to the same groove
+    // instead of drifting independently against it.
     const sectionDrumParams = applyEnergyToDrumParams(drumParams, energy);
     const rawPattern = generateDrumPattern({
       bars: def.bars, stepsPerBar, seed: sectionSeed + 1,
       ...sectionDrumParams,
     });
+    const accentSteps = rawPattern.grid.kick.map((k, i) => k || rawPattern.grid.snare[i]);
+
+    const sectionMelodyParams = applyEnergyToMelodyParams(melodyParams, energy);
+    const rawNotes = generateMelody({
+      rootMidi, scaleName, bars: def.bars, stepsPerBar,
+      ...sectionMelodyParams, seed: sectionSeed, accentSteps,
+    });
+    const melodyNotes = scaleVelocity(rawNotes, energy.velocityMult).map((n) => ({
+      ...n,
+      startStep: n.startStep + startStep,
+    }));
 
     sections.push({
       type: def.type,

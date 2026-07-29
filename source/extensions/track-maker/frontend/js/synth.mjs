@@ -30,29 +30,48 @@ function applyLowPass(samples, cutoff01) {
 export function renderLeadVoice(notes, synthParams, sampleRate, stepDurationSec) {
   if (!notes.length) return new Float32Array(0);
 
-  const { waveform, attack, decay, sustainLevel, release, filterCutoff, vibratoDepth, vibratoRate } = synthParams;
-  const maxEndStep = Math.max(...notes.map((n) => n.startStep + n.lengthSteps));
+  const { waveform, attack, decay, sustainLevel, release, filterCutoff, vibratoDepth, vibratoRate, glideTime = 0 } = synthParams;
+  // Sort defensively — legato detection below depends on iterating notes
+  // in time order regardless of the caller's array order.
+  const sorted = [...notes].sort((a, b) => a.startStep - b.startStep);
+  const maxEndStep = Math.max(...sorted.map((n) => n.startStep + n.lengthSteps));
   // Include release tail room for the note defining maxEndStep
   const totalSamples = Math.ceil((maxEndStep * stepDurationSec + release) * sampleRate);
   const out = new Float32Array(totalSamples);
 
-  for (const note of notes) {
+  let prevHz = null;
+  let prevEndStep = null;
+
+  for (const note of sorted) {
     const startSample = Math.floor(note.startStep * stepDurationSec * sampleRate);
     const noteDurationSec = note.lengthSteps * stepDurationSec;
     const noteSamples = Math.max(1, Math.floor(noteDurationSec * sampleRate));
     const releaseSamples = Math.floor(release * sampleRate);
     const totalNoteSamples = Math.min(out.length - startSample, noteSamples + releaseSamples);
-    if (totalNoteSamples <= 0) continue;
-
     const hz = midiToHz(note.midi);
-    const attackSamples = Math.max(1, Math.floor(attack * sampleRate));
+    if (totalNoteSamples <= 0) {
+      prevHz = hz;
+      prevEndStep = note.startStep + note.lengthSteps;
+      continue;
+    }
+
+    // A "legato" note directly follows the previous one with no gap: skip
+    // its attack/decay entirely (the voice is already sounding) and instead
+    // glide pitch from the previous note's frequency to this note's over
+    // `glideTime` — this is what makes a run of notes read as one flowing
+    // phrase instead of a series of separately plucked/retriggered tones.
+    const isLegato = glideTime > 0 && prevHz !== null && prevEndStep === note.startStep;
+    const attackSamples = isLegato ? 0 : Math.max(1, Math.floor(attack * sampleRate));
     const decaySamples = Math.max(1, Math.floor(decay * sampleRate));
+    const glideSamples = isLegato ? Math.min(noteSamples, Math.max(1, Math.floor(glideTime * sampleRate))) : 0;
 
     // Compute envelope value at note-off boundary (i = noteSamples - 1)
     // to ensure smooth transition into release phase
     let envAtNoteOff = sustainLevel;
     const noteOffIndex = noteSamples - 1;
-    if (noteOffIndex < attackSamples) {
+    if (isLegato) {
+      envAtNoteOff = sustainLevel;
+    } else if (noteOffIndex < attackSamples) {
       envAtNoteOff = noteOffIndex / attackSamples;
     } else {
       const decayEndSample = Math.min(attackSamples + decaySamples, noteSamples);
@@ -68,13 +87,23 @@ export function renderLeadVoice(notes, synthParams, sampleRate, stepDurationSec)
     let vibPhase = 0;
     for (let i = 0; i < totalNoteSamples; i++) {
       vibPhase += vibratoRate / sampleRate;
-      const vibHz = hz * (1 + Math.sin(vibPhase * 2 * Math.PI) * vibratoDepth * 0.06);
+
+      let targetHz = hz;
+      if (isLegato && i < glideSamples) {
+        const g = i / glideSamples;
+        targetHz = prevHz + (hz - prevHz) * g;
+      }
+      const vibHz = targetHz * (1 + Math.sin(vibPhase * 2 * Math.PI) * vibratoDepth * 0.06);
       phase += vibHz / sampleRate;
 
       let env;
       if (i < noteSamples) {
         // Note is still sounding: compute envelope respecting note-off boundary
-        if (i < attackSamples) {
+        if (isLegato) {
+          // Continuation of the previous note's voice — no re-attack, just
+          // hold at sustain level while the pitch glides above.
+          env = sustainLevel;
+        } else if (i < attackSamples) {
           env = i / attackSamples;
         } else {
           const decayEndSample = Math.min(attackSamples + decaySamples, noteSamples);
@@ -94,6 +123,9 @@ export function renderLeadVoice(notes, synthParams, sampleRate, stepDurationSec)
       const sample = oscillatorSample(waveform, phase) * env * note.velocity;
       out[startSample + i] += sample;
     }
+
+    prevHz = hz;
+    prevEndStep = note.startStep + note.lengthSteps;
   }
 
   applyLowPass(out, filterCutoff);

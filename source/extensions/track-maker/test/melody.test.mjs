@@ -54,3 +54,29 @@ test("higher density produces more notes than lower density (same seed)", () => 
   const high = generateMelody({ ...BASE, ...moodToParams("calm"), density: 0.9 });
   assert.ok(high.length >= low.length);
 });
+
+test("accentSteps biases note onsets to land on the marked (drum-accented) steps", () => {
+  const totalSteps = BASE.bars * BASE.stepsPerBar;
+  const accentSteps = new Array(totalSteps).fill(false);
+  // Accent every 4th step (a typical kick/snare quarter-note pulse).
+  for (let i = 0; i < totalSteps; i += 4) accentSteps[i] = true;
+
+  // Pin density very low so non-accented steps have near-zero onset chance —
+  // isolates the accent bias's effect instead of measuring it against the
+  // noisy baseline of a normal (small-sample) generated phrase.
+  const params = { ...BASE, density: 0.02, jump: 0.2, syncopation: 0, restProb: 0, accentSteps };
+  const notes = generateMelody(params);
+  assert.ok(notes.length > 0, "expected at least some notes to be generated");
+  const onAccentCount = notes.filter((n) => accentSteps[n.startStep]).length;
+  assert.ok(onAccentCount / notes.length >= 0.7, `expected most onsets on accented steps, got ${onAccentCount}/${notes.length}`);
+
+  // Notes still stay within total steps and non-overlapping with accents applied.
+  for (let i = 0; i < notes.length - 1; i++) {
+    assert.ok(notes[i].startStep + notes[i].lengthSteps <= notes[i + 1].startStep);
+  }
+});
+
+test("without accentSteps, generateMelody behaves as before (no accentSteps key required)", () => {
+  const params = { ...BASE, ...moodToParams("epic") };
+  assert.doesNotThrow(() => generateMelody(params));
+});

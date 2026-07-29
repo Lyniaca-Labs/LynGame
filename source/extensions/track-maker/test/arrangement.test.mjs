@@ -150,3 +150,38 @@ test("generateArrangement sections are not identical to each other (arrangement 
     assert.ok(chorusVel >= verseVel * 0.9); // loose bound, avoid flakiness on small samples
   }
 });
+
+test("generateArrangement: melody note onsets are, in aggregate, biased toward drum accents (kick/snare)", () => {
+  // A single seed's single section is too small a sample to check reliably
+  // (a soft probability bias can easily miss on any one short section by
+  // chance) — aggregate across many seeds/sections instead, which is what
+  // the feature actually promises (a statistical lean toward the groove,
+  // not a per-section guarantee).
+  let totalOnsets = 0;
+  let onAccentOnsets = 0;
+  let totalSteps = 0;
+  let totalAccentSteps = 0;
+
+  for (let seed = 0; seed < 25; seed++) {
+    const { sections } = generateArrangement({ ...ARR_BASE, seed });
+    for (const s of sections) {
+      const sectionSteps = s.bars * ARR_BASE.stepsPerBar;
+      totalSteps += sectionSteps;
+      for (let i = 0; i < sectionSteps; i++) {
+        if (s.drumGrid.kick[i] || s.drumGrid.snare[i]) totalAccentSteps += 1;
+      }
+      for (const n of s.melodyNotes) {
+        const localStep = n.startStep - s.startStep;
+        totalOnsets += 1;
+        if (s.drumGrid.kick[localStep] || s.drumGrid.snare[localStep]) onAccentOnsets += 1;
+      }
+    }
+  }
+
+  const accentStepFraction = totalAccentSteps / totalSteps;
+  const onAccentFraction = onAccentOnsets / totalOnsets;
+  assert.ok(
+    onAccentFraction > accentStepFraction,
+    `expected onset-accent alignment (${onAccentFraction}) to exceed chance level from accent density alone (${accentStepFraction})`
+  );
+});
