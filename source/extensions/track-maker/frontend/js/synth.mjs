@@ -32,7 +32,8 @@ export function renderLeadVoice(notes, synthParams, sampleRate, stepDurationSec)
 
   const { waveform, attack, decay, sustainLevel, release, filterCutoff, vibratoDepth, vibratoRate } = synthParams;
   const maxEndStep = Math.max(...notes.map((n) => n.startStep + n.lengthSteps));
-  const totalSamples = Math.ceil(maxEndStep * stepDurationSec * sampleRate);
+  // Include release tail room for the note defining maxEndStep
+  const totalSamples = Math.ceil((maxEndStep * stepDurationSec + release) * sampleRate);
   const out = new Float32Array(totalSamples);
 
   for (const note of notes) {
@@ -56,13 +57,19 @@ export function renderLeadVoice(notes, synthParams, sampleRate, stepDurationSec)
 
       let env;
       if (i < attackSamples) {
+        // Attack phase
         env = i / attackSamples;
-      } else if (i < attackSamples + decaySamples) {
-        const t = (i - attackSamples) / decaySamples;
-        env = 1 - t * (1 - sustainLevel);
       } else if (i < noteSamples) {
-        env = sustainLevel;
+        // Decay and sustain: clamp decay to not run past noteSamples
+        const decayEndSample = Math.min(attackSamples + decaySamples, noteSamples);
+        if (i < decayEndSample) {
+          const t = (i - attackSamples) / (decayEndSample - attackSamples);
+          env = 1 - t * (1 - sustainLevel);
+        } else {
+          env = sustainLevel;
+        }
       } else {
+        // Release phase: always start ramp from t=0 at note-off boundary
         const t = (i - noteSamples) / Math.max(1, releaseSamples);
         env = sustainLevel * Math.max(0, 1 - t);
       }

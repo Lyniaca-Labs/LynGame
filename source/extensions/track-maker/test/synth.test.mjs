@@ -23,11 +23,12 @@ test("renderLeadVoice returns an empty buffer for no notes", () => {
   assert.equal(out.length, 0);
 });
 
-test("renderLeadVoice length matches the last note's end time", () => {
+test("renderLeadVoice length matches the last note's end time plus release tail", () => {
   const notes = [{ startStep: 0, lengthSteps: 2, midi: 60, velocity: 1 }];
   const stepDurationSec = 0.25;
   const out = renderLeadVoice(notes, LEAD_PARAMS, SR, stepDurationSec);
-  const expectedLen = Math.ceil(2 * stepDurationSec * SR);
+  // Buffer length = (note end time + release time) * sampleRate
+  const expectedLen = Math.ceil((2 * stepDurationSec + LEAD_PARAMS.release) * SR);
   assert.equal(out.length, expectedLen);
 });
 
@@ -50,4 +51,38 @@ test("renderLeadVoice produces silence before a note's start and non-silence dur
   const rms = (arr) => Math.sqrt(arr.reduce((a, v) => a + v * v, 0) / (arr.length || 1));
   assert.ok(rms(beforeWindow) < 1e-6);
   assert.ok(rms(duringWindow) > 0.01);
+});
+
+test("renderLeadVoice release tail decays toward zero for the note defining buffer length", () => {
+  // Last note defines maxEndStep and should have release room
+  const notes = [
+    { startStep: 0, lengthSteps: 2, midi: 60, velocity: 1 },
+  ];
+  const stepDurationSec = 0.25;
+  const out = renderLeadVoice(notes, LEAD_PARAMS, SR, stepDurationSec);
+  const noteDurationSec = 2 * stepDurationSec;
+  const noteEndSample = Math.floor(noteDurationSec * SR);
+  const releaseSamples = Math.floor(LEAD_PARAMS.release * SR);
+  // Check after release ends (tail should be ~0)
+  const releaseEndSample = noteEndSample + releaseSamples;
+  const silentWindow = out.subarray(Math.max(releaseEndSample, out.length - 1000));
+  const rms = (arr) => Math.sqrt(arr.reduce((a, v) => a + v * v, 0) / (arr.length || 1));
+  assert.ok(rms(silentWindow) < 0.001, `Post-release RMS ${rms(silentWindow)} should be near zero`);
+});
+
+test("renderLeadVoice short note (attack+decay > length) has no envelope discontinuity", () => {
+  // Short note where attack+decay exceeds the note length
+  // attack (0.01s = 441 samples) + decay (0.05s = 2205 samples) = 2646 samples total
+  // Need note < 2646 samples: 0.06s * 44100 / 0.25 step = 0.24 lengthSteps
+  const shortNote = { startStep: 0, lengthSteps: 0.2, midi: 60, velocity: 1 };
+  const stepDurationSec = 0.25;
+  const out = renderLeadVoice([shortNote], LEAD_PARAMS, SR, stepDurationSec);
+  // Check for no large jumps in envelope (compute adjacent-sample deltas)
+  let maxDelta = 0;
+  for (let i = 1; i < out.length; i++) {
+    const delta = Math.abs(out[i] - out[i - 1]);
+    maxDelta = Math.max(maxDelta, delta);
+  }
+  // A discontinuous click would show delta > ~0.1 per sample at 44.1kHz
+  assert.ok(maxDelta < 0.05, `Max sample delta ${maxDelta} should be < 0.05 (no click)`);
 });
