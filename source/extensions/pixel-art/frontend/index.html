@@ -147,6 +147,24 @@
     <div class="sidebar">
       <div>Palette</div>
       <div class="swatches" id="swatches"></div>
+
+      <div>Color Scheme</div>
+      <label>Type
+        <select id="schemeType">
+          <option value="monochromatic">Monochromatic</option>
+          <option value="complementary">Complementary</option>
+          <option value="analogous" selected>Analogous</option>
+          <option value="triadic">Triadic</option>
+          <option value="random">Random</option>
+        </select>
+      </label>
+      <label>Count
+        <input type="number" id="schemeCount" min="2" max="12" value="5" style="width:3em" />
+      </label>
+      <button id="generateSchemeBtn">Generate</button>
+      <button id="detectSchemeBtn" title="Detect a dominant palette from the current sprite">Detect from Sprite</button>
+      <div class="swatches" id="schemeSwatches"></div>
+      <button id="applySchemeBtn" title="Remap the sprite's colors to this palette">Apply to Sprite</button>
     </div>
     <div class="canvas-area">
       <canvas id="canvas"></canvas>
@@ -175,6 +193,10 @@
   import { brushCells } from "./js/paint.mjs";
   import { createPalette, addColor, uniqueColors, loadPalette, savePalette } from "./js/palette.mjs";
   import { createUndoStack, pushSnapshot, undo, redo, resetUndoStack } from "./js/undo.mjs";
+  import { rgbToHex } from "./js/colorMath.mjs";
+  import { generateScheme } from "./js/schemes.mjs";
+  import { extractColors, quantizeColors } from "./js/quantize.mjs";
+  import { remapToPalette } from "./js/remap.mjs";
 
   const undoStack = createUndoStack();
 
@@ -231,6 +253,57 @@
       swatchesEl.appendChild(el);
     }
   }
+
+  const schemeTypeSelect = document.getElementById("schemeType");
+  const schemeCountInput = document.getElementById("schemeCount");
+  const generateSchemeBtn = document.getElementById("generateSchemeBtn");
+  const detectSchemeBtn = document.getElementById("detectSchemeBtn");
+  const schemeSwatchesEl = document.getElementById("schemeSwatches");
+  const applySchemeBtn = document.getElementById("applySchemeBtn");
+
+  let generatedPalette = [];
+
+  function schemeCount() {
+    return Math.max(2, Math.min(12, Number(schemeCountInput.value) || 5));
+  }
+
+  function renderSchemeSwatches() {
+    schemeSwatchesEl.innerHTML = "";
+    for (const color of generatedPalette) {
+      const el = document.createElement("div");
+      el.className = "swatch";
+      el.style.background = color;
+      el.title = color;
+      el.addEventListener("click", () => {
+        eraserActive = false;
+        eraserBtn.classList.remove("active");
+        colorPicker.value = color;
+        opacityInput.value = 100;
+        renderPalette();
+      });
+      schemeSwatchesEl.appendChild(el);
+    }
+  }
+
+  generateSchemeBtn.addEventListener("click", () => {
+    generatedPalette = generateScheme(schemeTypeSelect.value, schemeCount());
+    renderSchemeSwatches();
+  });
+
+  detectSchemeBtn.addEventListener("click", () => {
+    generatedPalette = quantizeColors(extractColors(cells), schemeCount());
+    renderSchemeSwatches();
+  });
+
+  applySchemeBtn.addEventListener("click", () => {
+    if (generatedPalette.length === 0) return;
+    pushSnapshot(undoStack, cells);
+    cells = remapToPalette(cells, generatedPalette);
+    render();
+    palette = createPalette(uniqueColors(cells));
+    savePalette(localStorage, project, palette);
+    renderPalette();
+  });
 
   const canvasArea = document.querySelector(".canvas-area");
   let view = { zoom: 1, panX: 0, panY: 0 };
@@ -563,10 +636,6 @@
       statusEl.textContent = err instanceof Error ? err.message : String(err);
       statusEl.className = "status error";
     }
-  }
-
-  function rgbToHex(r, g, b) {
-    return "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
   }
 
   openSelect.addEventListener("change", () => {
