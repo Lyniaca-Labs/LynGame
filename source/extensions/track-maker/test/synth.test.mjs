@@ -103,3 +103,37 @@ test("renderLeadVoice very short note (length < attack) has no envelope disconti
   // Should not have the 0.25 discontinuity reported by reviewer
   assert.ok(maxDelta < 0.05, `Max sample delta ${maxDelta} should be < 0.05 (no click on very short note)`);
 });
+
+// Drum kit tests
+import { DEFAULT_DRUM_VOICE_PARAMS, renderDrumHit, renderDrumKit } from "../frontend/js/synth.mjs";
+import { KIT_VOICES } from "../frontend/js/drums.mjs";
+
+test("DEFAULT_DRUM_VOICE_PARAMS has an entry for every kit voice", () => {
+  for (const voice of KIT_VOICES) assert.ok(DEFAULT_DRUM_VOICE_PARAMS[voice], `${voice} missing`);
+});
+
+test("renderDrumHit returns a non-empty buffer within [-1, 1]", () => {
+  const out = renderDrumHit("kick", DEFAULT_DRUM_VOICE_PARAMS.kick, SR);
+  assert.ok(out.length > 0);
+  for (const s of out) assert.ok(s >= -1 && s <= 1);
+});
+
+test("renderDrumKit produces silence on steps with no hits and energy on steps with hits", () => {
+  const steps = 8;
+  const grid = { kick: new Array(steps).fill(false), snare: new Array(steps).fill(false), closedHat: new Array(steps).fill(false), openHat: new Array(steps).fill(false), clap: new Array(steps).fill(false), tom: new Array(steps).fill(false) };
+  grid.kick[2] = true;
+  const stepDurationSec = 0.25;
+  const out = renderDrumKit(grid, DEFAULT_DRUM_VOICE_PARAMS, SR, stepDurationSec, 0);
+  const hitSample = Math.floor(2 * stepDurationSec * SR);
+  const rms = (arr) => Math.sqrt(arr.reduce((a, v) => a + v * v, 0) / (arr.length || 1));
+  assert.ok(rms(out.subarray(0, hitSample)) < 1e-6);
+  assert.ok(rms(out.subarray(hitSample, hitSample + 500)) > 0.01);
+});
+
+test("renderDrumKit output stays within [-1, 1] with multiple simultaneous voices", () => {
+  const steps = 4;
+  const grid = {};
+  for (const v of KIT_VOICES) grid[v] = new Array(steps).fill(true); // worst case: every voice hits every step
+  const out = renderDrumKit(grid, DEFAULT_DRUM_VOICE_PARAMS, SR, 0.25, 0.3);
+  for (const s of out) assert.ok(s >= -1 && s <= 1);
+});

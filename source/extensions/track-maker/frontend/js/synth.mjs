@@ -100,3 +100,66 @@ export function renderLeadVoice(notes, synthParams, sampleRate, stepDurationSec)
   for (let i = 0; i < out.length; i++) out[i] = Math.max(-1, Math.min(1, out[i]));
   return out;
 }
+
+export const DEFAULT_DRUM_VOICE_PARAMS = {
+  kick: { basePitchHz: 150, pitchDecay: 0.04, ampDecay: 0.25, toneNoiseMix: 0.05, clickAmount: 0.3 },
+  snare: { basePitchHz: 200, pitchDecay: 0.02, ampDecay: 0.15, toneNoiseMix: 0.6, clickAmount: 0.4 },
+  closedHat: { basePitchHz: 6000, pitchDecay: 0.005, ampDecay: 0.04, toneNoiseMix: 0.95, clickAmount: 0.1 },
+  openHat: { basePitchHz: 5000, pitchDecay: 0.005, ampDecay: 0.25, toneNoiseMix: 0.9, clickAmount: 0.1 },
+  clap: { basePitchHz: 1200, pitchDecay: 0.01, ampDecay: 0.12, toneNoiseMix: 0.85, clickAmount: 0.2 },
+  tom: { basePitchHz: 180, pitchDecay: 0.06, ampDecay: 0.3, toneNoiseMix: 0.15, clickAmount: 0.15 },
+};
+
+function noiseSample() {
+  return Math.random() * 2 - 1;
+}
+
+export function renderDrumHit(voiceType, voiceParams, sampleRate) {
+  const { basePitchHz, pitchDecay, ampDecay, toneNoiseMix, clickAmount } = voiceParams;
+  const length = Math.max(64, Math.floor(ampDecay * 4 * sampleRate));
+  const out = new Float32Array(length);
+  let phase = 0;
+
+  for (let i = 0; i < length; i++) {
+    const t = i / sampleRate;
+    const pitchEnv = Math.exp(-t / Math.max(0.001, pitchDecay));
+    const hz = basePitchHz * (1 + pitchEnv * 2);
+    phase += hz / sampleRate;
+
+    const tone = Math.sin(phase * 2 * Math.PI);
+    const noise = noiseSample();
+    let s = tone * (1 - toneNoiseMix) + noise * toneNoiseMix;
+
+    if (t < 0.002) s += (1 - t / 0.002) * clickAmount * (Math.random() * 2 - 1);
+
+    const ampEnv = Math.exp(-t / Math.max(0.001, ampDecay));
+    out[i] = Math.max(-1, Math.min(1, s * ampEnv));
+  }
+
+  return out;
+}
+
+export function renderDrumKit(grid, voiceParamsByVoice, sampleRate, stepDurationSec, swing) {
+  const voices = Object.keys(grid);
+  const steps = grid[voices[0]]?.length ?? 0;
+  const baseLength = Math.ceil(steps * stepDurationSec * sampleRate);
+  const tailLength = Math.ceil(1 * sampleRate); // headroom for decay tails past the last step
+  const out = new Float32Array(baseLength + tailLength);
+
+  for (const voice of voices) {
+    const hits = grid[voice];
+    const params = voiceParamsByVoice[voice] ?? voiceParamsByVoice[Object.keys(voiceParamsByVoice)[0]];
+    for (let step = 0; step < hits.length; step++) {
+      if (!hits[step]) continue;
+      const swingOffsetSec = step % 2 === 1 ? swing * stepDurationSec * 0.5 : 0;
+      const startSample = Math.floor((step * stepDurationSec + swingOffsetSec) * sampleRate);
+      const hit = renderDrumHit(voice, params, sampleRate);
+      for (let i = 0; i < hit.length && startSample + i < out.length; i++) {
+        out[startSample + i] += hit[i];
+      }
+    }
+  }
+
+  for (let i = 0; i < out.length; i++) out[i] = Math.max(-1, Math.min(1, out[i]));
+  return out;
+}
