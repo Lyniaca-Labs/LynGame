@@ -80,20 +80,23 @@
   .swatch.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
   .canvas-area {
     flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: auto;
+    position: relative;
+    overflow: hidden;
     background:
       linear-gradient(45deg, #23242a 25%, transparent 25%, transparent 75%, #23242a 75%),
       linear-gradient(45deg, #23242a 25%, transparent 25%, transparent 75%, #23242a 75%);
     background-size: 16px 16px;
     background-position: 0 0, 8px 8px;
   }
+  .canvas-area.panning { cursor: grabbing; }
   canvas {
     image-rendering: pixelated;
     border: 1px solid var(--border);
     cursor: crosshair;
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform-origin: 0 0;
   }
   .status { color: var(--text-faint); overflow-wrap: break-word; min-width: 0; }
   .status.error { color: #ff6b6b; }
@@ -116,6 +119,12 @@
     </label>
 
     <input type="color" id="colorPicker" value="#4f9eff" title="Custom color" />
+    <label>Opacity
+      <input type="range" id="opacity" min="0" max="100" value="100" title="Paint opacity" />
+    </label>
+    <label>Brush
+      <input type="number" id="brushSize" min="1" max="8" value="1" style="width:3em" title="Brush size" />
+    </label>
     <button id="eraserBtn" title="Eraser">Eraser</button>
     <button id="clearBtn" title="Clear the whole canvas">Clear</button>
 
@@ -144,12 +153,7 @@
     </div>
   </main>
 
-<script>
-  const PALETTE = [
-    "#000000", "#ffffff", "#e53935", "#fb8c00", "#fdd835", "#43a047",
-    "#1e88e5", "#8e24aa", "#6d4c41", "#757575", "#4f9eff", "transparent",
-  ];
-
+<script type="module">
   const params = new URLSearchParams(location.search);
   const project = params.get("project") || "";
 
@@ -166,14 +170,105 @@
   const statusEl = document.getElementById("status");
   const swatchesEl = document.getElementById("swatches");
 
+  import { MIN_ZOOM, MAX_ZOOM, screenToGrid, zoomAt, panBy } from "./js/viewport.mjs";
+  import { setCell } from "./js/grid.mjs";
+  import { brushCells } from "./js/paint.mjs";
+  import { createPalette, addColor, uniqueColors, loadPalette, savePalette } from "./js/palette.mjs";
+  import { createUndoStack, pushSnapshot, undo, redo, resetUndoStack } from "./js/undo.mjs";
+
+  const undoStack = createUndoStack();
+
+  window.addEventListener("keydown", (e) => {
+    if (document.activeElement.tagName === "INPUT") return;
+    const key = e.key.toLowerCase();
+    if (e.ctrlKey && key === "z" && !e.shiftKey) {
+      e.preventDefault();
+      const prev = undo(undoStack, cells);
+      if (prev) {
+        cells = prev;
+        render();
+      }
+    } else if (e.ctrlKey && (key === "y" || (key === "z" && e.shiftKey))) {
+      e.preventDefault();
+      const next = redo(undoStack, cells);
+      if (next) {
+        cells = next;
+        render();
+      }
+    }
+  });
+
+  const opacityInput = document.getElementById("opacity");
+  const brushSizeInput = document.getElementById("brushSize");
+
+  let palette = loadPalette(localStorage, project);
+
+  function renderPalette() {
+    swatchesEl.innerHTML = "";
+    for (const color of palette.recent) {
+      const el = document.createElement("div");
+      el.className = "swatch";
+      el.style.background = color === null
+        ? "repeating-conic-gradient(#444 0% 25%, #222 0% 50%) 0 0 / 8px 8px"
+        : color;
+      el.title = color === null ? "transparent" : color;
+      // Selection reflects tool state: the transparent swatch shows selected
+      // while the eraser is active; a color swatch shows selected only when
+      // it matches the current paint color AND the eraser isn't active.
+      const isSelected = color === null ? eraserActive : (!eraserActive && color === colorPicker.value);
+      if (isSelected) el.classList.add("selected");
+      el.addEventListener("click", () => {
+        if (color === null) {
+          eraserActive = true;
+        } else {
+          eraserActive = false;
+          colorPicker.value = color;
+          opacityInput.value = 100;
+        }
+        eraserBtn.classList.toggle("active", eraserActive);
+        renderPalette();
+      });
+      swatchesEl.appendChild(el);
+    }
+  }
+
+  const canvasArea = document.querySelector(".canvas-area");
+  let view = { zoom: 1, panX: 0, panY: 0 };
+
+  function applyTransform() {
+    canvas.style.transform = `translate(${view.panX}px, ${view.panY}px) scale(${view.zoom})`;
+  }
+
+  // Centers the canvas in the viewport at 1x zoom — called whenever the grid
+  // is (re)loaded so a fresh/opened sprite starts fully visible and centered,
+  // matching the old flex-centered layout's default appearance.
+  function centerView() {
+    const rect = canvasArea.getBoundingClientRect();
+    view = {
+      zoom: 1,
+      panX: Math.round((rect.width - canvas.width) / 2),
+      panY: Math.round((rect.height - canvas.height) / 2),
+    };
+    applyTransform();
+  }
+
   const CELL_DISPLAY_SIZE = 20; // on-screen px per pixel-art cell
   let gridW = parseInt(gridSizeSelect.value, 10);
   let gridH = gridW;
   let cells = [];
-  let selectedColor = colorPicker.value;
   let eraserActive = false;
   let painting = false;
   let paintingErase = false; // right-click / eraser-tool paint = erase this stroke
+
+  function currentColor() {
+    const alpha = Number(opacityInput.value) / 100;
+    const hex = colorPicker.value;
+    if (alpha >= 1) return hex;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+  }
 
   const stripExt = (name) => name.replace(/\.png$/i, "");
 
@@ -192,7 +287,9 @@
     cells = data;
     canvas.width = w * CELL_DISPLAY_SIZE;
     canvas.height = h * CELL_DISPLAY_SIZE;
+    resetUndoStack(undoStack);
     render();
+    centerView();
   }
 
   function render() {
@@ -223,18 +320,32 @@
   }
 
   function paintAt(clientX, clientY, erase) {
-    const rect = canvas.getBoundingClientRect();
-    const x = Math.floor((clientX - rect.left) / CELL_DISPLAY_SIZE);
-    const y = Math.floor((clientY - rect.top) / CELL_DISPLAY_SIZE);
-    if (x < 0 || y < 0 || x >= gridW || y >= gridH) return;
-    cells[y * gridW + x] = erase ? null : selectedColor;
+    const areaRect = canvasArea.getBoundingClientRect();
+    const screenX = clientX - areaRect.left;
+    const screenY = clientY - areaRect.top;
+    const g = screenToGrid(view, CELL_DISPLAY_SIZE, screenX, screenY);
+    const cx = Math.floor(g.x);
+    const cy = Math.floor(g.y);
+    if (cx < 0 || cy < 0 || cx >= gridW || cy >= gridH) return;
+    const size = Number(brushSizeInput.value);
+    const color = erase ? null : currentColor();
+    for (const cell of brushCells(gridW, gridH, cx, cy, size)) {
+      setCell(cells, gridW, cell.x, cell.y, color);
+    }
     render();
   }
 
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   canvas.addEventListener("pointerdown", (e) => {
+    if (spaceHeld || e.button === 1) return;
     painting = true;
     paintingErase = eraserActive || e.button === 2;
+    pushSnapshot(undoStack, cells);
+    if (!paintingErase) {
+      palette = addColor(palette, currentColor());
+      savePalette(localStorage, project, palette);
+      renderPalette();
+    }
     canvas.setPointerCapture(e.pointerId);
     paintAt(e.clientX, e.clientY, paintingErase);
   });
@@ -245,39 +356,70 @@
   canvas.addEventListener("pointerup", () => { painting = false; });
   canvas.addEventListener("pointerleave", () => { painting = false; });
 
+  canvasArea.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const areaRect = canvasArea.getBoundingClientRect();
+    const screenX = e.clientX - areaRect.left;
+    const screenY = e.clientY - areaRect.top;
+    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    view = zoomAt(view, CELL_DISPLAY_SIZE, screenX, screenY, view.zoom * factor);
+    applyTransform();
+  }, { passive: false });
+
+  let spaceHeld = false;
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space" && document.activeElement.tagName !== "INPUT") {
+      spaceHeld = true;
+      canvasArea.style.cursor = "grab";
+    }
+  });
+  window.addEventListener("keyup", (e) => {
+    if (e.code === "Space") {
+      spaceHeld = false;
+      canvasArea.style.cursor = "";
+    }
+  });
+
+  let panning = false;
+  let panOrigin = null;
+  canvasArea.addEventListener("pointerdown", (e) => {
+    if (!(spaceHeld || e.button === 1)) return;
+    e.preventDefault();
+    panning = true;
+    panOrigin = { x: e.clientX, y: e.clientY, panX: view.panX, panY: view.panY };
+    canvasArea.classList.add("panning");
+    canvasArea.setPointerCapture(e.pointerId);
+  });
+  canvasArea.addEventListener("pointermove", (e) => {
+    if (!panning) return;
+    view = panBy(
+      { zoom: view.zoom, panX: panOrigin.panX, panY: panOrigin.panY },
+      e.clientX - panOrigin.x,
+      e.clientY - panOrigin.y
+    );
+    applyTransform();
+  });
+  canvasArea.addEventListener("pointerup", () => {
+    panning = false;
+    canvasArea.classList.remove("panning");
+  });
+
   gridSizeSelect.addEventListener("change", () => {
     if (gridSizeSelect.value === "custom") return; // set programmatically only, not user-selectable
     resetGrid(parseInt(gridSizeSelect.value, 10));
   });
   colorPicker.addEventListener("input", () => {
-    selectedColor = colorPicker.value;
     eraserActive = false;
     eraserBtn.classList.remove("active");
-    document.querySelectorAll(".swatch.selected").forEach((el) => el.classList.remove("selected"));
+    renderPalette();
   });
   eraserBtn.addEventListener("click", () => {
     eraserActive = !eraserActive;
     eraserBtn.classList.toggle("active", eraserActive);
+    renderPalette();
   });
   clearBtn.addEventListener("click", () => {
     if (confirm("Clear the whole canvas?")) loadGrid(gridW, gridH, Array.from({ length: gridW * gridH }, () => null));
-  });
-
-  PALETTE.forEach((color) => {
-    const el = document.createElement("div");
-    el.className = "swatch";
-    el.style.background = color === "transparent"
-      ? "repeating-conic-gradient(#444 0% 25%, #222 0% 50%) 0 0 / 8px 8px"
-      : color;
-    el.title = color;
-    el.addEventListener("click", () => {
-      selectedColor = color;
-      eraserActive = false;
-      eraserBtn.classList.remove("active");
-      document.querySelectorAll(".swatch.selected").forEach((s) => s.classList.remove("selected"));
-      el.classList.add("selected");
-    });
-    swatchesEl.appendChild(el);
   });
 
   saveBtn.addEventListener("click", async () => {
@@ -397,6 +539,9 @@
       }
 
       loadGrid(w, h, data);
+      palette = createPalette(uniqueColors(data));
+      savePalette(localStorage, project, palette);
+      renderPalette();
 
       // Only a square opened at one of the preset sizes maps back onto the
       // dropdown cleanly; anything else gets a synthetic "Custom" entry so
@@ -429,6 +574,7 @@
     if (filename) openAsset(filename);
   });
 
+  renderPalette();
   refreshOpenList();
   resetGrid(gridW);
 </script>
