@@ -1,0 +1,12 @@
+{
+  "name": "track-maker",
+  "displayName": "Track Maker",
+  "description": "Procedurally generate melodies, drum patterns, and full soundtracks from music-theory parameters, then save them straight into the current project's assets.",
+  "icon": "🎼",
+  "activation": ["toolbar"],
+  "view": {
+    "type": "modal",
+    "size": "full",
+    "entry": "index.html"
+  }
+}

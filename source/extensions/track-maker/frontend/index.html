@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Track Maker</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #17181c;
+    --bg-elevated: #202127;
+    --bg-inset: #1b1c21;
+    --border: #33343b;
+    --text: #e8e8ec;
+    --text-faint: #8a8b93;
+    --accent: #4f9eff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 12px/1.4 -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+    flex-wrap: wrap;
+  }
+  header strong { font-size: 13px; }
+  label { color: var(--text-faint); display: flex; align-items: center; gap: 4px; }
+  select, input[type="text"], input[type="number"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font: inherit;
+  }
+  button {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font: inherit;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--text-faint); }
+  button.primary { background: var(--accent); color: #06121f; border-color: var(--accent); font-weight: 600; }
+  button.active { border-color: var(--accent); color: var(--accent); }
+  main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .tab-btn {
+    padding: 4px 12px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .tab-btn:hover {
+    border-color: var(--text-faint);
+  }
+  .tab-btn.active {
+    background: var(--accent);
+    color: #06121f;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .panels {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  .panel.hidden {
+    display: none;
+  }
+  .panel .body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .panel-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .status { color: var(--text-faint); }
+  .status.error { color: #ff6b6b; }
+  .status.ok { color: #4ade80; }
+</style>
+</head>
+<body>
+  <header>
+    <strong>🎼 Track Maker</strong>
+
+    <label>Key
+      <select id="key">
+        <option value="C">C</option>
+        <option value="C#">C#</option>
+        <option value="D">D</option>
+        <option value="D#">D#</option>
+        <option value="E">E</option>
+        <option value="F">F</option>
+        <option value="F#">F#</option>
+        <option value="G">G</option>
+        <option value="G#">G#</option>
+        <option value="A" selected>A</option>
+        <option value="A#">A#</option>
+        <option value="B">B</option>
+      </select>
+    </label>
+
+    <label>Scale
+      <select id="scale">
+        <option value="major" selected>major</option>
+        <option value="naturalMinor">naturalMinor</option>
+        <option value="harmonicMinor">harmonicMinor</option>
+        <option value="dorian">dorian</option>
+        <option value="mixolydian">mixolydian</option>
+        <option value="majorPentatonic">majorPentatonic</option>
+        <option value="minorPentatonic">minorPentatonic</option>
+      </select>
+    </label>
+
+    <label>BPM
+      <input type="number" id="tempo" value="120" min="40" max="240" />
+    </label>
+
+    <label>Seed
+      <input type="number" id="seed" value="1" />
+      <button id="reseedBtn">🎲</button>
+    </label>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="melody">Melody</button>
+    <button class="tab-btn" data-tab="drums">Drums</button>
+    <button class="tab-btn" data-tab="track">Track</button>
+  </div>
+
+  <main class="panels">
+    <section class="panel" id="panel-melody">
+      <div class="body"></div>
+      <div class="panel-footer">
+        <input type="text" id="filename-melody" placeholder="my_melody" />
+        <button id="save-melody" class="primary">Save to Assets</button>
+        <span class="status" id="status-melody"></span>
+      </div>
+    </section>
+
+    <section class="panel hidden" id="panel-drums">
+      <div class="body"></div>
+      <div class="panel-footer">
+        <input type="text" id="filename-drums" placeholder="my_drums" />
+        <button id="save-drums" class="primary">Save to Assets</button>
+        <span class="status" id="status-drums"></span>
+      </div>
+    </section>
+
+    <section class="panel hidden" id="panel-track">
+      <div class="body"></div>
+      <div class="panel-footer">
+        <input type="text" id="filename-track" placeholder="my_track" />
+        <button id="save-track" class="primary">Save to Assets</button>
+        <span class="status" id="status-track"></span>
+      </div>
+    </section>
+  </main>
+
+<script type="module">
+  const params = new URLSearchParams(location.search);
+  const project = params.get("project") || "";
+
+  // ---- Tab switching ----
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  const panels = document.querySelectorAll(".panel");
+
+  tabBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tabName = btn.dataset.tab;
+
+      // Remove active class from all buttons
+      tabBtns.forEach((b) => b.classList.remove("active"));
+      // Add active class to clicked button
+      btn.classList.add("active");
+
+      // Hide all panels
+      panels.forEach((p) => p.classList.add("hidden"));
+      // Show selected panel
+      const selectedPanel = document.getElementById(`panel-${tabName}`);
+      if (selectedPanel) selectedPanel.classList.remove("hidden");
+    });
+  });
+
+  // ---- Reseed button ----
+  const reseedBtn = document.getElementById("reseedBtn");
+  const seedInput = document.getElementById("seed");
+
+  reseedBtn.addEventListener("click", () => {
+    seedInput.value = Math.floor(Math.random() * 1e9);
+  });
+
+  // ---- Save button handlers ----
+  const saveButtons = ["melody", "drums", "track"];
+
+  saveButtons.forEach((tab) => {
+    const saveBtn = document.getElementById(`save-${tab}`);
+    const statusEl = document.getElementById(`status-${tab}`);
+
+    saveBtn.addEventListener("click", () => {
+      if (!project) {
+        statusEl.textContent = "No project — open this from the editor.";
+        statusEl.className = "status error";
+      }
+      // Real save wiring comes in later tasks
+    });
+  });
+</script>
+</body>
+</html>
