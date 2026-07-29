@@ -408,3 +408,29 @@ export const projectsApi = {
   renameAsset: (project: string, from: string, to: string) =>
     api.post<ApiResult>(`api/projects/${enc(project)}/assets/rename`, { from, to }),
 };
+
+// ---- Extensions ----
+// See source/server/manager/ExtensionHandler.ts for how these are loaded
+// server-side, and docs/changelogs/changelog2.md for the overall design.
+
+export interface ExtensionManifest {
+  name: string;
+  displayName: string;
+  description?: string;
+  icon?: string;
+  activation?: string[];
+  view?: {
+    type?: "modal" | "panel";
+    size?: "md" | "lg" | "full";
+    entry?: string;
+  };
+  hasFrontend: boolean;
+}
+
+export interface ExtensionListResponse extends ApiResult {
+  extensions: ExtensionManifest[];
+}
+
+export const extensionsApi = {
+  list: () => api.get<ExtensionListResponse>("api/extensions"),
+};

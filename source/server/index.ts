@@ -14,6 +14,7 @@ import { fileURLToPath } from "url";
 import { config } from "./config/config.js";
 import { buildProject } from "./compiler/build.js";
 import ProjectHandler from "./manager/ProjectHandler.js";
+import { registerExtensions } from "./manager/ExtensionHandler.js";
 import { spawn } from "child_process";
 import { compileGraphToProject, scriptNodeMetadata } from "./compiler/graphScripts.js";
 import { compileTextureGraph, compileTextureToProject, getTextureNodeMetadata } from "./compiler/textureCompiler.js";
@@ -29,6 +30,8 @@ const projectsDir = path.join(sourceRoot, "projects");
 
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
+
+await registerExtensions(app);
 
 app.use("/engine", express.static(path.join(sourceRoot, "engine")));
 app.use("/output", express.static(path.join(sourceRoot, "output")));

@@ -7,6 +7,7 @@ import {
   FolderCog,
   LayoutGrid,
   Gamepad2,
+  Puzzle,
 } from "lucide-react";
 
 import { useProject } from "../context/ProjectContext";
@@ -26,6 +27,7 @@ import { SettingsModal } from "../components/SettingsModal";
 import { ProjectSettingsModal } from "../components/ProjectSettingsModal";
 import { ProjectSelector } from "../components/ProjectSelector";
 import { AnimationClipEditorModal } from "../components/AnimationClipEditorModal";
+import { ExtensionsModal } from "../components/ExtensionsModal";
 import { GameView, type GameViewHandle } from "./sections/GameView";
 import { SceneCanvas } from "./sections/SceneCanvas";
 import { OutputPanel } from "./sections/OutputPanel";
@@ -62,6 +64,7 @@ function EditorLayoutContent() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
+  const [extensionsOpen, setExtensionsOpen] = useState(false);
 
   const [buildUrl, setBuildUrl] = useState<string | null>(null);
   const [gameUrl, setGameUrl] = useState<string | null>(null);
@@ -131,6 +134,11 @@ function EditorLayoutContent() {
       if (result.url) {
         setBuildUrl(result.url);
         setBuildVersion((v) => v + 1);
+        // Tell every entity-preview listener (Inspector, Scene Canvas) to
+        // (re)fetch. Matters most for the very first build on project open —
+        // previews that tried to load before it finished used to fail
+        // permanently since nothing told them to retry once it was ready.
+        window.dispatchEvent(new Event("entity-preview-refresh"));
       }
     } finally {
       setIsBuilding(false);
@@ -147,14 +155,13 @@ function EditorLayoutContent() {
     // window.dispatchEvent(new Event("entity-preview-refresh"));
   };
 
-  // Rebuild after a save, then tell every EntityPreview to refetch. A
-  // prefab-only edit doesn't change the selected entity's own JSON, so
-  // EntityPreview can't detect it just by diffing `entity` — it needs
-  // this explicit nudge once the new build is ready.
+  // Rebuild after a save — build() itself dispatches "entity-preview-refresh"
+  // once the new build lands, which is what makes previews correct after a
+  // prefab-only edit (that doesn't change the selected entity's own JSON, so
+  // preview listeners can't detect it just by diffing `entity`).
   const handleSave = async () => {
     await save();
     await build();
-    window.dispatchEvent(new Event("entity-preview-refresh"));
   };
 
   // Clicking something in the actually-running game selects its counterpart
@@ -258,6 +265,10 @@ function EditorLayoutContent() {
             <FolderCog size={16} />
           </Button>
 
+          <Button title="Extensions" disabled={!currentProject} onClick={() => setExtensionsOpen(true)}>
+            <Puzzle size={16} />
+          </Button>
+
           <Button onClick={() => setSettingsOpen(true)}>
             <SettingsIcon size={16} />
           </Button>
@@ -325,6 +336,8 @@ function EditorLayoutContent() {
       <OutputPanel />
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      <ExtensionsModal open={extensionsOpen} onClose={() => setExtensionsOpen(false)} />
 
       <AnimationClipEditorModal
         open={!!editingClipName}

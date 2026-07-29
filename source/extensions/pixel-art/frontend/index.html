@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Pixel Art Editor</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #17181c;
+    --bg-elevated: #202127;
+    --border: #33343b;
+    --text: #e8e8ec;
+    --text-faint: #8a8b93;
+    --accent: #4f9eff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 12px/1.4 -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+    flex-wrap: wrap;
+  }
+  header strong { font-size: 13px; }
+  label { color: var(--text-faint); display: flex; align-items: center; gap: 4px; }
+  select, input[type="text"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font: inherit;
+  }
+  button {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font: inherit;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--text-faint); }
+  button.primary { background: var(--accent); color: #06121f; border-color: var(--accent); font-weight: 600; }
+  button.active { border-color: var(--accent); color: var(--accent); }
+  main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .sidebar {
+    width: 160px;
+    border-right: 1px solid var(--border);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+  }
+  .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+  .swatch {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .swatch.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .canvas-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    background:
+      linear-gradient(45deg, #23242a 25%, transparent 25%, transparent 75%, #23242a 75%),
+      linear-gradient(45deg, #23242a 25%, transparent 25%, transparent 75%, #23242a 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
+  }
+  canvas {
+    image-rendering: pixelated;
+    border: 1px solid var(--border);
+    cursor: crosshair;
+  }
+  .status { color: var(--text-faint); }
+  .status.error { color: #ff6b6b; }
+  .status.ok { color: #4ade80; }
+</style>
+</head>
+<body>
+  <header>
+    <strong>🎨 Pixel Art Editor</strong>
+
+    <label>Grid
+      <select id="gridSize">
+        <option value="8">8×8</option>
+        <option value="16" selected>16×16</option>
+        <option value="24">24×24</option>
+        <option value="32">32×32</option>
+        <option value="48">48×48</option>
+      </select>
+    </label>
+
+    <input type="color" id="colorPicker" value="#4f9eff" title="Custom color" />
+    <button id="eraserBtn" title="Eraser">Eraser</button>
+    <button id="clearBtn" title="Clear the whole canvas">Clear</button>
+
+    <span style="flex:1"></span>
+
+    <label>Save as
+      <input type="text" id="filename" placeholder="my_sprite" />
+    </label>
+    <button id="saveBtn" class="primary">Save to Assets</button>
+    <span class="status" id="status"></span>
+  </header>
+
+  <main>
+    <div class="sidebar">
+      <div>Palette</div>
+      <div class="swatches" id="swatches"></div>
+    </div>
+    <div class="canvas-area">
+      <canvas id="canvas"></canvas>
+    </div>
+  </main>
+
+<script>
+  const PALETTE = [
+    "#000000", "#ffffff", "#e53935", "#fb8c00", "#fdd835", "#43a047",
+    "#1e88e5", "#8e24aa", "#6d4c41", "#757575", "#4f9eff", "transparent",
+  ];
+
+  const params = new URLSearchParams(location.search);
+  const project = params.get("project") || "";
+
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  const gridSizeSelect = document.getElementById("gridSize");
+  const colorPicker = document.getElementById("colorPicker");
+  const eraserBtn = document.getElementById("eraserBtn");
+  const clearBtn = document.getElementById("clearBtn");
+  const filenameInput = document.getElementById("filename");
+  const saveBtn = document.getElementById("saveBtn");
+  const statusEl = document.getElementById("status");
+  const swatchesEl = document.getElementById("swatches");
+
+  const CELL_DISPLAY_SIZE = 20; // on-screen px per pixel-art cell
+  let gridSize = parseInt(gridSizeSelect.value, 10);
+  let cells = [];
+  let selectedColor = colorPicker.value;
+  let eraserActive = false;
+  let painting = false;
+  let paintingErase = false; // right-click / eraser-tool paint = erase this stroke
+
+  function resetGrid(size) {
+    gridSize = size;
+    cells = Array.from({ length: size * size }, () => null); // null = transparent
+    canvas.width = size * CELL_DISPLAY_SIZE;
+    canvas.height = size * CELL_DISPLAY_SIZE;
+    render();
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let y = 0; y < gridSize; y++) {
+      for (let x = 0; x < gridSize; x++) {
+        const color = cells[y * gridSize + x];
+        if (!color) continue;
+        ctx.fillStyle = color;
+        ctx.fillRect(x * CELL_DISPLAY_SIZE, y * CELL_DISPLAY_SIZE, CELL_DISPLAY_SIZE, CELL_DISPLAY_SIZE);
+      }
+    }
+    // grid lines
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= gridSize; i++) {
+      ctx.beginPath();
+      ctx.moveTo(i * CELL_DISPLAY_SIZE + 0.5, 0);
+      ctx.lineTo(i * CELL_DISPLAY_SIZE + 0.5, canvas.height);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, i * CELL_DISPLAY_SIZE + 0.5);
+      ctx.lineTo(canvas.width, i * CELL_DISPLAY_SIZE + 0.5);
+      ctx.stroke();
+    }
+  }
+
+  function paintAt(clientX, clientY, erase) {
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.floor((clientX - rect.left) / CELL_DISPLAY_SIZE);
+    const y = Math.floor((clientY - rect.top) / CELL_DISPLAY_SIZE);
+    if (x < 0 || y < 0 || x >= gridSize || y >= gridSize) return;
+    cells[y * gridSize + x] = erase ? null : selectedColor;
+    render();
+  }
+
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+  canvas.addEventListener("pointerdown", (e) => {
+    painting = true;
+    paintingErase = eraserActive || e.button === 2;
+    canvas.setPointerCapture(e.pointerId);
+    paintAt(e.clientX, e.clientY, paintingErase);
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!painting) return;
+    paintAt(e.clientX, e.clientY, paintingErase);
+  });
+  canvas.addEventListener("pointerup", () => { painting = false; });
+  canvas.addEventListener("pointerleave", () => { painting = false; });
+
+  gridSizeSelect.addEventListener("change", () => resetGrid(parseInt(gridSizeSelect.value, 10)));
+  colorPicker.addEventListener("input", () => {
+    selectedColor = colorPicker.value;
+    eraserActive = false;
+    eraserBtn.classList.remove("active");
+    document.querySelectorAll(".swatch.selected").forEach((el) => el.classList.remove("selected"));
+  });
+  eraserBtn.addEventListener("click", () => {
+    eraserActive = !eraserActive;
+    eraserBtn.classList.toggle("active", eraserActive);
+  });
+  clearBtn.addEventListener("click", () => {
+    if (confirm("Clear the whole canvas?")) resetGrid(gridSize);
+  });
+
+  PALETTE.forEach((color) => {
+    const el = document.createElement("div");
+    el.className = "swatch";
+    el.style.background = color === "transparent"
+      ? "repeating-conic-gradient(#444 0% 25%, #222 0% 50%) 0 0 / 8px 8px"
+      : color;
+    el.title = color;
+    el.addEventListener("click", () => {
+      selectedColor = color;
+      eraserActive = false;
+      eraserBtn.classList.remove("active");
+      document.querySelectorAll(".swatch.selected").forEach((s) => s.classList.remove("selected"));
+      el.classList.add("selected");
+    });
+    swatchesEl.appendChild(el);
+  });
+
+  saveBtn.addEventListener("click", async () => {
+    const filename = filenameInput.value.trim();
+    if (!project) {
+      statusEl.textContent = "No project — open this from the editor.";
+      statusEl.className = "status error";
+      return;
+    }
+    if (!filename) {
+      statusEl.textContent = "Enter a filename first.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    // Export at native (1px-per-cell) resolution, not the zoomed-in display
+    // size, so the saved asset is the actual pixel-art dimensions.
+    const exportCanvas = document.createElement("canvas");
+    exportCanvas.width = gridSize;
+    exportCanvas.height = gridSize;
+    const exportCtx = exportCanvas.getContext("2d");
+    for (let y = 0; y < gridSize; y++) {
+      for (let x = 0; x < gridSize; x++) {
+        const color = cells[y * gridSize + x];
+        if (!color) continue;
+        exportCtx.fillStyle = color;
+        exportCtx.fillRect(x, y, 1, 1);
+      }
+    }
+
+    statusEl.textContent = "Saving…";
+    statusEl.className = "status";
+
+    try {
+      const res = await fetch("/api/extensions/pixel-art/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project,
+          filename,
+          dataUrl: exportCanvas.toDataURL("image/png"),
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Save failed");
+
+      statusEl.textContent = `Saved ${data.filename}`;
+      statusEl.className = "status ok";
+      // Let the host editor (if it's listening) know a new asset landed, so
+      // it can refresh the Explorer's Assets tab without a manual reload.
+      window.parent.postMessage(
+        { type: "EXTENSION_ASSET_SAVED", extension: "pixel-art", project, filename: data.filename },
+        "*"
+      );
+    } catch (err) {
+      statusEl.textContent = err instanceof Error ? err.message : String(err);
+      statusEl.className = "status error";
+    }
+  });
+
+  resetGrid(gridSize);
+</script>
+</body>
+</html>

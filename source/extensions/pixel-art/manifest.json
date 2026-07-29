@@ -1,0 +1,12 @@
+{
+  "name": "pixel-art",
+  "displayName": "Pixel Art Editor",
+  "description": "Draw pixel art on a grid and save it straight into the current project's assets.",
+  "icon": "🎨",
+  "activation": ["toolbar"],
+  "view": {
+    "type": "modal",
+    "size": "full",
+    "entry": "index.html"
+  }
+}

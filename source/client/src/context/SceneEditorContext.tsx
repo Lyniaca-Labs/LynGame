@@ -139,6 +139,11 @@ interface SceneEditorContextValue {
     field: string,
     value: unknown
   ) => void;
+  setOverrideFields: (
+    entityId: string,
+    componentName: string,
+    fields: Record<string, unknown>
+  ) => void;
   resetOverrideComponent: (entityId: string, componentName: string) => void;
 
   addScript: (entityId: string, scriptName: string) => void;
@@ -468,6 +473,23 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         overrides: {
           ...e.overrides,
           [componentName]: { ...e.overrides?.[componentName], [field]: value },
+        },
+      }));
+    },
+    [updateEntity]
+  );
+
+  // Same as updateOverrideField, but merges several fields as one history
+  // entry — the override-side counterpart to setComponentFields, for the
+  // same reason (e.g. dragging a prefab instance in the scene canvas
+  // touches both x and y of its Transform override).
+  const setOverrideFields = useCallback(
+    (entityId: string, componentName: string, fields: Record<string, unknown>) => {
+      updateEntity(entityId, (e) => ({
+        ...e,
+        overrides: {
+          ...e.overrides,
+          [componentName]: { ...e.overrides?.[componentName], ...fields },
         },
       }));
     },
@@ -1056,6 +1078,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         removeComponent,
         setEntityPrefab,
         updateOverrideField,
+        setOverrideFields,
         resetOverrideComponent,
         addScript,
         removeScript,

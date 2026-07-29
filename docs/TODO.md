@@ -215,11 +215,17 @@ LATER
 
 ## Editor Extensions
 
+New backend-hosted extensions system landed to support these (see
+`docs/changelogs/changelog2.md` for the design) — `source/extensions/*`,
+loaded by `source/server/manager/ExtensionHandler.ts`, launched from the
+editor's toolbar via `ExtensionsModal.tsx`. Each item below can now be built
+as its own extension instead of needing engine/editor changes.
+
 - [ ] Sprite creator
 - [ ] Texture creator
 - [ ] Tilemap creator
 - [ ] Audio creator 
-- [ ] Pixel art editor
+- [x] Pixel art editor — `source/extensions/pixel-art/` (first extension, built as the system's example/proof of concept)
 - [ ] visual Animation editor
 - [ ] google magenta tensorflow running in browser for music generation
 - [ ] drums too

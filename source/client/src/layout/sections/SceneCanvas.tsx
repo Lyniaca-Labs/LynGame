@@ -17,6 +17,10 @@ const CORNERS = [
 const DEFAULT_SIZE = 32;
 const NUDGE = 1;
 const NUDGE_FAST = 10;
+const MIN_ZOOM = 0.2;
+const MAX_ZOOM = 4;
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 function effectiveComponents(
   entity: Entity,
@@ -49,11 +53,20 @@ interface SceneCanvasProps {
 }
 
 export function SceneCanvas({ gameViewRef }: SceneCanvasProps) {
-  const { scene, target, openEntity, setComponentFields, addComponent, removeComponent, prefabCache } =
-    useSceneEditor();
+  const {
+    scene,
+    target,
+    openEntity,
+    setComponentFields,
+    addComponent,
+    removeComponent,
+    setOverrideFields,
+    resetOverrideComponent,
+    prefabCache,
+  } = useSceneEditor();
 
   const [dragState, setDragState] = useState<{
-    entityId: string;
+    entity: Entity;
     pointerId: number;
     startClientX: number;
     startClientY: number;
@@ -74,6 +87,49 @@ export function SceneCanvas({ gameViewRef }: SceneCanvasProps) {
     startPanX: number;
     startPanY: number;
   } | null>(null);
+  const [zoom, setZoom] = useState(1);
+
+  // Writes to a prefab instance's local overrides (its own components object
+  // doesn't exist — see SceneEditorContext's setEntityPrefab), everything
+  // else to its plain components. For plain entities, seeds the component
+  // from its schema defaults first if it isn't present yet — e.g. an entity
+  // with no Transform at all gets a real one on its first drag instead of
+  // silently failing to move.
+  const writeFields = (entity: Entity, componentName: string, fields: Record<string, unknown>) => {
+    if (entity.prefab) {
+      setOverrideFields(entity.id, componentName, fields);
+    } else {
+      if (!entity.components?.[componentName]) addComponent(entity.id, componentName);
+      setComponentFields(entity.id, componentName, fields);
+    }
+  };
+
+  const clearAnchor = (entity: Entity) => {
+    if (entity.prefab) resetOverrideComponent(entity.id, "Anchor");
+    else removeComponent(entity.id, "Anchor");
+  };
+
+  // React attaches its synthetic onWheel as a passive listener, so
+  // preventDefault() inside it is a silent no-op (and logs a warning) —
+  // has to be a real DOM listener registered with { passive: false } to
+  // actually stop the page from scrolling while zooming the canvas.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setZoom((z) => clamp(z * Math.exp(-e.deltaY * 0.001), MIN_ZOOM, MAX_ZOOM));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+    // `scene` (not []): the ref only ends up on a real element once `scene`
+    // has loaded (before that, the early-return placeholder below renders
+    // instead, and rootRef.current is null) — depend on it so this effect
+    // gets a second chance to attach once the real canvas div shows up,
+    // instead of only ever trying once at mount and giving up for good if
+    // that first render happened to be the loading placeholder.
+  }, [scene]);
 
   if (!scene) {
     return (
@@ -86,34 +142,36 @@ export function SceneCanvas({ gameViewRef }: SceneCanvasProps) {
   const sceneId = scene.name;
   const selectedId = target?.kind === "entity" && target.sceneId === sceneId ? target.entityId : null;
 
-  const positionable = scene.entities
-    .map((entity) => {
-      const components = effectiveComponents(entity, prefabCache);
-      const transform = components.Transform;
-      if (!transform) return null;
-      const baseX = Number(transform.x) || 0;
-      const baseY = Number(transform.y) || 0;
-      const { width, height } = entitySize(components);
-      const isDragging = dragState?.entityId === entity.id;
-      return {
-        entity,
-        components,
-        width,
-        height,
-        x: isDragging ? dragState.x : baseX,
-        y: isDragging ? dragState.y : baseY,
-      };
-    })
-    .filter((v): v is NonNullable<typeof v> => v !== null);
+  // Entities with no Transform anywhere in their effective components (most
+  // often a prefab instance whose prefab never defined one) still get a box
+  // at the origin, draggable like any other — dragging/nudging/pinning it
+  // creates the Transform (as a plain component, or an override for a
+  // prefab instance) via writeFields rather than requiring it to pre-exist.
+  const positionable = scene.entities.map((entity) => {
+    const components = effectiveComponents(entity, prefabCache);
+    const transform = components.Transform;
+    const baseX = Number(transform?.x) || 0;
+    const baseY = Number(transform?.y) || 0;
+    const { width, height } = entitySize(components);
+    const isDragging = dragState?.entity.id === entity.id;
+    return {
+      entity,
+      components,
+      width,
+      height,
+      x: isDragging ? dragState.x : baseX,
+      y: isDragging ? dragState.y : baseY,
+    };
+  });
 
   const selected = positionable.find((p) => p.entity.id === selectedId) ?? null;
 
-  const handlePointerDown = (e: React.PointerEvent, entityId: string, x: number, y: number) => {
+  const handlePointerDown = (e: React.PointerEvent, entity: Entity, x: number, y: number) => {
     e.stopPropagation();
-    openEntity(sceneId, entityId);
+    openEntity(sceneId, entity.id);
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     setDragState({
-      entityId,
+      entity,
       pointerId: e.pointerId,
       startClientX: e.clientX,
       startClientY: e.clientY,
@@ -126,14 +184,17 @@ export function SceneCanvas({ gameViewRef }: SceneCanvasProps) {
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!dragState || e.pointerId !== dragState.pointerId) return;
-    const dx = e.clientX - dragState.startClientX;
-    const dy = e.clientY - dragState.startClientY;
+    // Screen-pixel movement maps to more world units the further zoomed
+    // out we are (the entity layer is visually shrunk by `scale(zoom)`),
+    // so divide by zoom to keep the box glued to the cursor either way.
+    const dx = (e.clientX - dragState.startClientX) / zoom;
+    const dy = (e.clientY - dragState.startClientY) / zoom;
     setDragState({ ...dragState, x: dragState.startX + dx, y: dragState.startY + dy });
   };
 
   const commitDrag = (e: React.PointerEvent) => {
     if (!dragState || e.pointerId !== dragState.pointerId) return;
-    setComponentFields(dragState.entityId, "Transform", {
+    writeFields(dragState.entity, "Transform", {
       x: Math.round(dragState.x),
       y: Math.round(dragState.y),
     });
@@ -143,9 +204,9 @@ export function SceneCanvas({ gameViewRef }: SceneCanvasProps) {
   const nudgeSelected = (dx: number, dy: number) => {
     if (!selected) return;
     const transform = selected.components.Transform;
-    setComponentFields(selected.entity.id, "Transform", {
-      x: (Number(transform.x) || 0) + dx,
-      y: (Number(transform.y) || 0) + dy,
+    writeFields(selected.entity, "Transform", {
+      x: (Number(transform?.x) || 0) + dx,
+      y: (Number(transform?.y) || 0) + dy,
     });
   };
 
@@ -158,9 +219,13 @@ export function SceneCanvas({ gameViewRef }: SceneCanvasProps) {
     else if (e.key === "ArrowDown") { e.preventDefault(); nudgeSelected(0, amount); }
   };
 
-  const pinToCorner = (entityId: string, hasAnchor: boolean, corner: string) => {
-    if (!hasAnchor) addComponent(entityId, "Anchor");
-    setComponentFields(entityId, "Anchor", { anchor: corner });
+  const pinToCorner = (entity: Entity, corner: string) => {
+    writeFields(entity, "Anchor", { anchor: corner });
+  };
+
+  const centerView = () => {
+    setPan({ x: 0, y: 0 });
+    setZoom(1);
   };
 
   // Background drag-to-pan. Entity boxes and the corner-pin panel both
@@ -192,12 +257,13 @@ export function SceneCanvas({ gameViewRef }: SceneCanvasProps) {
 
   return (
     <div
+      ref={rootRef}
       className={`relative h-full w-full overflow-hidden outline-none ${panDrag ? "cursor-grabbing" : "cursor-grab"}`}
       style={{
         backgroundColor: "var(--color-bg-inset)",
         backgroundImage:
           "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
-        backgroundSize: "24px 24px",
+        backgroundSize: `${24 * zoom}px ${24 * zoom}px`,
         backgroundPosition: `${pan.x}px ${pan.y}px`,
       }}
       tabIndex={0}
@@ -209,15 +275,20 @@ export function SceneCanvas({ gameViewRef }: SceneCanvasProps) {
       <button
         type="button"
         title="Center view"
-        onClick={() => setPan({ x: 0, y: 0 })}
+        onClick={centerView}
+        onPointerDown={(e) => e.stopPropagation()}
         className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded border border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-text-faint)] hover:text-[var(--color-text)]"
       >
         <Crosshair size={13} />
       </button>
 
+      <div className="absolute right-9 top-2 z-20 flex h-6 items-center rounded border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-1.5 text-[10px] text-[var(--color-text-faint)]">
+        {Math.round(zoom * 100)}%
+      </div>
+
       <div
         className="absolute inset-0"
-        style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}
+        style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
       >
         {positionable.map(({ entity, x, y, width, height }) => {
           const isSelected = entity.id === selectedId;
@@ -231,7 +302,7 @@ export function SceneCanvas({ gameViewRef }: SceneCanvasProps) {
               height={height}
               selected={isSelected}
               gameViewRef={gameViewRef}
-              onPointerDown={(e) => handlePointerDown(e, entity.id, x, y)}
+              onPointerDown={(e) => handlePointerDown(e, entity, x, y)}
               onPointerMove={handlePointerMove}
               onPointerUp={commitDrag}
             />
@@ -244,8 +315,8 @@ export function SceneCanvas({ gameViewRef }: SceneCanvasProps) {
             y={selected.y}
             height={selected.height}
             hasAnchor={!!selected.components.Anchor}
-            onPin={(corner) => pinToCorner(selected.entity.id, !!selected.components.Anchor, corner)}
-            onClear={() => removeComponent(selected.entity.id, "Anchor")}
+            onPin={(corner) => pinToCorner(selected.entity, corner)}
+            onClear={() => clearAnchor(selected.entity)}
           />
         )}
       </div>
@@ -279,21 +350,51 @@ function EntityBox({
   const [preview, setPreview] = useState<string | null>(null);
   const fetchedFor = useRef<string | null>(null);
 
+  // The first build after project open often isn't ready yet by the time
+  // every box on the canvas fires its initial fetch — EditorLayout's build()
+  // dispatches this once the build (or rebuild) actually lands, same signal
+  // the Inspector's own EntityPreview listens for, so a fetch that lost that
+  // race gets a second try instead of showing "no preview" forever.
+  const [refreshKey, setRefreshKey] = useState(0);
+  useEffect(() => {
+    const handler = () => setRefreshKey((k) => k + 1);
+    window.addEventListener("entity-preview-refresh", handler);
+    return () => window.removeEventListener("entity-preview-refresh", handler);
+  }, []);
+
   useEffect(() => {
     if (!gameViewRef) return;
-    const key = JSON.stringify(entity);
+    const key = `${refreshKey}:${JSON.stringify(entity)}`;
     if (fetchedFor.current === key) return;
     fetchedFor.current = key;
     let cancelled = false;
-    gameViewRef.current
-      ?.getEntityPreview(entity.id, { width: 64, height: 64, background: null })
-      .then((dataUrl) => {
-        if (!cancelled) setPreview(dataUrl);
-      });
+
+    // A `null` result usually means the initial build/preview-iframe wasn't
+    // ready yet, not "this entity truly has nothing to render" — a real
+    // project build can take several seconds, well past a single short
+    // retry. getEntityPreview() itself already retries internally for up to
+    // ~5s per call before giving up, so chaining several calls back-to-back
+    // (no extra delay needed between them) covers a much longer real build
+    // without hammering anything harder than one call already does.
+    const MAX_ATTEMPTS = 5;
+    const attempt = (n: number) => {
+      gameViewRef.current
+        ?.getEntityPreview(entity.id, { width: 64, height: 64, background: null })
+        .then((dataUrl) => {
+          if (cancelled) return;
+          if (dataUrl == null && n < MAX_ATTEMPTS) {
+            attempt(n + 1);
+            return;
+          }
+          setPreview(dataUrl);
+        });
+    };
+    attempt(0);
+
     return () => {
       cancelled = true;
     };
-  }, [entity, gameViewRef]);
+  }, [entity, gameViewRef, refreshKey]);
 
   const icons = presentComponentIcons(entity);
 
