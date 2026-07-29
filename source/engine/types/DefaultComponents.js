@@ -8,6 +8,8 @@ import { Interactable } from "../components/Interactable.js";
 import { Anchor } from "../components/Anchor.js";
 import { Animator } from "../components/Animator.js";
 import { Opacity } from "../components/Opacity.js";
+import { Collision } from "../components/Collision.js";
+import { Follow } from "../components/Follow.js";
 
 export const DEFAULT_COMPONENTS = {
   Interactable,
@@ -20,4 +22,6 @@ export const DEFAULT_COMPONENTS = {
   Anchor,
   Animator,
   Opacity,
+  Collision,
+  Follow,
 };
