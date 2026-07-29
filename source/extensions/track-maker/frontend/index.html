@@ -118,6 +118,27 @@
   .status { color: var(--text-faint); }
   .status.error { color: #ff6b6b; }
   .status.ok { color: #4ade80; }
+
+  /* ---- shared param-panel / slider styles (reused by Melody/Drums/Track) ---- */
+  .split { display: flex; gap: 12px; height: 100%; }
+  .side-panel { width: 300px; flex: 0 0 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+  .main-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; padding-top: 4px; }
+  .side-panel h4 { margin: 0 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-faint); }
+  .mood-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .mood-btn.active { border-color: var(--accent); color: var(--accent); }
+  fieldset { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px 10px; margin: 0; }
+  legend { padding: 0 4px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-faint); }
+  .row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  .row label { flex: 0 0 100px; color: var(--text-faint); }
+  .row input[type="range"] { flex: 1; }
+  .row select { flex: 1; }
+  .row .val { flex: 0 0 40px; text-align: right; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .wave-buttons { display: flex; gap: 4px; margin-bottom: 8px; }
+  .wave-buttons button { flex: 1; padding: 4px 2px; font-size: 10px; }
+  canvas.piano-roll { max-width: 100%; background: var(--bg-inset); border: 1px solid var(--border); border-radius: 6px; }
+  .transport { display: flex; gap: 8px; align-items: center; }
+  .transport button { padding: 8px 18px; font-size: 13px; }
+  .duration { color: var(--text-faint); font-size: 11px; }
 </style>
 </head>
 <body>
@@ -171,7 +192,40 @@
 
   <main class="panels">
     <section class="panel" id="panel-melody">
-      <div class="body"></div>
+      <div class="body">
+        <div class="split">
+          <div class="side-panel">
+            <div>
+              <h4>Mood</h4>
+              <div class="mood-row" id="moodRow"></div>
+            </div>
+            <fieldset>
+              <legend>Melody</legend>
+              <div id="melodyParams"></div>
+              <div class="row">
+                <label>Steps/Bar</label>
+                <select id="stepsPerBar">
+                  <option value="4">4</option>
+                  <option value="8">8</option>
+                  <option value="16" selected>16</option>
+                </select>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Synth</legend>
+              <div class="wave-buttons" id="waveButtons"></div>
+              <div id="synthParams"></div>
+            </fieldset>
+          </div>
+          <div class="main-panel">
+            <canvas id="pianoRoll" class="piano-roll" width="900" height="260"></canvas>
+            <div class="transport">
+              <button id="playMelodyBtn" class="primary">▶ Play</button>
+              <span class="duration" id="melodyDuration"></span>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="panel-footer">
         <input type="text" id="filename-melody" placeholder="my_melody" />
         <button id="save-melody" class="primary">Save to Assets</button>
@@ -199,8 +253,19 @@
   </main>
 
 <script type="module">
+  import { MOODS, moodToParams, generateMelody } from "./js/melody.mjs";
+  import { noteNameToMidi, scaleDegreeToMidi, SCALES } from "./js/theory.mjs";
+  import { WAVEFORMS, renderLeadVoice } from "./js/synth.mjs";
+  import { encodeWav, bufferToDataUrl } from "./js/wav.mjs";
+
+  const SR = 44100;
   const params = new URLSearchParams(location.search);
   const project = params.get("project") || "";
+
+  const keySelect = document.getElementById("key");
+  const scaleSelect = document.getElementById("scale");
+  const tempoInput = document.getElementById("tempo");
+  const seedInput = document.getElementById("seed");
 
   // ---- Tab switching ----
   const tabBtns = document.querySelectorAll(".tab-btn");
@@ -225,14 +290,19 @@
 
   // ---- Reseed button ----
   const reseedBtn = document.getElementById("reseedBtn");
-  const seedInput = document.getElementById("seed");
 
   reseedBtn.addEventListener("click", () => {
     seedInput.value = Math.floor(Math.random() * 1e9);
+    regenerateMelody();
   });
 
-  // ---- Save button handlers ----
-  const saveButtons = ["melody", "drums", "track"];
+  keySelect.addEventListener("change", () => regenerateMelody());
+  scaleSelect.addEventListener("change", () => regenerateMelody());
+  seedInput.addEventListener("change", () => regenerateMelody());
+  tempoInput.addEventListener("change", () => updateMelodyDuration());
+
+  // ---- Save button handlers (placeholders for tabs not yet wired) ----
+  const saveButtons = ["drums", "track"];
 
   saveButtons.forEach((tab) => {
     const saveBtn = document.getElementById(`save-${tab}`);
@@ -246,6 +316,447 @@
       // Real save wiring comes in later tasks
     });
   });
+
+  // ============================================================
+  // ---- Melody tab ----
+  // ============================================================
+
+  // Generic slider-row builder, reused by the Drums/Track tabs (Tasks 12-13)
+  // for the same param-panel pattern. `refs`, if given, is a registry object
+  // that gets `refs[key] = { input, valEl, decimals }` so callers (e.g. mood
+  // presets) can push a new value into the slider without re-deriving state.
+  function buildSliderRow(container, { key, label, min, max, step, value, decimals = 2, onChange, refs }) {
+    const row = document.createElement("div");
+    row.className = "row";
+
+    const labelEl = document.createElement("label");
+    labelEl.textContent = label;
+
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = String(min);
+    input.max = String(max);
+    input.step = String(step);
+    input.value = String(value);
+    input.dataset.key = key;
+
+    const valEl = document.createElement("span");
+    valEl.className = "val";
+    valEl.textContent = Number(value).toFixed(decimals);
+
+    input.addEventListener("input", () => {
+      const v = parseFloat(input.value);
+      valEl.textContent = v.toFixed(decimals);
+      onChange(v);
+    });
+
+    row.appendChild(labelEl);
+    row.appendChild(input);
+    row.appendChild(valEl);
+    container.appendChild(row);
+
+    if (refs) refs[key] = { input, valEl, decimals };
+    return input;
+  }
+
+  const melodyState = {
+    registerLowOctave: 0,
+    registerHighOctave: 1,
+    density: 0.35,
+    jump: 0.15,
+    syncopation: 0.1,
+    restProb: 0.35,
+    bars: 8,
+    stepsPerBar: 16,
+    synthParams: {
+      waveform: "sine",
+      attack: 0.02,
+      decay: 0.15,
+      sustainLevel: 0.7,
+      release: 0.25,
+      filterCutoff: 1,
+      vibratoDepth: 0,
+      vibratoRate: 5,
+    },
+    notes: [],
+  };
+
+  const melodySliderRefs = {};
+  const melodyParamsEl = document.getElementById("melodyParams");
+  const synthParamsEl = document.getElementById("synthParams");
+  const moodRowEl = document.getElementById("moodRow");
+  const waveButtonsEl = document.getElementById("waveButtons");
+  const stepsPerBarSelect = document.getElementById("stepsPerBar");
+  const pianoRollCanvas = document.getElementById("pianoRoll");
+  const pianoRollCtx = pianoRollCanvas.getContext("2d");
+  const playMelodyBtn = document.getElementById("playMelodyBtn");
+  const melodyDurationEl = document.getElementById("melodyDuration");
+  const filenameMelodyInput = document.getElementById("filename-melody");
+  const saveMelodyBtn = document.getElementById("save-melody");
+  const statusMelodyEl = document.getElementById("status-melody");
+
+  // ---- mood presets ----
+  Object.keys(MOODS).forEach((mood) => {
+    const btn = document.createElement("button");
+    btn.className = "mood-btn";
+    btn.dataset.mood = mood;
+    btn.textContent = mood.charAt(0).toUpperCase() + mood.slice(1);
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".mood-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      const p = moodToParams(mood);
+      Object.assign(melodyState, p);
+      for (const key of Object.keys(p)) {
+        const ref = melodySliderRefs[key];
+        if (!ref) continue;
+        ref.input.value = String(p[key]);
+        ref.valEl.textContent = Number(p[key]).toFixed(ref.decimals);
+      }
+      regenerateMelody();
+    });
+    moodRowEl.appendChild(btn);
+  });
+
+  // ---- melody sliders ----
+  buildSliderRow(melodyParamsEl, {
+    key: "registerLowOctave", label: "Register Low", min: -2, max: 2, step: 1,
+    value: melodyState.registerLowOctave, decimals: 0, refs: melodySliderRefs,
+    onChange: (v) => { melodyState.registerLowOctave = v; regenerateMelody(); },
+  });
+  buildSliderRow(melodyParamsEl, {
+    key: "registerHighOctave", label: "Register High", min: -2, max: 2, step: 1,
+    value: melodyState.registerHighOctave, decimals: 0, refs: melodySliderRefs,
+    onChange: (v) => { melodyState.registerHighOctave = v; regenerateMelody(); },
+  });
+  buildSliderRow(melodyParamsEl, {
+    key: "density", label: "Density", min: 0, max: 1, step: 0.01,
+    value: melodyState.density, decimals: 2, refs: melodySliderRefs,
+    onChange: (v) => { melodyState.density = v; regenerateMelody(); },
+  });
+  buildSliderRow(melodyParamsEl, {
+    key: "jump", label: "Jump", min: 0, max: 1, step: 0.01,
+    value: melodyState.jump, decimals: 2, refs: melodySliderRefs,
+    onChange: (v) => { melodyState.jump = v; regenerateMelody(); },
+  });
+  buildSliderRow(melodyParamsEl, {
+    key: "syncopation", label: "Syncopation", min: 0, max: 1, step: 0.01,
+    value: melodyState.syncopation, decimals: 2, refs: melodySliderRefs,
+    onChange: (v) => { melodyState.syncopation = v; regenerateMelody(); },
+  });
+  buildSliderRow(melodyParamsEl, {
+    key: "restProb", label: "Rest Prob", min: 0, max: 1, step: 0.01,
+    value: melodyState.restProb, decimals: 2, refs: melodySliderRefs,
+    onChange: (v) => { melodyState.restProb = v; regenerateMelody(); },
+  });
+  buildSliderRow(melodyParamsEl, {
+    key: "bars", label: "Bars", min: 1, max: 32, step: 1,
+    value: melodyState.bars, decimals: 0, refs: melodySliderRefs,
+    onChange: (v) => { melodyState.bars = v; regenerateMelody(); },
+  });
+
+  stepsPerBarSelect.addEventListener("change", () => {
+    melodyState.stepsPerBar = parseInt(stepsPerBarSelect.value, 10);
+    regenerateMelody();
+  });
+
+  // ---- synth waveform + params ----
+  WAVEFORMS.forEach((wf) => {
+    const btn = document.createElement("button");
+    btn.textContent = wf;
+    btn.classList.toggle("active", wf === melodyState.synthParams.waveform);
+    btn.addEventListener("click", () => {
+      melodyState.synthParams.waveform = wf;
+      document.querySelectorAll("#waveButtons button").forEach((b) => b.classList.toggle("active", b === btn));
+    });
+    waveButtonsEl.appendChild(btn);
+  });
+
+  const synthSliderRefs = {};
+  buildSliderRow(synthParamsEl, {
+    key: "attack", label: "Attack", min: 0, max: 2, step: 0.01,
+    value: melodyState.synthParams.attack, decimals: 2, refs: synthSliderRefs,
+    onChange: (v) => { melodyState.synthParams.attack = v; updateMelodyDuration(); },
+  });
+  buildSliderRow(synthParamsEl, {
+    key: "decay", label: "Decay", min: 0, max: 2, step: 0.01,
+    value: melodyState.synthParams.decay, decimals: 2, refs: synthSliderRefs,
+    onChange: (v) => { melodyState.synthParams.decay = v; updateMelodyDuration(); },
+  });
+  buildSliderRow(synthParamsEl, {
+    key: "release", label: "Release", min: 0, max: 2, step: 0.01,
+    value: melodyState.synthParams.release, decimals: 2, refs: synthSliderRefs,
+    onChange: (v) => { melodyState.synthParams.release = v; updateMelodyDuration(); },
+  });
+  buildSliderRow(synthParamsEl, {
+    key: "sustainLevel", label: "Sustain", min: 0, max: 1, step: 0.01,
+    value: melodyState.synthParams.sustainLevel, decimals: 2, refs: synthSliderRefs,
+    onChange: (v) => { melodyState.synthParams.sustainLevel = v; },
+  });
+  buildSliderRow(synthParamsEl, {
+    key: "filterCutoff", label: "Filter Cutoff", min: 0, max: 1, step: 0.01,
+    value: melodyState.synthParams.filterCutoff, decimals: 2, refs: synthSliderRefs,
+    onChange: (v) => { melodyState.synthParams.filterCutoff = v; },
+  });
+  buildSliderRow(synthParamsEl, {
+    key: "vibratoDepth", label: "Vibrato Depth", min: 0, max: 1, step: 0.01,
+    value: melodyState.synthParams.vibratoDepth, decimals: 2, refs: synthSliderRefs,
+    onChange: (v) => { melodyState.synthParams.vibratoDepth = v; },
+  });
+  buildSliderRow(synthParamsEl, {
+    key: "vibratoRate", label: "Vibrato Rate", min: 0, max: 20, step: 0.1,
+    value: melodyState.synthParams.vibratoRate, decimals: 1, refs: synthSliderRefs,
+    onChange: (v) => { melodyState.synthParams.vibratoRate = v; },
+  });
+
+  // ---- generation ----
+  function currentStepDurationSec() {
+    const tempo = parseFloat(tempoInput.value) || 120;
+    return 60 / tempo / (melodyState.stepsPerBar / 4);
+  }
+
+  function regenerateMelody() {
+    const rootMidi = noteNameToMidi(keySelect.value, 4);
+    const scaleName = scaleSelect.value;
+    const seed = parseInt(seedInput.value, 10) || 0;
+
+    melodyState.notes = generateMelody({
+      rootMidi,
+      scaleName,
+      bars: melodyState.bars,
+      stepsPerBar: melodyState.stepsPerBar,
+      registerLowOctave: melodyState.registerLowOctave,
+      registerHighOctave: melodyState.registerHighOctave,
+      density: melodyState.density,
+      jump: melodyState.jump,
+      syncopation: melodyState.syncopation,
+      restProb: melodyState.restProb,
+      seed,
+    });
+
+    drawPianoRoll();
+    updateMelodyDuration();
+  }
+
+  function updateMelodyDuration() {
+    if (!melodyState.notes.length) {
+      melodyDurationEl.textContent = "0.00s";
+      return;
+    }
+    const stepDurationSec = currentStepDurationSec();
+    const maxEndStep = Math.max(...melodyState.notes.map((n) => n.startStep + n.lengthSteps));
+    const seconds = maxEndStep * stepDurationSec + melodyState.synthParams.release;
+    melodyDurationEl.textContent = `${seconds.toFixed(2)}s`;
+  }
+
+  // ---- piano roll ----
+  function getPianoRollLayout() {
+    const scaleName = scaleSelect.value;
+    const scaleLen = SCALES[scaleName].length;
+    const minDegree = melodyState.registerLowOctave * scaleLen;
+    const maxDegree = melodyState.registerHighOctave * scaleLen + (scaleLen - 1);
+    const rowCount = Math.max(1, maxDegree - minDegree + 1);
+    const rootMidi = noteNameToMidi(keySelect.value, 4);
+
+    const rows = [];
+    const midiToRow = new Map();
+    for (let i = 0; i < rowCount; i++) {
+      const degree = minDegree + i;
+      const midi = scaleDegreeToMidi(rootMidi, scaleName, degree);
+      rows.push({ degree, midi });
+      midiToRow.set(midi, i);
+    }
+
+    const totalSteps = Math.max(1, melodyState.bars * melodyState.stepsPerBar);
+    return { rowCount, rows, midiToRow, totalSteps, stepsPerBar: melodyState.stepsPerBar };
+  }
+
+  function drawPianoRoll() {
+    const layout = getPianoRollLayout();
+    const w = pianoRollCanvas.width;
+    const h = pianoRollCanvas.height;
+    const rowHeight = h / layout.rowCount;
+    const colWidth = w / layout.totalSteps;
+
+    pianoRollCtx.clearRect(0, 0, w, h);
+
+    // horizontal gridlines (one per scale-degree row)
+    pianoRollCtx.lineWidth = 1;
+    pianoRollCtx.strokeStyle = "rgba(255,255,255,0.06)";
+    for (let i = 0; i <= layout.rowCount; i++) {
+      const y = i * rowHeight;
+      pianoRollCtx.beginPath();
+      pianoRollCtx.moveTo(0, y);
+      pianoRollCtx.lineTo(w, y);
+      pianoRollCtx.stroke();
+    }
+
+    // vertical gridlines (heavier every bar)
+    for (let s = 0; s <= layout.totalSteps; s++) {
+      const x = s * colWidth;
+      pianoRollCtx.strokeStyle = s % layout.stepsPerBar === 0 ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.05)";
+      pianoRollCtx.beginPath();
+      pianoRollCtx.moveTo(x, 0);
+      pianoRollCtx.lineTo(x, h);
+      pianoRollCtx.stroke();
+    }
+
+    // notes — higher rows (higher scale degree / pitch) drawn nearer the top
+    pianoRollCtx.fillStyle = "#4f9eff";
+    for (const note of melodyState.notes) {
+      const row = layout.midiToRow.get(note.midi);
+      if (row === undefined) continue;
+      const y = (layout.rowCount - 1 - row) * rowHeight;
+      const x = note.startStep * colWidth;
+      pianoRollCtx.fillRect(x + 1, y + 1, Math.max(1, note.lengthSteps * colWidth - 2), Math.max(1, rowHeight - 2));
+    }
+  }
+
+  // ---- piano roll editing: click to add/remove, drag to extend length ----
+  let dragNote = null;
+
+  function eventToCell(evt) {
+    const layout = getPianoRollLayout();
+    const rect = pianoRollCanvas.getBoundingClientRect();
+    const scaleX = pianoRollCanvas.width / rect.width;
+    const scaleY = pianoRollCanvas.height / rect.height;
+    const x = (evt.clientX - rect.left) * scaleX;
+    const y = (evt.clientY - rect.top) * scaleY;
+
+    const colWidth = pianoRollCanvas.width / layout.totalSteps;
+    const rowHeight = pianoRollCanvas.height / layout.rowCount;
+
+    const step = Math.max(0, Math.min(layout.totalSteps - 1, Math.floor(x / colWidth)));
+    const yRow = Math.max(0, Math.min(layout.rowCount - 1, Math.floor(y / rowHeight)));
+    const row = layout.rowCount - 1 - yRow;
+    const midi = layout.rows[row].midi;
+    return { step, midi };
+  }
+
+  function findNoteAt(step, midi) {
+    return melodyState.notes.find(
+      (n) => n.midi === midi && step >= n.startStep && step < n.startStep + n.lengthSteps
+    );
+  }
+
+  pianoRollCanvas.addEventListener("mousedown", (evt) => {
+    const { step, midi } = eventToCell(evt);
+    const existing = findNoteAt(step, midi);
+    if (existing) {
+      melodyState.notes = melodyState.notes.filter((n) => n !== existing);
+      dragNote = null;
+      drawPianoRoll();
+      return;
+    }
+    const note = { startStep: step, lengthSteps: 1, midi, velocity: 0.85 };
+    melodyState.notes.push(note);
+    dragNote = note;
+    drawPianoRoll();
+  });
+
+  pianoRollCanvas.addEventListener("mousemove", (evt) => {
+    if (!dragNote) return;
+    const { step, midi } = eventToCell(evt);
+    if (midi !== dragNote.midi) return;
+    const newLength = Math.max(1, step - dragNote.startStep + 1);
+    if (newLength === dragNote.lengthSteps) return;
+    dragNote.lengthSteps = newLength;
+
+    const start = dragNote.startStep;
+    const end = start + newLength;
+    melodyState.notes = melodyState.notes.filter(
+      (n) => n === dragNote || n.midi !== dragNote.midi || n.startStep + n.lengthSteps <= start || n.startStep >= end
+    );
+    drawPianoRoll();
+  });
+
+  function endMelodyDrag() {
+    if (!dragNote) return;
+    dragNote = null;
+    melodyState.notes.sort((a, b) => a.startStep - b.startStep);
+    drawPianoRoll();
+    updateMelodyDuration();
+  }
+  pianoRollCanvas.addEventListener("mouseup", endMelodyDrag);
+  window.addEventListener("mouseup", endMelodyDrag);
+
+  // ---- playback ----
+  let melodyAudioCtx = null;
+  let melodyCurrentSource = null;
+
+  function ensureMelodyAudioCtx() {
+    if (!melodyAudioCtx) melodyAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return melodyAudioCtx;
+  }
+
+  function playMelody() {
+    if (!melodyState.notes.length) return;
+    const stepDurationSec = currentStepDurationSec();
+    const samples = renderLeadVoice(melodyState.notes, melodyState.synthParams, SR, stepDurationSec);
+    if (!samples.length) return;
+
+    const ac = ensureMelodyAudioCtx();
+    if (melodyCurrentSource) { try { melodyCurrentSource.stop(); } catch {} }
+    const buffer = ac.createBuffer(1, samples.length, SR);
+    buffer.copyToChannel(samples, 0);
+    const source = ac.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ac.destination);
+    source.start();
+    melodyCurrentSource = source;
+    melodyDurationEl.textContent = `${(samples.length / SR).toFixed(2)}s`;
+  }
+  playMelodyBtn.addEventListener("click", playMelody);
+
+  // ---- save ----
+  saveMelodyBtn.addEventListener("click", async () => {
+    const filename = filenameMelodyInput.value.trim();
+    if (!project) {
+      statusMelodyEl.textContent = "No project — open this from the editor.";
+      statusMelodyEl.className = "status error";
+      return;
+    }
+    if (!filename) {
+      statusMelodyEl.textContent = "Enter a filename first.";
+      statusMelodyEl.className = "status error";
+      return;
+    }
+    if (!melodyState.notes.length) {
+      statusMelodyEl.textContent = "Nothing generated yet.";
+      statusMelodyEl.className = "status error";
+      return;
+    }
+
+    statusMelodyEl.textContent = "Saving…";
+    statusMelodyEl.className = "status";
+
+    try {
+      const stepDurationSec = currentStepDurationSec();
+      const samples = renderLeadVoice(melodyState.notes, melodyState.synthParams, SR, stepDurationSec);
+      const wavBuffer = encodeWav(samples, SR);
+      const dataUrl = bufferToDataUrl(wavBuffer);
+      const res = await fetch("/api/extensions/track-maker/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project, filename, dataUrl }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Save failed");
+
+      statusMelodyEl.textContent = `Saved ${data.filename}`;
+      statusMelodyEl.className = "status ok";
+      window.parent.postMessage(
+        { type: "EXTENSION_ASSET_SAVED", extension: "track-maker", project, filename: data.filename },
+        "*"
+      );
+    } catch (err) {
+      statusMelodyEl.textContent = err instanceof Error ? err.message : String(err);
+      statusMelodyEl.className = "status error";
+    }
+  });
+
+  // ---- seed a default mood so the tab isn't empty on load ----
+  const defaultMoodBtn = moodRowEl.querySelector('[data-mood="calm"]');
+  if (defaultMoodBtn) defaultMoodBtn.click();
+  else regenerateMelody();
 </script>
 </body>
 </html>
