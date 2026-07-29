@@ -1,0 +1,12 @@
+{
+  "name": "board",
+  "displayName": "Board",
+  "description": "Organize ideas and tasks on a drag-and-drop board, per project.",
+  "icon": "📋",
+  "activation": ["toolbar"],
+  "view": {
+    "type": "modal",
+    "size": "full",
+    "entry": "index.html"
+  }
+}

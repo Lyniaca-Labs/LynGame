@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Board</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0;
+    font: 13px/1.4 -apple-system, "Segoe UI", sans-serif;
+    background: #17181c;
+    color: #e8e8ec;
+    padding: 16px;
+  }
+</style>
+</head>
+<body>
+  <div id="status">Loading…</div>
+  <script type="module">
+    const params = new URLSearchParams(location.search);
+    const project = params.get("project") || "";
+    document.getElementById("status").textContent = project
+      ? `Board extension scaffold loaded for project "${project}".`
+      : "No project — open this from the editor.";
+  </script>
+</body>
+</html>
