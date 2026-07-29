@@ -58,6 +58,14 @@ export function hslToRgb(h, s, l) {
   };
 }
 
+// Shortest distance between two hues on the 360-degree hue circle (e.g. 350
+// and 10 are 20 apart, not 340) — used to group colors by hue family
+// regardless of how light/dark/saturated each shade is.
+export function hueDistance(h1, h2) {
+  const d = Math.abs(h1 - h2) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
 // Euclidean distance in RGB space — cheap and good enough for nearest-swatch
 // matching at pixel-art scale (no perceptual color space needed).
 export function colorDistance(a, b) {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hexToRgb, rgbToHex, rgbToHsl, hslToRgb, colorDistance, parseColor } from "../frontend/js/colorMath.mjs";
+import { hexToRgb, rgbToHex, rgbToHsl, hslToRgb, hueDistance, colorDistance, parseColor } from "../frontend/js/colorMath.mjs";
 
 test("hexToRgb parses a hex string", () => {
   assert.deepEqual(hexToRgb("#ff8000"), { r: 255, g: 128, b: 0 });
@@ -26,6 +26,13 @@ test("rgbToHsl detects pure red as hue 0", () => {
   assert.equal(h, 0);
   assert.equal(s, 1);
   assert.equal(l, 0.5);
+});
+
+test("hueDistance handles the 0/360 wraparound", () => {
+  assert.equal(hueDistance(350, 10), 20);
+  assert.equal(hueDistance(10, 350), 20);
+  assert.equal(hueDistance(0, 180), 180);
+  assert.equal(hueDistance(45, 45), 0);
 });
 
 test("colorDistance is 0 for identical colors and positive otherwise", () => {
