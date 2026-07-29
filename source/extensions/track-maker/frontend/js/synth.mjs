@@ -48,6 +48,22 @@ export function renderLeadVoice(notes, synthParams, sampleRate, stepDurationSec)
     const attackSamples = Math.max(1, Math.floor(attack * sampleRate));
     const decaySamples = Math.max(1, Math.floor(decay * sampleRate));
 
+    // Compute envelope value at note-off boundary (i = noteSamples - 1)
+    // to ensure smooth transition into release phase
+    let envAtNoteOff = sustainLevel;
+    const noteOffIndex = noteSamples - 1;
+    if (noteOffIndex < attackSamples) {
+      envAtNoteOff = noteOffIndex / attackSamples;
+    } else {
+      const decayEndSample = Math.min(attackSamples + decaySamples, noteSamples);
+      if (noteOffIndex < decayEndSample) {
+        const t = (noteOffIndex - attackSamples) / (decayEndSample - attackSamples);
+        envAtNoteOff = 1 - t * (1 - sustainLevel);
+      } else {
+        envAtNoteOff = sustainLevel;
+      }
+    }
+
     let phase = 0;
     let vibPhase = 0;
     for (let i = 0; i < totalNoteSamples; i++) {
@@ -56,22 +72,23 @@ export function renderLeadVoice(notes, synthParams, sampleRate, stepDurationSec)
       phase += vibHz / sampleRate;
 
       let env;
-      if (i < attackSamples) {
-        // Attack phase
-        env = i / attackSamples;
-      } else if (i < noteSamples) {
-        // Decay and sustain: clamp decay to not run past noteSamples
-        const decayEndSample = Math.min(attackSamples + decaySamples, noteSamples);
-        if (i < decayEndSample) {
-          const t = (i - attackSamples) / (decayEndSample - attackSamples);
-          env = 1 - t * (1 - sustainLevel);
+      if (i < noteSamples) {
+        // Note is still sounding: compute envelope respecting note-off boundary
+        if (i < attackSamples) {
+          env = i / attackSamples;
         } else {
-          env = sustainLevel;
+          const decayEndSample = Math.min(attackSamples + decaySamples, noteSamples);
+          if (i < decayEndSample) {
+            const t = (i - attackSamples) / (decayEndSample - attackSamples);
+            env = 1 - t * (1 - sustainLevel);
+          } else {
+            env = sustainLevel;
+          }
         }
       } else {
-        // Release phase: always start ramp from t=0 at note-off boundary
+        // Release phase: fade from envelope value at note-off
         const t = (i - noteSamples) / Math.max(1, releaseSamples);
-        env = sustainLevel * Math.max(0, 1 - t);
+        env = envAtNoteOff * Math.max(0, 1 - t);
       }
 
       const sample = oscillatorSample(waveform, phase) * env * note.velocity;

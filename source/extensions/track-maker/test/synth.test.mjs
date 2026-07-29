@@ -86,3 +86,20 @@ test("renderLeadVoice short note (attack+decay > length) has no envelope discont
   // A discontinuous click would show delta > ~0.1 per sample at 44.1kHz
   assert.ok(maxDelta < 0.05, `Max sample delta ${maxDelta} should be < 0.05 (no click)`);
 });
+
+test("renderLeadVoice very short note (length < attack) has no envelope discontinuity", () => {
+  // Very short note where note length < attack time
+  // attack = 0.01s = 441 samples, so note length ~0.0025s = ~110 samples
+  // 0.0025s / 0.25s per step = 0.01 lengthSteps
+  const veryShortNote = { startStep: 0, lengthSteps: 0.01, midi: 60, velocity: 1 };
+  const stepDurationSec = 0.25;
+  const out = renderLeadVoice([veryShortNote], LEAD_PARAMS, SR, stepDurationSec);
+  // Check for no large jumps in envelope across the entire note+release
+  let maxDelta = 0;
+  for (let i = 1; i < out.length; i++) {
+    const delta = Math.abs(out[i] - out[i - 1]);
+    maxDelta = Math.max(maxDelta, delta);
+  }
+  // Should not have the 0.25 discontinuity reported by reviewer
+  assert.ok(maxDelta < 0.05, `Max sample delta ${maxDelta} should be < 0.05 (no click on very short note)`);
+});
