@@ -1234,6 +1234,30 @@ function SchemaField({
   description?: string;
   componentRegistry?: Record<string, ComponentDefinition>;
 }) {
+  const { scene } = useSceneEditor();
+
+  if (type === "entity") {
+    const datalistId = `entity-options-${label}`;
+    return (
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <FieldLabel label={label} description={description} />
+        <input
+          type="text"
+          list={datalistId}
+          value={(value as string) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="entity id or query path"
+          className="w-40 rounded border border-[var(--color-border)] bg-transparent px-1.5 py-0.5 text-right text-[var(--color-text)]"
+        />
+        <datalist id={datalistId}>
+          {(scene?.entities ?? []).map((e) => (
+            <option key={e.id} value={e.id} />
+          ))}
+        </datalist>
+      </label>
+    );
+  }
+
   if (type === "animationRefs") {
     return (
       <div className="space-y-1">
@@ -1280,6 +1304,7 @@ function SchemaField({
     onDragStart: ["entity", "engine", "data"],
     onDrag: ["entity", "engine", "data"],
     onDragEnd: ["entity", "engine", "data"],
+    onCollide: ["entity", "other", "engine"],
   };
 
   if (type === "code") {

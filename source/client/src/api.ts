@@ -125,7 +125,7 @@ export interface SceneResponse extends ApiResult {
 
 export interface ComponentFieldDefinition {
   key: string;
-  type: "number" | "text" | "string" | "boolean" | "color" | "vector" | "code" | "select" | "animationRefs";
+  type: "number" | "text" | "string" | "boolean" | "color" | "vector" | "code" | "select" | "animationRefs" | "entity";
   defaultValue: unknown;
   description?: string;
   options?: SelectOption[];
