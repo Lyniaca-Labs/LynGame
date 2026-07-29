@@ -51,7 +51,12 @@ export function buildProject(projectName: string): string {
   fs.mkdirSync(outDir, { recursive: true });
 
   fs.cpSync(engineSrc, path.join(outDir, "engine"), { recursive: true });
-  fs.cpSync(projectSrc, path.join(outDir, "game"), { recursive: true });
+  // .extensions/ holds editor-tool data (e.g. the board extension's
+  // boards) — not game content, so it's excluded from the shipped build.
+  fs.cpSync(projectSrc, path.join(outDir, "game"), {
+    recursive: true,
+    filter: (src) => path.basename(src) !== ".extensions",
+  });
   // Graph JSON is editor source only. The final game receives the generated
   // JavaScript beside ordinary scripts, with the same import/attach path.
   compileProjectGraphScripts(projectName, path.join(outDir, "game"));
