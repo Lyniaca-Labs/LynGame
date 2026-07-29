@@ -34,7 +34,8 @@
 - [x] Move entities around/between scenes, duplicate, copy/paste — massive speed-up for laying out cards & board
   - Duplicate/Copy/Paste live in the Explorer's entity context menu (see Entity children note above). "Move to Scene" persists the entity (+ its full child subtree) into another scene file immediately via the API and removes it from the current one — a real cross-file move, not just local draft state, since losing that mid-edit would be worse than an ordinary undo-able mistake. Implemented in `source/client/src/context/SceneEditorContext.tsx` (`setEntityParent`, `duplicateEntity`, `copyEntity`/`pasteEntity`, `moveEntityToScene`) and `source/client/src/layout/sections/Explorer.tsx`.
   - Drag-and-drop in the hierarchy tree supports all three: drop in the top/bottom ~30% of a row to land as a **sibling** at that position (same parent, reordered into the array next to the target); drop in the middle ~40% to land **inside** it as a child; drop onto a different scene's row/entity to actually **move it across scene files** (goes through `moveEntityToScene`, not just local reparenting). `FolderTree.tsx` computes the before/inside/after position from cursor Y within the row and shows a line/ring indicator accordingly. Fixed a flicker bug where the drop highlight toggled rapidly — caused by `dragenter`/`dragleave` firing on the row's own child elements (chevron/label/badges); fixed via an `e.relatedTarget` containment check plus only calling `setState` when the computed drop position actually changes (dragover fires continuously).
-- [ ] Audio system — basic SFX for playing cards / timers
+- [x] Audio system — basic SFX for playing cards / timers
+  - New `engine.audio` module (`source/engine/modules/Audio.js`): `engine.audio.play("key", { volume, loop, playbackRate })` clones the cached `<audio>` element per call so overlapping SFX (e.g. rapid card plays) layer instead of restarting each other; `stopAll()` (now wired into `loadScene()`) and `setMasterVolume()` round it out. Built on top of `AssetLoader`'s existing per-key `<audio>` cache — no engine-wide changes needed.
 - [ ] SpriteSheets — faster card art iteration than one texture per card
 - [ ] Collision/simple hit-detection — drop zones for cards (could piggyback on event component instead if time-crunched)
 
@@ -163,7 +164,7 @@ LATER
 - [ ] Pathfinding
 - [ ] Inverse kinematics
 - [ ] Following/math utilities
-- [ ] Audio system
+- [x] Audio system (`engine.audio` — see ULTRA PRIORITY entry above)
 - [x] GUI helper/system (`Anchor` component + `engine.gui` module — see ULTRA PRIORITY entry above)
 - [x] Y-offset Z-level sorting
 - [x] Global scene switching
@@ -224,7 +225,7 @@ as its own extension instead of needing engine/editor changes.
 - [ ] Sprite creator
 - [ ] Texture creator
 - [ ] Tilemap creator
-- [ ] Audio creator 
+- [x] Audio creator — `source/extensions/sfx-generator/` (sfxr-style synth: waveform/envelope/frequency/vibrato/arpeggio/duty/repeat/phaser/filters, presets + randomize/mutate, saves a real .wav into the project's assets)
 - [x] Pixel art editor — `source/extensions/pixel-art/` (first extension, built as the system's example/proof of concept)
 - [ ] visual Animation editor
 - [ ] google magenta tensorflow running in browser for music generation

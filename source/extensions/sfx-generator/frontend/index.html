@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SFX Generator</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #17181c;
+    --bg-elevated: #202127;
+    --bg-inset: #1b1c21;
+    --border: #33343b;
+    --text: #e8e8ec;
+    --text-faint: #8a8b93;
+    --accent: #4f9eff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 12px/1.4 -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+    flex-wrap: wrap;
+  }
+  header strong { font-size: 13px; }
+  label { color: var(--text-faint); display: flex; align-items: center; gap: 4px; }
+  select, input[type="text"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font: inherit;
+  }
+  button {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font: inherit;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--text-faint); }
+  button.primary { background: var(--accent); color: #06121f; border-color: var(--accent); font-weight: 600; }
+  button.active { border-color: var(--accent); color: var(--accent); }
+  main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+  }
+  .sidebar {
+    width: 210px;
+    border-right: 1px solid var(--border);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+  }
+  .sidebar h4 { margin: 0 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-faint); }
+  .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .preset-grid button { width: 100%; }
+  .center {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 16px;
+    background:
+      linear-gradient(45deg, #23242a 25%, transparent 25%, transparent 75%, #23242a 75%),
+      linear-gradient(45deg, #23242a 25%, transparent 25%, transparent 75%, #23242a 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
+  }
+  canvas#wave {
+    width: 100%;
+    max-width: 640px;
+    height: 180px;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .transport { display: flex; gap: 8px; align-items: center; }
+  .transport button { padding: 8px 18px; font-size: 13px; }
+  .duration { color: var(--text-faint); font-size: 11px; }
+  .params {
+    width: 320px;
+    border-left: 1px solid var(--border);
+    padding: 10px 12px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  fieldset { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px 10px; }
+  legend { padding: 0 4px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-faint); }
+  .row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  .row label { flex: 0 0 88px; color: var(--text-faint); }
+  .row input[type="range"] { flex: 1; }
+  .row .val { flex: 0 0 40px; text-align: right; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .wave-buttons { display: flex; gap: 4px; }
+  .wave-buttons button { flex: 1; padding: 4px 2px; font-size: 10px; }
+  .status { color: var(--text-faint); }
+  .status.error { color: #ff6b6b; }
+  .status.ok { color: #4ade80; }
+</style>
+</head>
+<body>
+  <header>
+    <strong>🔊 SFX Generator</strong>
+
+    <span style="flex:1"></span>
+
+    <label>Save as
+      <input type="text" id="filename" placeholder="my_sound" />
+    </label>
+    <button id="saveBtn" class="primary">Save to Assets</button>
+    <span class="status" id="status"></span>
+  </header>
+
+  <main>
+    <div class="sidebar">
+      <div>
+        <h4>Presets</h4>
+        <div class="preset-grid" id="presets"></div>
+      </div>
+      <div>
+        <h4>Randomize</h4>
+        <div class="preset-grid">
+          <button id="randomizeBtn" title="Fresh, fully random sound">Randomize</button>
+          <button id="mutateBtn" title="Small random tweak to the current sound">Mutate</button>
+        </div>
+      </div>
+      <div>
+        <h4>Wave Type</h4>
+        <div class="wave-buttons" id="waveButtons"></div>
+      </div>
+    </div>
+
+    <div class="center">
+      <canvas id="wave" width="640" height="180"></canvas>
+      <div class="transport">
+        <button id="playBtn" class="primary">▶ Play</button>
+        <span class="duration" id="duration"></span>
+      </div>
+    </div>
+
+    <div class="params" id="params"></div>
+  </main>
+
+<script>
+  const SR = 44100;
+  const params = new URLSearchParams(location.search);
+  const project = params.get("project") || "";
+
+  const filenameInput = document.getElementById("filename");
+  const saveBtn = document.getElementById("saveBtn");
+  const statusEl = document.getElementById("status");
+  const playBtn = document.getElementById("playBtn");
+  const durationEl = document.getElementById("duration");
+  const canvas = document.getElementById("wave");
+  const ctx2d = canvas.getContext("2d");
+  const paramsEl = document.getElementById("params");
+  const presetsEl = document.getElementById("presets");
+  const waveButtonsEl = document.getElementById("waveButtons");
+
+  // ---- param model ----
+  // waveType: 0 square, 1 sawtooth, 2 sine, 3 triangle, 4 noise
+  const FIELDS = [
+    { key: "envAttack", label: "Attack", min: 0, max: 1, step: 0.01, group: "Envelope" },
+    { key: "envSustain", label: "Sustain", min: 0, max: 1, step: 0.01, group: "Envelope" },
+    { key: "envPunch", label: "Punch", min: 0, max: 1, step: 0.01, group: "Envelope" },
+    { key: "envDecay", label: "Decay", min: 0, max: 1, step: 0.01, group: "Envelope" },
+
+    { key: "freq", label: "Base Freq", min: 0, max: 1, step: 0.001, group: "Frequency" },
+    { key: "freqLimit", label: "Cutoff Freq", min: 0, max: 1, step: 0.01, group: "Frequency" },
+    { key: "freqRamp", label: "Slide", min: -1, max: 1, step: 0.01, group: "Frequency" },
+    { key: "freqDramp", label: "Delta Slide", min: -1, max: 1, step: 0.01, group: "Frequency" },
+
+    { key: "vibStrength", label: "Strength", min: 0, max: 1, step: 0.01, group: "Vibrato" },
+    { key: "vibSpeed", label: "Speed", min: 0, max: 1, step: 0.01, group: "Vibrato" },
+
+    { key: "arpMod", label: "Pitch Change", min: -1, max: 1, step: 0.01, group: "Arpeggio" },
+    { key: "arpSpeed", label: "Speed", min: 0, max: 1, step: 0.01, group: "Arpeggio" },
+
+    { key: "duty", label: "Duty", min: 0, max: 1, step: 0.01, group: "Duty Cycle (square)" },
+    { key: "dutyRamp", label: "Sweep", min: -1, max: 1, step: 0.01, group: "Duty Cycle (square)" },
+
+    { key: "repeatSpeed", label: "Speed", min: 0, max: 1, step: 0.01, group: "Repeat / Retrigger" },
+
+    { key: "phaOffset", label: "Offset", min: -1, max: 1, step: 0.01, group: "Phaser" },
+    { key: "phaRamp", label: "Sweep", min: -1, max: 1, step: 0.01, group: "Phaser" },
+
+    { key: "lpfFreq", label: "Cutoff", min: 0, max: 1, step: 0.01, group: "Low-Pass Filter" },
+    { key: "lpfRamp", label: "Sweep", min: -1, max: 1, step: 0.01, group: "Low-Pass Filter" },
+    { key: "lpfResonance", label: "Resonance", min: 0, max: 1, step: 0.01, group: "Low-Pass Filter" },
+
+    { key: "hpfFreq", label: "Cutoff", min: 0, max: 1, step: 0.01, group: "High-Pass Filter" },
+    { key: "hpfRamp", label: "Sweep", min: -1, max: 1, step: 0.01, group: "High-Pass Filter" },
+
+    { key: "masterVol", label: "Volume", min: 0, max: 1, step: 0.01, group: "Output" },
+  ];
+
+  function defaultParams() {
+    return {
+      waveType: 0,
+      envAttack: 0, envSustain: 0.1, envPunch: 0, envDecay: 0.3,
+      freq: 0.3, freqLimit: 0, freqRamp: 0, freqDramp: 0,
+      vibStrength: 0, vibSpeed: 0,
+      arpMod: 0, arpSpeed: 0.5,
+      duty: 0.5, dutyRamp: 0,
+      repeatSpeed: 0,
+      phaOffset: 0, phaRamp: 0,
+      lpfFreq: 1, lpfRamp: 0, lpfResonance: 0,
+      hpfFreq: 0, hpfRamp: 0,
+      masterVol: 0.5,
+    };
+  }
+
+  let p = defaultParams();
+  let lastSamples = new Float32Array(0);
+  let audioCtx = null;
+  let currentSource = null;
+
+  // ---- synth ----
+  function clamp01(x) { return Math.min(1, Math.max(0, x)); }
+  function baseHz(v) { return 40 + v * v * 9000; }
+  function rand(min, max) { return min + Math.random() * (max - min); }
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  function generate(par) {
+    const attackLen = Math.max(0, Math.floor(par.envAttack * par.envAttack * SR));
+    const sustainLen = Math.max(0, Math.floor(par.envSustain * par.envSustain * SR));
+    const decayLen = Math.max(0, Math.floor(par.envDecay * par.envDecay * SR * 2));
+    let totalLen = attackLen + sustainLen + decayLen;
+    if (totalLen < 64) totalLen = 64;
+    totalLen = Math.min(totalLen, SR * 8);
+
+    let hz = baseHz(par.freq);
+    let slideMul = 1 + par.freqRamp * 0.00003;
+    const dslideMul = par.freqDramp * 0.0000001;
+    const limitHz = par.freqLimit > 0 ? baseHz(par.freqLimit) : 0;
+
+    let squareDuty = clamp01(par.duty);
+    const dutySlide = par.dutyRamp * 0.00005;
+
+    const arpFactor = par.arpMod >= 0 ? 1 + par.arpMod * 1.5 : 1 / (1 + Math.abs(par.arpMod) * 1.5);
+    const arpLimit = Math.floor(200 + (1 - par.arpSpeed) * 8000);
+    let arpApplied = false;
+    let arpCounter = 0;
+
+    const repLimit = par.repeatSpeed > 0 ? Math.floor(200 + (1 - par.repeatSpeed) * 15000) : 0;
+    let repCounter = 0;
+
+    let phase = 0;
+    const noiseBuf = new Float64Array(32);
+    for (let k = 0; k < 32; k++) noiseBuf[k] = Math.random() * 2 - 1;
+
+    let vibPhase = 0;
+    const vibSpeed = 0.01 + par.vibSpeed * par.vibSpeed * 2;
+    const vibAmp = par.vibStrength * 0.15;
+
+    let lpLow = 0, lpBand = 0;
+    let hpPrevIn = 0, hpPrevOut = 0;
+
+    const phaBuf = new Float64Array(1024);
+    let phaWrite = 0;
+    let phaDelay = par.phaOffset * 300;
+    const phaDelayStep = totalLen > 0 ? (par.phaRamp * 300) / totalLen : 0;
+
+    const out = new Float32Array(totalLen);
+    let written = 0;
+
+    function resetVoice() {
+      hz = baseHz(par.freq);
+      slideMul = 1 + par.freqRamp * 0.00003;
+      squareDuty = clamp01(par.duty);
+      arpApplied = false;
+      arpCounter = 0;
+      lpLow = 0; lpBand = 0;
+      hpPrevIn = 0; hpPrevOut = 0;
+    }
+
+    for (let i = 0; i < totalLen; i++) {
+      if (repLimit > 0) {
+        repCounter++;
+        if (repCounter >= repLimit) { repCounter = 0; resetVoice(); }
+      }
+
+      arpCounter++;
+      if (par.arpMod !== 0 && !arpApplied && arpCounter >= arpLimit) {
+        arpApplied = true;
+        hz *= arpFactor;
+      }
+
+      slideMul += dslideMul;
+      hz *= slideMul;
+      hz = Math.min(Math.max(hz, 20), SR * 0.45);
+
+      if (limitHz > 0 && par.freqRamp < 0 && hz < limitHz) break;
+
+      let effectiveHz = hz;
+      if (vibAmp > 0) {
+        vibPhase += vibSpeed;
+        effectiveHz = hz * (1 + Math.sin(vibPhase) * vibAmp);
+      }
+      const period = Math.max(4, Math.round(SR / effectiveHz));
+
+      squareDuty = clamp01(squareDuty + dutySlide);
+
+      phase++;
+      if (phase >= period) {
+        phase %= period;
+        if (par.waveType === 4) for (let k = 0; k < 32; k++) noiseBuf[k] = Math.random() * 2 - 1;
+      }
+      const fp = phase / period;
+
+      let s;
+      switch (par.waveType) {
+        case 0: s = fp < squareDuty ? 0.5 : -0.5; break;
+        case 1: s = 1 - fp * 2; break;
+        case 2: s = Math.sin(fp * 2 * Math.PI); break;
+        case 3: s = fp < 0.5 ? fp * 4 - 1 : 3 - fp * 4; break;
+        case 4: s = noiseBuf[Math.floor(fp * 32)]; break;
+        default: s = 0;
+      }
+
+      let envVol;
+      if (i < attackLen) envVol = attackLen ? i / attackLen : 1;
+      else if (i < attackLen + sustainLen) {
+        const t = sustainLen ? (i - attackLen) / sustainLen : 0;
+        envVol = 1 + (1 - t) * par.envPunch * 2;
+      } else {
+        const t = decayLen ? (i - attackLen - sustainLen) / decayLen : 1;
+        envVol = Math.max(0, 1 - t);
+      }
+      s *= envVol;
+
+      if (par.lpfFreq < 1 || par.lpfRamp !== 0) {
+        const cutoff = clamp01(par.lpfFreq + par.lpfRamp * (i / totalLen));
+        const f = 2 * Math.sin(Math.PI * Math.min(0.45, Math.max(0.001, cutoff * 0.45)));
+        const q = 1 - clamp01(par.lpfResonance) * 0.99;
+        lpLow += f * lpBand;
+        const high = s - lpLow - q * lpBand;
+        lpBand += f * high;
+        s = lpLow;
+      }
+
+      if (par.hpfFreq > 0 || par.hpfRamp !== 0) {
+        const cutoff = clamp01(par.hpfFreq + par.hpfRamp * (i / totalLen));
+        const a = 1 - cutoff * 0.3;
+        const y = a * (hpPrevOut + s - hpPrevIn);
+        hpPrevIn = s; hpPrevOut = y;
+        s = y;
+      }
+
+      if (par.phaOffset !== 0 || par.phaRamp !== 0) {
+        phaBuf[phaWrite % 1024] = s;
+        phaDelay += phaDelayStep;
+        const d = Math.min(1023, Math.max(0, Math.round(Math.abs(phaDelay))));
+        const readPos = (phaWrite - d + 1024 * 4) % 1024;
+        s = (s + phaBuf[readPos]) * 0.5;
+        phaWrite++;
+      }
+
+      out[i] = Math.max(-1, Math.min(1, s * par.masterVol));
+      written++;
+    }
+
+    return out.subarray(0, written);
+  }
+
+  // ---- presets ----
+  const PRESETS = {
+    "Pickup / Coin": () => ({
+      ...defaultParams(),
+      waveType: pick([0, 3]),
+      envAttack: 0, envSustain: rand(0.02, 0.08), envPunch: rand(0.3, 0.6), envDecay: rand(0.1, 0.35),
+      freq: rand(0.45, 0.75), arpMod: rand(0.15, 0.4), arpSpeed: rand(0.5, 0.8),
+      duty: rand(0.2, 0.8),
+      masterVol: 0.5,
+    }),
+    "Laser / Shoot": () => ({
+      ...defaultParams(),
+      waveType: pick([0, 1]),
+      envAttack: 0, envSustain: rand(0.05, 0.2), envDecay: rand(0.1, 0.3),
+      freq: rand(0.6, 1), freqLimit: rand(0.05, 0.2), freqRamp: rand(-0.6, -0.3),
+      duty: rand(0, 1),
+      masterVol: 0.5,
+    }),
+    "Explosion": () => ({
+      ...defaultParams(),
+      waveType: 4,
+      envAttack: 0, envSustain: rand(0.1, 0.3), envPunch: rand(0.2, 0.5), envDecay: rand(0.4, 0.9),
+      freq: rand(0.1, 0.4), freqRamp: rand(-0.2, 0.1),
+      lpfFreq: rand(0.3, 0.7), lpfRamp: rand(-0.3, 0),
+      masterVol: 0.6,
+    }),
+    "Powerup": () => ({
+      ...defaultParams(),
+      waveType: pick([0, 2]),
+      envAttack: rand(0.05, 0.15), envSustain: rand(0.2, 0.4), envDecay: rand(0.2, 0.4),
+      freq: rand(0.2, 0.4), freqRamp: rand(0.2, 0.5),
+      vibStrength: rand(0, 0.3), vibSpeed: rand(0.3, 0.6),
+      masterVol: 0.5,
+    }),
+    "Hit / Hurt": () => ({
+      ...defaultParams(),
+      waveType: pick([3, 4]),
+      envAttack: 0, envSustain: rand(0.02, 0.1), envDecay: rand(0.1, 0.25),
+      freq: rand(0.2, 0.6), freqRamp: rand(-0.4, -0.1),
+      masterVol: 0.5,
+    }),
+    "Jump": () => ({
+      ...defaultParams(),
+      waveType: pick([0, 3]),
+      envAttack: 0, envSustain: rand(0.08, 0.2), envDecay: rand(0.1, 0.2),
+      freq: rand(0.25, 0.45), freqRamp: rand(0.25, 0.5),
+      duty: rand(0.3, 0.7),
+      masterVol: 0.5,
+    }),
+    "Blip / Select": () => ({
+      ...defaultParams(),
+      waveType: pick([0, 2]),
+      envAttack: 0, envSustain: rand(0.02, 0.06), envDecay: rand(0.03, 0.1),
+      freq: rand(0.5, 0.85),
+      duty: rand(0.3, 0.7),
+      masterVol: 0.4,
+    }),
+  };
+
+  function randomParams() {
+    return {
+      waveType: Math.floor(rand(0, 5)),
+      envAttack: rand(0, 0.3), envSustain: rand(0, 0.5), envPunch: rand(0, 0.6), envDecay: rand(0.05, 0.6),
+      freq: rand(0.1, 0.9), freqLimit: rand(0, 0.3) * (Math.random() < 0.3 ? 1 : 0), freqRamp: rand(-0.6, 0.6), freqDramp: rand(-0.3, 0.3),
+      vibStrength: Math.random() < 0.4 ? rand(0, 0.6) : 0, vibSpeed: rand(0, 1),
+      arpMod: Math.random() < 0.4 ? rand(-0.6, 0.6) : 0, arpSpeed: rand(0.2, 0.9),
+      duty: rand(0, 1), dutyRamp: rand(-0.3, 0.3),
+      repeatSpeed: Math.random() < 0.2 ? rand(0.2, 0.8) : 0,
+      phaOffset: Math.random() < 0.3 ? rand(-0.6, 0.6) : 0, phaRamp: rand(-0.3, 0.3),
+      lpfFreq: rand(0.4, 1), lpfRamp: rand(-0.3, 0.1), lpfResonance: rand(0, 0.4),
+      hpfFreq: Math.random() < 0.2 ? rand(0, 0.3) : 0, hpfRamp: 0,
+      masterVol: rand(0.35, 0.65),
+    };
+  }
+
+  function mutateParams(base) {
+    const next = { ...base };
+    for (const field of FIELDS) {
+      if (Math.random() > 0.35) continue;
+      const range = field.max - field.min;
+      const delta = (Math.random() * 2 - 1) * range * 0.15;
+      next[field.key] = Math.min(field.max, Math.max(field.min, next[field.key] + delta));
+    }
+    if (Math.random() < 0.1) next.waveType = Math.floor(rand(0, 5));
+    return next;
+  }
+
+  // ---- UI wiring ----
+  const WAVE_NAMES = ["Square", "Sawtooth", "Sine", "Triangle", "Noise"];
+  WAVE_NAMES.forEach((name, idx) => {
+    const btn = document.createElement("button");
+    btn.textContent = name;
+    btn.addEventListener("click", () => { p.waveType = idx; refresh(); });
+    waveButtonsEl.appendChild(btn);
+  });
+
+  const groups = {};
+  for (const field of FIELDS) {
+    if (!groups[field.group]) {
+      const fs = document.createElement("fieldset");
+      const legend = document.createElement("legend");
+      legend.textContent = field.group;
+      fs.appendChild(legend);
+      groups[field.group] = fs;
+      paramsEl.appendChild(fs);
+    }
+    const row = document.createElement("div");
+    row.className = "row";
+    const label = document.createElement("label");
+    label.textContent = field.label;
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = field.min;
+    input.max = field.max;
+    input.step = field.step;
+    input.dataset.key = field.key;
+    const val = document.createElement("span");
+    val.className = "val";
+    input.addEventListener("input", () => {
+      p[field.key] = parseFloat(input.value);
+      val.textContent = p[field.key].toFixed(2);
+      regenerate();
+    });
+    row.appendChild(label);
+    row.appendChild(input);
+    row.appendChild(val);
+    groups[field.group].appendChild(row);
+    field._input = input;
+    field._val = val;
+  }
+
+  Object.keys(PRESETS).forEach((name) => {
+    const btn = document.createElement("button");
+    btn.textContent = name;
+    btn.addEventListener("click", () => {
+      p = PRESETS[name]();
+      refresh();
+      playCurrent();
+    });
+    presetsEl.appendChild(btn);
+  });
+
+  document.getElementById("randomizeBtn").addEventListener("click", () => {
+    p = randomParams();
+    refresh();
+    playCurrent();
+  });
+  document.getElementById("mutateBtn").addEventListener("click", () => {
+    p = mutateParams(p);
+    refresh();
+    playCurrent();
+  });
+
+  function refresh() {
+    for (const field of FIELDS) {
+      field._input.value = p[field.key];
+      field._val.textContent = p[field.key].toFixed(2);
+    }
+    document.querySelectorAll("#waveButtons button").forEach((btn, idx) => {
+      btn.classList.toggle("active", idx === p.waveType);
+    });
+    regenerate();
+  }
+
+  function regenerate() {
+    lastSamples = generate(p);
+    drawWave();
+    durationEl.textContent = `${(lastSamples.length / SR).toFixed(2)}s · ${WAVE_NAMES[p.waveType]}`;
+  }
+
+  function drawWave() {
+    const w = canvas.width, h = canvas.height;
+    ctx2d.clearRect(0, 0, w, h);
+    ctx2d.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx2d.beginPath();
+    ctx2d.moveTo(0, h / 2);
+    ctx2d.lineTo(w, h / 2);
+    ctx2d.stroke();
+
+    if (!lastSamples.length) return;
+    ctx2d.strokeStyle = "#4f9eff";
+    ctx2d.lineWidth = 1.5;
+    ctx2d.beginPath();
+    const step = Math.max(1, Math.floor(lastSamples.length / w));
+    for (let x = 0; x < w; x++) {
+      const idx = Math.min(lastSamples.length - 1, x * step);
+      const y = h / 2 - lastSamples[idx] * (h / 2 - 4);
+      if (x === 0) ctx2d.moveTo(x, y);
+      else ctx2d.lineTo(x, y);
+    }
+    ctx2d.stroke();
+  }
+
+  function ensureAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+
+  function playCurrent() {
+    if (!lastSamples.length) return;
+    const ac = ensureAudioCtx();
+    if (currentSource) { try { currentSource.stop(); } catch {} }
+    const buffer = ac.createBuffer(1, lastSamples.length, SR);
+    buffer.copyToChannel(lastSamples, 0);
+    const source = ac.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ac.destination);
+    source.start();
+    currentSource = source;
+  }
+
+  playBtn.addEventListener("click", playCurrent);
+
+  // ---- wav export + save ----
+  function encodeWav(samples, sampleRate) {
+    const numSamples = samples.length;
+    const buffer = new ArrayBuffer(44 + numSamples * 2);
+    const view = new DataView(buffer);
+    function writeString(offset, str) {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    }
+    writeString(0, "RIFF");
+    view.setUint32(4, 36 + numSamples * 2, true);
+    writeString(8, "WAVE");
+    writeString(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, "data");
+    view.setUint32(40, numSamples * 2, true);
+    let offset = 44;
+    for (let i = 0; i < numSamples; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      offset += 2;
+    }
+    return buffer;
+  }
+
+  function bufferToDataUrl(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return "data:audio/wav;base64," + btoa(binary);
+  }
+
+  saveBtn.addEventListener("click", async () => {
+    const filename = filenameInput.value.trim();
+    if (!project) {
+      statusEl.textContent = "No project — open this from the editor.";
+      statusEl.className = "status error";
+      return;
+    }
+    if (!filename) {
+      statusEl.textContent = "Enter a filename first.";
+      statusEl.className = "status error";
+      return;
+    }
+    if (!lastSamples.length) {
+      statusEl.textContent = "Nothing generated yet.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    statusEl.textContent = "Saving…";
+    statusEl.className = "status";
+
+    try {
+      const wavBuffer = encodeWav(lastSamples, SR);
+      const dataUrl = bufferToDataUrl(wavBuffer);
+      const res = await fetch("/api/extensions/sfx-generator/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project, filename, dataUrl }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Save failed");
+
+      statusEl.textContent = `Saved ${data.filename}`;
+      statusEl.className = "status ok";
+      window.parent.postMessage(
+        { type: "EXTENSION_ASSET_SAVED", extension: "sfx-generator", project, filename: data.filename },
+        "*"
+      );
+    } catch (err) {
+      statusEl.textContent = err instanceof Error ? err.message : String(err);
+      statusEl.className = "status error";
+    }
+  });
+
+  // seed with a starter preset instead of dead silence
+  p = PRESETS["Blip / Select"]();
+  refresh();
+</script>
+</body>
+</html>

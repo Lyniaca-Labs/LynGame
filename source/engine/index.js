@@ -7,6 +7,7 @@ import { Transform } from "./components/Transform.js";
 import { SpriteRenderer } from "./components/SpriteRenderer.js";
 import { PrefabRegistry } from "./modules/PrefabRegistry.js";
 import AssetLoader from "./modules/AssetLoader.js";
+import { AudioModule } from "./modules/Audio.js";
 import { Scene } from "./types/Scene.js";
 import * as GUI from "./modules/GUI.js";
 export { LGTexture } from "./modules/TextureEngine.js";
@@ -33,6 +34,7 @@ export class GameEngine {
 
     this.prefabs = new PrefabRegistry(this);
     this.assets = new AssetLoader();
+    this.audio = new AudioModule(this); // scripts call engine.audio.play("key", { volume, loop, playbackRate })
     this.gui = GUI; // { layoutHand, layoutRow, layoutStack } — scripts call engine.gui.layoutHand(...) etc.
 
     this.startTime = Date.now();
@@ -157,6 +159,8 @@ export class GameEngine {
     // the more a scene had spawned before switching, the laggier the switch
     // got). We're replacing the whole array anyway, so just flag everything
     // destroyed and fire onDestroy once each.
+    this.audio.stopAll();
+
     const oldEntities = this.entities;
     this.entities = [];
     for (const entity of oldEntities) entity._destroyed = true;

@@ -1,0 +1,12 @@
+{
+  "name": "sfx-generator",
+  "displayName": "SFX Generator",
+  "description": "Design retro sound effects (sfxr-style synth) with presets, randomize/mutate, and save straight into the current project's assets.",
+  "icon": "🔊",
+  "activation": ["toolbar"],
+  "view": {
+    "type": "modal",
+    "size": "full",
+    "entry": "index.html"
+  }
+}

@@ -18,6 +18,8 @@ import {
   FileCode,
   Upload,
   Music,
+  Play,
+  Pause,
   File,
   Search,
   X,
@@ -893,6 +895,8 @@ interface AssetCardProps {
 function AssetCard({ asset, project, assets, onOpen, onRename, onDelete }: AssetCardProps) {
   const [texturePreview, setTexturePreview] = useState<string | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (asset.type !== "texture" || !project) return;
@@ -903,6 +907,9 @@ function AssetCard({ asset, project, assets, onOpen, onRename, onDelete }: Asset
       .catch(() => { if (!cancelled) setPreviewFailed(true); });
     return () => { cancelled = true; };
   }, [asset, project]);
+
+  // Stop playback if the card unmounts (e.g. asset deleted/renamed) while a preview is still going.
+  useEffect(() => () => audioRef.current?.pause(), []);
 
   const assetUrl = project ? `${BASE_URL}/api/projects/${encodeURIComponent(project)}/assets/raw/${encodeURIComponent(asset.relativePath)}` : "";
 
@@ -916,6 +923,22 @@ function AssetCard({ asset, project, assets, onOpen, onRename, onDelete }: Asset
 
   const hasVisual = (asset.type === "image") || (asset.type === "texture" && texturePreview);
 
+  const toggleAudioPreview = () => {
+    if (!assetUrl) return;
+    if (!audioRef.current) {
+      audioRef.current = new Audio(assetUrl);
+      audioRef.current.addEventListener("ended", () => setPlaying(false));
+    }
+    if (playing) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setPlaying(false);
+    } else {
+      void audioRef.current.play();
+      setPlaying(true);
+    }
+  };
+
   return (
     <div
       draggable
@@ -924,7 +947,8 @@ function AssetCard({ asset, project, assets, onOpen, onRename, onDelete }: Asset
         event.dataTransfer.setData("text/plain", asset.key);
       }}
       // onDoubleClick={onOpen}
-      onClick={onOpen}
+      onClick={asset.type === "audio" ? toggleAudioPreview : onOpen}
+      title={asset.type === "audio" ? `Click to preview · call from a script with engine.audio.play("${asset.key}")` : undefined}
       className="group relative aspect-square w-full cursor-pointer overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-inset)] shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-[var(--color-accent-secondary)] hover:shadow-lg"
     >
       {/* Visual layer */}
@@ -935,6 +959,11 @@ function AssetCard({ asset, project, assets, onOpen, onRename, onDelete }: Asset
           <img src={texturePreview} alt={`${asset.key} preview`} className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" />
         ) : asset.type === "texture" && !previewFailed ? (
           <div className="h-6 w-6 animate-pulse rounded-full bg-[var(--color-accent-secondary)]/30" />
+        ) : asset.type === "audio" ? (
+          <div className="flex flex-col items-center gap-1.5 text-[var(--color-text-faint)]">
+            {playing ? <Pause size={22} className="text-[var(--color-accent-secondary)]" /> : <Play size={22} />}
+            <span className="text-[9px] font-medium uppercase tracking-wide">{playing ? "playing" : "audio"}</span>
+          </div>
         ) : (
           <div className="flex flex-col items-center gap-1.5 text-[var(--color-text-faint)]">
             {icon}
