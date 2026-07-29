@@ -11,6 +11,7 @@ export class Entity {
 
     this.parent = null; // parent Entity, or null for top-level entities
     this.children = []; // child Entities, e.g. a card's art/text/icons riding along with its bg
+    this.childName = null; // name this entity is addressable as under its parent (e.g. "icon"), set by prefab children or addChild(child, name)
 
     // Set true the instant destroy()/removeEntity() runs. Engine tick loops
     // snapshot `entities` at the start of a frame, so a script that destroys
@@ -26,8 +27,9 @@ export class Entity {
    * a card's icon entity can be positioned as a small offset from the card's
    * background entity, and will move/rotate together with it.
    */
-  addChild(child) {
+  addChild(child, name = null) {
     if (!child || child === this) return this;
+    if (name) child.childName = name;
     if (child.parent === this) return this;
     if (child.parent) child.parent.removeChild(child);
     child.parent = this;
@@ -40,6 +42,53 @@ export class Entity {
     child.parent = null;
     this.children = this.children.filter((c) => c !== child);
     return this;
+  }
+
+  /**
+   * Looks up a descendant by name path, e.g. `getChild("icon")` or, for a
+   * grandchild, `getChild("description.badge")` — each segment matches a
+   * child's `childName` (set from a prefab's children key, or passed as the
+   * second argument to addChild). Returns undefined if any segment is missing.
+   */
+  getChild(path) {
+    let current = this;
+    for (const segment of path.split(".")) {
+      current = current.children.find((c) => c.childName === segment);
+      if (!current) return undefined;
+    }
+    return current;
+  }
+
+  /**
+   * One call for "get me a descendant, a component on it, or a property of
+   * that component". `path` is a child path (as in getChild), optionally
+   * followed by `:ComponentName` and then `.property`:
+   *   query("icon")                  -> the "icon" child Entity
+   *   query("icon:SpriteRenderer")   -> icon's SpriteRenderer component
+   *   query("icon:SpriteRenderer.x") -> that component's `x` property value
+   *   query(":Transform.x")          -> this entity's own Transform.x
+   * Returns undefined if any part of the path doesn't resolve.
+   */
+  query(path) {
+    const colonIndex = path.indexOf(":");
+    const childPath = colonIndex === -1 ? path : path.slice(0, colonIndex);
+    const target = childPath ? this.getChild(childPath) : this;
+    if (!target) return undefined;
+    if (colonIndex === -1) return target;
+
+    const rest = path.slice(colonIndex + 1);
+    const dotIndex = rest.indexOf(".");
+    const compName = dotIndex === -1 ? rest : rest.slice(0, dotIndex);
+    const component = target.getComponent(compName);
+    if (dotIndex === -1 || component === undefined) return component;
+
+    const propPath = rest.slice(dotIndex + 1);
+    let value = component;
+    for (const segment of propPath.split(".")) {
+      if (value === undefined || value === null) return undefined;
+      value = value[segment];
+    }
+    return value;
   }
 
   /**

@@ -63,7 +63,10 @@ LATER
 
 - [ ] Graphics framework first (foundation)
   - [x] text components / font loading (font assets)
-  - [ ] should be able to make global scripts not attached to an entity
+  - [ ] ability to query in engine with name.child.subchild
+  - [ ] layout component for entities -> like flexbox / grid, will auto format children
+  - [x] should be able to make global scripts not attached to an entity
+  - [ ] debug mode that shows bounding box
     - [x] attach scripts to game / engine -> callable from anywhere
   - [x] entity children
   - [ ] icons for premade components
@@ -79,7 +82,8 @@ LATER
   - [x] camera component -> attaches to entity, can set isactive on camera component and it will turn off all others in scene and attach to scene
   - [x] stop reshipping LGEngine with every single texture
   - [ ] screen effects (blur, bloom, vignette, etc)
-  - [ ] ability to load an asset into texture creator to create a new version of that asset
+  - [ ] prefabs should be able to have children
+  - [x] ability to load an asset into texture creator to create a new version of that asset
     - [x] requires assets to also be allowed to be json / js files -> built into canvases
     - [x] should view output of texture at output node
     - [x] some textures can be seeded and regenerated
@@ -93,9 +97,8 @@ LATER
   - [x] ability to pause the game
   - [x] code editor
   - [x] ability to move entities around, around scenes, duplicate, copy, paste
-  - [ ] little icons for tabs on explorer
+  - [x] little icons for tabs on explorer
     - [x] camera icon for cameras (+ Interactable/Animator/Anchor icons — `source/client/src/lib/entityIcons.tsx`)
-    - [ ] entity icon for entities (generic default icon; only "special" components have one so far)
     - [ ] hitbox entity evnetually
   - [x] can edit prefabs
   - [ ] export project to zip (with a node live server. Can use node or python, or powershell (ps1) to run)
@@ -105,7 +108,7 @@ LATER
   - [x] codemirror code editor should be based on selected theme
   - [ ] get open in vscode working
   - [x] should be able to put components on a prefab instance, seperate from overrides
-  - [ ] ability to collapse components
+  - [ ] ability to collapse components in inspector
   - [ ] undo / redo
   - [ ] visual editor and context menu in scene
     - [x] script visual editor
@@ -114,10 +117,11 @@ LATER
   - [ ] ESLINT in code editor
   - [ ] autosave option in settings
   - [ ] preview render for prefabs
-  - [ ] can drag assets in and upload from editor
+  - [x] can drag assets in and upload from editor
+  - [ ] full feature documentation (components, scripts, functionality, scenes, entities, everything, etc...)
 
-- [ ] Good overall architecture/design pattern
-  - [ ] turn server into typescript, keep all project files and engine files javascript
+- [x] Good overall architecture/design pattern
+  - [x] turn server into typescript, keep all project files and engine files javascript
 - [x] Scene hierarchy (`Scene[] -> Entity[] -> Children[]`)
 - [x] Components system
 - [x] Events system

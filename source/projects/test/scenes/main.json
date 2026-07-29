@@ -6,14 +6,26 @@
       "prefab": "Enemy",
       "overrides": {
         "Transform": {
-          "x": 101,
-          "y": 150
+          "x": 97,
+          "y": 154
         },
         "ShapeRenderer": {
           "height": 64,
           "width": 32,
           "color": "#5c4242",
           "shape": "rect"
+        },
+        "children": {
+          "dot": {
+            "ShapeRenderer": {
+              "color": "#dd5fa9"
+            }
+          },
+          "dot.ggg": {
+            "ShapeRenderer": {
+              "color": "#2e3008"
+            }
+          }
         }
       },
       "components": {
@@ -83,8 +95,8 @@
       "id": "text",
       "components": {
         "Transform": {
-          "x": 100,
-          "y": 0,
+          "x": 107,
+          "y": 11,
           "rotation": 0
         },
         "TextRenderer": {
@@ -138,8 +150,8 @@
       "id": "fallingBox",
       "components": {
         "Transform": {
-          "x": 178,
-          "y": 157,
+          "x": 179,
+          "y": 156,
           "rotation": 0,
           "zIndex": 1
         },
@@ -193,8 +205,8 @@
       "id": "gui",
       "components": {
         "Transform": {
-          "x": 64,
-          "y": 0,
+          "x": 58,
+          "y": 6,
           "rotation": 0
         },
         "Anchor": {

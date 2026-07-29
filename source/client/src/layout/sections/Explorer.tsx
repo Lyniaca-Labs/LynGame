@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { FolderTree, TreeNode, TreeNodeBadge, DropPosition } from "../../ui/FolderTree";
 import { MenuAction } from "../../ui/ActionsMenu";
-import { projectsApi, Entity, graphScriptsApi, AssetEntry, BASE_URL } from "../../api";
+import { projectsApi, Entity, PrefabData, PrefabChildData, graphScriptsApi, AssetEntry, BASE_URL } from "../../api";
 import { CodeFileEditor } from "../../components/CodeFileEditor";
 import ScriptGraph from "../../components/graphs/ScriptGraph";
 import { GraphValue } from "../../components/graphs/GraphEditor";
@@ -107,7 +107,9 @@ function buildEntityTree(
   sceneFile: string,
   sceneId: string,
   entities: Entity[],
-  openEntity: (sceneId: string, entityId: string) => void
+  openEntity: (sceneId: string, entityId: string) => void,
+  prefabDefs: Record<string, PrefabData>,
+  openInstanceChild: (sceneId: string, entityId: string, path: string) => void
 ): TreeNode[] {
   const ids = new Set(entities.map((e) => e.id));
   const byParent = new Map<string, Entity[]>();
@@ -124,7 +126,16 @@ function buildEntityTree(
   }
 
   const buildNode = (e: Entity): TreeNode => {
-    const children = byParent.get(e.id);
+    const realChildren = byParent.get(e.id);
+    const prefabDef = e.prefab ? prefabDefs[e.prefab] : undefined;
+    // Ghost children come first, then any manually-added real children —
+    // both render under the same node, distinguished only by the ghost
+    // dimming, so you can freely mix inherited fields with extra entities.
+    const ghostChildren = prefabDef
+      ? buildGhostChildTree(sceneFile, e.id, prefabDef.children, "", sceneId, e, openInstanceChild)
+      : [];
+    const children = [...ghostChildren, ...(realChildren?.map(buildNode) ?? [])];
+
     const meta: EntityNodeMeta = {
       kind: "entity",
       sceneId,
@@ -135,7 +146,7 @@ function buildEntityTree(
       id: `${sceneFile}::${e.id}`,
       label: e.id,
       onClick: () => openEntity(sceneId, e.id),
-      children: children?.length ? children.map(buildNode) : undefined,
+      children: children.length ? children : undefined,
       badges: entityBadges(e),
       meta,
     };
@@ -144,14 +155,91 @@ function buildEntityTree(
   return roots.map(buildNode);
 }
 
+// A prefab child node's id, distinct from entity node ids ("sceneFile::id")
+// so getActions/drag handlers never confuse the two. `owner` is the prefab
+// filename ("Card.json") when authoring the prefab itself, or
+// "sceneFile::entityId" when it's a ghost child under an instance.
+const prefabChildNodeId = (owner: string, path: string) => `${owner}##${path}`;
+
+// Builds the "authoring" tree for a prefab's own `children` definition —
+// shown under a Prefabs-section node so Card's icon/name/description can be
+// added/renamed/removed directly, same as an entity's real children.
+function buildPrefabChildTree(
+  prefabFile: string,
+  children: Record<string, PrefabChildData> | undefined,
+  parentPath: string,
+  prefabName: string,
+  openPrefabChild: (prefabName: string, path: string) => void
+): TreeNode[] {
+  return Object.entries(children ?? {}).map(([name, child]) => {
+    const path = parentPath ? `${parentPath}.${name}` : name;
+    return {
+      id: prefabChildNodeId(prefabFile, path),
+      label: name,
+      onClick: () => openPrefabChild(prefabName, path),
+      children: child.children && Object.keys(child.children).length
+        ? buildPrefabChildTree(prefabFile, child.children, path, prefabName, openPrefabChild)
+        : undefined,
+    };
+  });
+}
+
+// Builds the "ghost" tree of a prefab instance's inherited children — one
+// TreeNode per child defined on the prefab, dimmed to read as "inherited,
+// not yet a real entity", each carrying an override badge if this instance
+// already has field overrides for it. Recurses using the SAME dot-paths the
+// override map and Entity.getChild/query use, so what you click here is
+// exactly what you'd address in a script.
+function buildGhostChildTree(
+  sceneFile: string,
+  entityId: string,
+  children: Record<string, PrefabChildData> | undefined,
+  parentPath: string,
+  sceneId: string,
+  entity: Entity,
+  openInstanceChild: (sceneId: string, entityId: string, path: string) => void
+): TreeNode[] {
+  const owner = `${sceneFile}::${entityId}`;
+  return Object.entries(children ?? {}).map(([name, child]) => {
+    const path = parentPath ? `${parentPath}.${name}` : name;
+    const hasOverride = Boolean(
+      entity.overrides?.children?.[path] && Object.keys(entity.overrides.children[path]).length > 0
+    );
+    return {
+      id: prefabChildNodeId(owner, path),
+      label: name,
+      ghost: true,
+      onClick: () => openInstanceChild(sceneId, entityId, path),
+      badges: [
+        {
+          id: "override",
+          icon: (
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${hasOverride ? "bg-[var(--color-accent-secondary)]" : "border border-[var(--color-text-faint)]"}`}
+            />
+          ),
+          tooltip: hasOverride ? "Has instance overrides" : "Inherited from prefab, no overrides",
+          persistent: hasOverride,
+        },
+      ],
+      children: child.children && Object.keys(child.children).length
+        ? buildGhostChildTree(sceneFile, entityId, child.children, path, sceneId, entity, openInstanceChild)
+        : undefined,
+    };
+  });
+}
+
 function ExplorerFiles() {
   const { projectData, currentProject } = useProject();
   const {
     target,
     scene: liveScene,
+    prefabCache,
     openScene,
     openEntity,
     openPrefab,
+    openPrefabChild,
+    openInstanceChild,
     addEntity,
     renameEntity,
     deleteEntity,
@@ -161,6 +249,9 @@ function ExplorerFiles() {
     copyEntity,
     pasteEntity,
     moveEntityToScene,
+    addPrefabChild,
+    renamePrefabChild,
+    removePrefabChild,
     createComponent,
     deleteComponent,
     createScript,
@@ -173,6 +264,7 @@ function ExplorerFiles() {
     deletePrefab,
     createAnimation,
     deleteAnimation,
+    prefabDraft,
     openClipEditor,
   } = useSceneEditor();
 
@@ -180,7 +272,12 @@ function ExplorerFiles() {
   const [openCodeFile, setOpenCodeFile] = useState<OpenCodeFile | null>(null);
   const [openGraphScript, setOpenGraphScript] = useState<string | null>(null);
 
-  const activeSceneId = target && target.kind !== "prefab" ? target.sceneId : undefined;
+  const activeSceneId =
+    target && (target.kind === "scene" || target.kind === "entity" || target.kind === "instanceChild")
+      ? target.sceneId
+      : undefined;
+  const activePrefabName =
+    target && (target.kind === "prefab" || target.kind === "prefabChild") ? target.prefabName : undefined;
 
   const [graphContent, setGraphContent] = useState<GraphValue | null>(null);
   const [graphLoading, setGraphLoading] = useState(false);
@@ -279,6 +376,17 @@ function ExplorerFiles() {
     ];
   };
 
+  // Prefer the live draft over prefabCache for whichever prefab is currently
+  // open in the Inspector, so editing a prefab's children shows up
+  // immediately both in its own "Prefabs" node and in any instance's ghost
+  // children — same freshness rule buildEntityTree already follows for
+  // liveScene vs sceneEntities below. prefabCache itself (from context) is
+  // kept fresh on save() and eagerly pre-fetched for every project prefab
+  // (see SceneEditorContext) — it's the single source of truth here, not a
+  // second Explorer-local cache that could go stale independently of it.
+  const livePrefabDefs =
+    activePrefabName && prefabDraft ? { ...prefabCache, [activePrefabName]: prefabDraft } : prefabCache;
+
   const sections: TreeNode[] = [
     {
       id: "scenes",
@@ -295,7 +403,9 @@ function ExplorerFiles() {
           label: sceneId,
           badges: sceneBadges(sceneFile),
           onClick: () => openScene(sceneId),
-          children: entities ? buildEntityTree(sceneFile, sceneId, entities, openEntity) : undefined,
+          children: entities
+            ? buildEntityTree(sceneFile, sceneId, entities, openEntity, livePrefabDefs, openInstanceChild)
+            : undefined,
           meta: sceneMeta,
         };
       }),
@@ -303,11 +413,18 @@ function ExplorerFiles() {
     {
       id: "prefabs",
       label: "Prefabs",
-      children: projectData.prefabs.map((p) => ({
-        id: p,
-        label: p,
-        onClick: () => openPrefab(stripExt(p)),
-      })),
+      children: projectData.prefabs.map((p) => {
+        const prefabName = stripExt(p);
+        const def = livePrefabDefs[prefabName];
+        return {
+          id: p,
+          label: p,
+          onClick: () => openPrefab(prefabName),
+          children: def
+            ? buildPrefabChildTree(p, def.children, "", prefabName, openPrefabChild)
+            : undefined,
+        };
+      }),
     },
     {
       id: "scripts",
@@ -369,6 +486,48 @@ function ExplorerFiles() {
   };
 
   const getActions = (node: TreeNode): MenuAction[] => {
+    // Prefab child node, id shape is "<owner>##<dot.path>" — checked before
+    // the "::" entity check below since a ghost child's owner embeds
+    // "sceneFile::entityId" and would otherwise be misread as an entity node.
+    if (node.id.includes("##")) {
+      const [owner, path] = node.id.split("##");
+      if (owner.includes("::")) {
+        // Ghost child of a prefab instance — inherited, override-only (see
+        // Inspector's instanceChild view), nothing structural to do here.
+        return [];
+      }
+
+      const prefabName = stripExt(owner);
+      const lastDot = path.lastIndexOf(".");
+      const parentPath = lastDot === -1 ? "" : path.slice(0, lastDot);
+      const childName = lastDot === -1 ? path : path.slice(lastDot + 1);
+
+      return [
+        {
+          label: "Add Child",
+          icon: Plus,
+          onClick: async () => {
+            const name = (await window.prompt("New child name:"))?.trim();
+            if (name) addPrefabChild(path, name);
+          },
+        },
+        {
+          label: "Rename",
+          icon: Pencil,
+          onClick: async () => {
+            const next = (await window.prompt("Rename child:", childName))?.trim();
+            if (next && next !== childName) renamePrefabChild(parentPath, childName, next);
+          },
+        },
+        {
+          label: "Delete",
+          icon: Trash2,
+          danger: true,
+          onClick: () => removePrefabChild(parentPath, childName),
+        },
+      ];
+    }
+
     // Entity node, id shape is "sceneFile.json::entityId"
     if (node.id.includes("::")) {
       const [sceneFile, entityId] = node.id.split("::");
@@ -488,7 +647,17 @@ function ExplorerFiles() {
 
     // Prefab node — id is the raw prefab filename (e.g. "Player.json")
     if (projectData.prefabs.includes(node.id)) {
+      const prefabName = stripExt(node.id);
       return [
+        {
+          label: "Add Child",
+          icon: Plus,
+          onClick: async () => {
+            if (activePrefabName !== prefabName) openPrefab(prefabName);
+            const name = (await window.prompt("New child name:"))?.trim();
+            if (name) addPrefabChild("", name);
+          },
+        },
         { label: "Rename", icon: Pencil, onClick: () => console.log("rename", node.id) },
         { label: "Delete", icon: Trash2, danger: true, onClick: () => deletePrefab(node.id) },
       ];

@@ -7,13 +7,28 @@ import { Select, SelectOption } from "../../ui/Select";
 import { Button } from "../../ui/Button";
 import { useSceneEditor } from "../../context/SceneEditorContext";
 import { useProject } from "../../context/ProjectContext";
-import { Entity, ComponentDefinition, ComponentFieldDefinition, PrefabData } from "../../api";
+import { Entity, ComponentDefinition, ComponentFieldDefinition, PrefabData, PrefabChildData } from "../../api";
 import type { GameViewHandle } from "../sections/GameView";
 import { CodeStringEditorModal } from "../../components/CodeStringEditorModal";
 
 type FieldType = ComponentFieldDefinition["type"];
 
 const stripExt = (name: string) => name.replace(/\.(js|ts|json)$/i, "");
+
+// Walks a prefab's `children` tree by dot-path — the same addressing scheme
+// used everywhere else in this feature (overrides, Entity.getChild/query).
+// Read-only lookup; SceneEditorContext has the mutating counterpart.
+function resolvePrefabChildNode(
+  root: PrefabData | PrefabChildData | undefined,
+  path: string
+): PrefabChildData | undefined {
+  let node: PrefabData | PrefabChildData | undefined = root;
+  for (const segment of path.split(".")) {
+    node = node?.children?.[segment];
+    if (!node) return undefined;
+  }
+  return node as PrefabChildData;
+}
 
 type InspectorProps = {
   onEdit?: () => void;
@@ -41,6 +56,18 @@ export function Inspector({ onEdit }: InspectorProps) {
     removePrefabComponent,
     addPrefabScript,
     removePrefabScript,
+    addPrefabChild,
+    renamePrefabChild,
+    removePrefabChild,
+    updatePrefabChildComponentField,
+    addPrefabChildComponent,
+    removePrefabChildComponent,
+    addPrefabChildScript,
+    removePrefabChildScript,
+    updateChildOverrideField,
+    resetChildOverrideComponent,
+    addChildOverrideScript,
+    removeChildOverrideScript,
   } = useSceneEditor();
   const { projectData } = useProject();
 
@@ -70,7 +97,14 @@ export function Inspector({ onEdit }: InspectorProps) {
     );
   }
 
-  const inspectingLabel = target.kind === "prefab" ? target.prefabName : target.entityId;
+  const inspectingLabel =
+    target.kind === "prefab"
+      ? target.prefabName
+      : target.kind === "prefabChild"
+        ? `${target.prefabName} / ${target.path}`
+        : target.kind === "instanceChild"
+          ? `${target.entityId} / ${target.path}`
+          : target.entityId;
 
   if (loading) {
     return (
@@ -108,6 +142,64 @@ export function Inspector({ onEdit }: InspectorProps) {
         onRemoveComponent={withEdit(removePrefabComponent)}
         onAddScript={withEdit(addPrefabScript)}
         onRemoveScript={withEdit(removePrefabScript)}
+      />
+    );
+  }
+
+  if (target.kind === "prefabChild") {
+    const node = prefabDraft ? resolvePrefabChildNode(prefabDraft, target.path) : undefined;
+    if (!node) {
+      return (
+        <Container title={`Inspector — ${target.prefabName} / ${target.path}`}>
+          <PlaceholderPanel label="Child not found" />
+        </Container>
+      );
+    }
+
+    return (
+      <InspectorPrefabChild
+        prefabName={target.prefabName}
+        path={target.path}
+        node={node}
+        componentRegistry={projectData?.components ?? {}}
+        scriptRegistry={projectData?.scripts ?? []}
+        onAddChild={withEdit(addPrefabChild)}
+        onRenameChild={withEdit(renamePrefabChild)}
+        onRemoveChild={withEdit(removePrefabChild)}
+        onFieldChange={withEdit(updatePrefabChildComponentField)}
+        onAddComponent={withEdit(addPrefabChildComponent)}
+        onRemoveComponent={withEdit(removePrefabChildComponent)}
+        onAddScript={withEdit(addPrefabChildScript)}
+        onRemoveScript={withEdit(removePrefabChildScript)}
+      />
+    );
+  }
+
+  if (target.kind === "instanceChild") {
+    const entity = scene?.entities.find((e) => e.id === target.entityId);
+    const prefabDef = entity?.prefab ? prefabCache[entity.prefab] : undefined;
+    const node = resolvePrefabChildNode(prefabDef, target.path);
+
+    if (!entity || !node) {
+      return (
+        <Container title={`Inspector — ${target.entityId} / ${target.path}`}>
+          <PlaceholderPanel label={!entity ? "Entity not found" : "Loading prefab…"} />
+        </Container>
+      );
+    }
+
+    return (
+      <InspectorInstanceChild
+        entityId={entity.id}
+        path={target.path}
+        node={node}
+        override={entity.overrides?.children?.[target.path]}
+        componentRegistry={projectData?.components ?? {}}
+        scriptRegistry={projectData?.scripts ?? []}
+        onOverrideFieldChange={withEdit(updateChildOverrideField)}
+        onResetOverride={withEdit(resetChildOverrideComponent)}
+        onAddScript={withEdit(addChildOverrideScript)}
+        onRemoveScript={withEdit(removeChildOverrideScript)}
       />
     );
   }
@@ -424,6 +516,314 @@ function InspectorPrefab({
               <Select
                 options={scriptOptions}
                 onChange={(v: string) => onAddScript(v)}
+                placeholder="Add script…"
+                emptyMessage="No scripts available"
+              />
+            </div>
+          )}
+        </Section>
+      </div>
+    </Container>
+  );
+}
+
+// Structural authoring view for a single child WITHIN a prefab's own
+// definition (e.g. editing Card's "icon" child directly) — same shape as
+// InspectorPrefab above, just addressed by dot-`path` instead of the prefab
+// root, and with its own nested children addable/renameable/removable.
+function InspectorPrefabChild({
+  prefabName,
+  path,
+  node,
+  componentRegistry,
+  scriptRegistry,
+  onAddChild,
+  onRenameChild,
+  onRemoveChild,
+  onFieldChange,
+  onAddComponent,
+  onRemoveComponent,
+  onAddScript,
+  onRemoveScript,
+}: {
+  prefabName: string;
+  path: string;
+  node: PrefabChildData;
+  componentRegistry: Record<string, ComponentDefinition>;
+  scriptRegistry: string[];
+  onAddChild: (parentPath: string, childName: string) => void;
+  onRenameChild: (parentPath: string, oldName: string, newName: string) => void;
+  onRemoveChild: (parentPath: string, childName: string) => void;
+  onFieldChange: (path: string, componentName: string, field: string, value: unknown) => void;
+  onAddComponent: (path: string, componentName: string) => void;
+  onRemoveComponent: (path: string, componentName: string) => void;
+  onAddScript: (path: string, scriptName: string) => void;
+  onRemoveScript: (path: string, index: number) => void;
+}) {
+  const lastDot = path.lastIndexOf(".");
+  const childName = lastDot === -1 ? path : path.slice(lastDot + 1);
+  const parentPath = lastDot === -1 ? "" : path.slice(0, lastDot);
+
+  const usedComponents = new Set(Object.keys(node.components ?? {}));
+  const componentOptions: SelectOption[] = Object.keys(componentRegistry)
+    .filter((name) => !usedComponents.has(name))
+    .map((name) => ({ value: name, label: name }));
+
+  const scriptOptions: SelectOption[] = Array.from(
+    new Map(
+      scriptRegistry
+        .filter((s) => !s.endsWith(".lgscript.js"))
+        .map((s) => {
+          const name = stripExt(s);
+          return [name, { value: name, label: name } as SelectOption];
+        })
+    ).values()
+  );
+
+  const childNames = Object.keys(node.children ?? {});
+
+  return (
+    <Container title={`Inspector — ${prefabName} / ${path}`} bodyClassName="overflow-y-auto p-2">
+      <div className="space-y-4">
+        <Section title="Child Name">
+          <input
+            type="text"
+            defaultValue={childName}
+            key={path}
+            onBlur={(e) => {
+              const next = e.target.value.trim();
+              if (next && next !== childName) onRenameChild(parentPath, childName, next);
+            }}
+            className="w-full rounded border border-[var(--color-border)] bg-transparent px-1.5 py-1 text-xs text-[var(--color-text)]"
+          />
+        </Section>
+
+        <Section title="Components">
+          <div className="space-y-2">
+            {Object.entries(node.components ?? {}).map(([componentName, fields]) => (
+              <ComponentPanel
+                key={componentName}
+                entityId={path}
+                componentName={componentName}
+                schema={componentRegistry[componentName]}
+                values={fields as Record<string, unknown>}
+                componentRegistry={componentRegistry}
+                onFieldChange={(_path, cName, field, value) => onFieldChange(path, cName, field, value)}
+                onRemove={() => onRemoveComponent(path, componentName)}
+              />
+            ))}
+            {Object.keys(node.components ?? {}).length === 0 && (
+              <div className="text-xs italic text-[var(--color-text-faint)]">No components</div>
+            )}
+          </div>
+          {componentOptions.length > 0 && (
+            <div className="mt-2">
+              <Select
+                options={componentOptions}
+                onChange={(v: string) => onAddComponent(path, v)}
+                placeholder="Add component…"
+                emptyMessage="No components available"
+              />
+            </div>
+          )}
+        </Section>
+
+        <Section title="Scripts">
+          <div className="space-y-1">
+            {(node.scripts ?? []).map((scriptName, i) => (
+              <div
+                key={`${scriptName}-${i}`}
+                className="flex items-center justify-between rounded border border-[var(--color-border)] px-2 py-1 text-xs"
+              >
+                <span className="text-[var(--color-text)]">{scriptName}</span>
+                <button
+                  type="button"
+                  onClick={() => onRemoveScript(path, i)}
+                  className="text-[var(--color-text-faint)] hover:text-[var(--color-danger)]"
+                  aria-label={`Remove ${scriptName}`}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+            {(node.scripts ?? []).length === 0 && (
+              <div className="text-xs italic text-[var(--color-text-faint)]">No scripts</div>
+            )}
+          </div>
+          {scriptOptions.length > 0 && (
+            <div className="mt-2">
+              <Select
+                options={scriptOptions}
+                onChange={(v: string) => onAddScript(path, v)}
+                placeholder="Add script…"
+                emptyMessage="No scripts available"
+              />
+            </div>
+          )}
+        </Section>
+
+        <Section title="Children">
+          <div className="space-y-1">
+            {childNames.map((name) => (
+              <div
+                key={name}
+                className="flex items-center justify-between rounded border border-[var(--color-border)] px-2 py-1 text-xs"
+              >
+                <span className="text-[var(--color-text)]">{name}</span>
+                <button
+                  type="button"
+                  onClick={() => onRemoveChild(path, name)}
+                  className="text-[var(--color-text-faint)] hover:text-[var(--color-danger)]"
+                  aria-label={`Remove ${name}`}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+            {childNames.length === 0 && (
+              <div className="text-xs italic text-[var(--color-text-faint)]">No children</div>
+            )}
+          </div>
+          <div className="mt-2">
+            <Button
+              size="sm"
+              onClick={async () => {
+                const name = (await window.prompt("New child name:"))?.trim();
+                if (name) onAddChild(path, name);
+              }}
+            >
+              Add Child
+            </Button>
+          </div>
+        </Section>
+      </div>
+    </Container>
+  );
+}
+
+// Override-only view for a "ghost" child of a prefab INSTANCE — inherited
+// from the prefab, editable per-field via overrides (same pattern as
+// OverridesSection/OverrideComponentPanel for a prefab's root component
+// overrides), plus additive-only extra scripts. No structural editing here
+// by design: a ghost child always keeps the same components/shape as the
+// prefab defines; only its field VALUES can diverge per instance.
+function InspectorInstanceChild({
+  entityId,
+  path,
+  node,
+  override,
+  componentRegistry,
+  scriptRegistry,
+  onOverrideFieldChange,
+  onResetOverride,
+  onAddScript,
+  onRemoveScript,
+}: {
+  entityId: string;
+  path: string;
+  node: PrefabChildData;
+  override: Record<string, unknown> | undefined;
+  componentRegistry: Record<string, ComponentDefinition>;
+  scriptRegistry: string[];
+  onOverrideFieldChange: (entityId: string, path: string, componentName: string, field: string, value: unknown) => void;
+  onResetOverride: (entityId: string, path: string, componentName: string) => void;
+  onAddScript: (entityId: string, path: string, scriptName: string) => void;
+  onRemoveScript: (entityId: string, path: string, index: number) => void;
+}) {
+  const componentNames = Object.keys(node.components ?? {});
+  const extraScripts = (override?.scripts as string[] | undefined) ?? [];
+
+  const scriptOptions: SelectOption[] = Array.from(
+    new Map(
+      scriptRegistry
+        .filter((s) => !s.endsWith(".lgscript.js"))
+        .map((s) => {
+          const name = stripExt(s);
+          return [name, { value: name, label: name } as SelectOption];
+        })
+    ).values()
+  );
+
+  return (
+    <Container title={`Inspector — ${entityId} / ${path} (ghost)`} bodyClassName="overflow-y-auto p-2">
+      <div className="space-y-4">
+        <div className="rounded border border-dashed border-[var(--color-border)] px-2 py-1.5 text-[10px] text-[var(--color-text-faint)]">
+          Inherited from the prefab. Override fields below to diverge just this instance — structure
+          (components/children) always follows the prefab.
+        </div>
+
+        <Section title="Overrides">
+          {componentNames.length === 0 ? (
+            <div className="text-xs italic text-[var(--color-text-faint)]">This child has no components</div>
+          ) : (
+            <div className="space-y-2">
+              {componentNames.map((componentName) => {
+                const defaults = node.components[componentName];
+                const overrideValues = override?.[componentName] as Record<string, unknown> | undefined;
+                const merged = { ...defaults, ...overrideValues };
+                const hasOverride = Boolean(overrideValues && Object.keys(overrideValues).length > 0);
+
+                return (
+                  <OverrideComponentPanel
+                    key={componentName}
+                    entityId={entityId}
+                    componentName={componentName}
+                    schema={componentRegistry[componentName]}
+                    values={merged}
+                    hasOverride={hasOverride}
+                    componentRegistry={componentRegistry}
+                    onFieldChange={(eId, cName, field, value) => onOverrideFieldChange(eId, path, cName, field, value)}
+                    onReset={() => onResetOverride(entityId, path, componentName)}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </Section>
+
+        <Section title="Inherited Scripts">
+          <div className="space-y-1">
+            {(node.scripts ?? []).map((scriptName, i) => (
+              <div
+                key={`${scriptName}-${i}`}
+                className="flex items-center rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-text-faint)]"
+              >
+                {scriptName}
+              </div>
+            ))}
+            {(node.scripts ?? []).length === 0 && (
+              <div className="text-xs italic text-[var(--color-text-faint)]">None</div>
+            )}
+          </div>
+        </Section>
+
+        <Section title="Extra Scripts (this instance only)">
+          <div className="space-y-1">
+            {extraScripts.map((scriptName, i) => (
+              <div
+                key={`${scriptName}-${i}`}
+                className="flex items-center justify-between rounded border border-[var(--color-border)] px-2 py-1 text-xs"
+              >
+                <span className="text-[var(--color-text)]">{scriptName}</span>
+                <button
+                  type="button"
+                  onClick={() => onRemoveScript(entityId, path, i)}
+                  className="text-[var(--color-text-faint)] hover:text-[var(--color-danger)]"
+                  aria-label={`Remove ${scriptName}`}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+            {extraScripts.length === 0 && (
+              <div className="text-xs italic text-[var(--color-text-faint)]">No extra scripts</div>
+            )}
+          </div>
+          {scriptOptions.length > 0 && (
+            <div className="mt-2">
+              <Select
+                options={scriptOptions}
+                onChange={(v: string) => onAddScript(entityId, path, v)}
                 placeholder="Add script…"
                 emptyMessage="No scripts available"
               />

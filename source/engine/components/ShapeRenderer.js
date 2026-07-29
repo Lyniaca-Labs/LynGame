@@ -2,7 +2,11 @@ import { Component } from "../types/Component.js";
 
 export class ShapeRenderer extends Component {
   static schema = {
-    shape: { type: "string", default: "rect", description: "\"rect\" or \"circle\"." },
+    // shape: { type: "string", default: "rect", description: "\"rect\" or \"circle\"." },
+    shape: { 
+      type: "select", default: "rect", description: "\"rect\" or \"circle\".", 
+      options: [{ value: "rect", label: "Rectangle" }, { value: "circle", label: "Circle" }] 
+    },
     width: { type: "number", default: 32, description: "Width in pixels (diameter, for circles)." },
     height: { type: "number", default: 32, description: "Height in pixels. Ignored for circles (width is used as the diameter)." },
     color: { type: "color", default: "#fff", description: "Fill color." },

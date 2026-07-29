@@ -433,6 +433,42 @@ export default class ProjectHandler {
       return lines;
     }
 
+    // Recursively renders a prefab's `children` tree (children of children of...)
+    // into entity-creation code, run inside the prefab factory function where
+    // `entity` (the root) and `childOverrides` (= overrides.children || {}) are
+    // already in scope. `path` is the dot-joined chain of childName segments
+    // from the prefab root (e.g. "description.badge"), used both as the
+    // override lookup key and as the runtime `childName` — this is exactly
+    // the addressing scheme entity.getChild()/query() and instance overrides
+    // both rely on.
+    function renderPrefabChildren(children, parentVar, pathPrefix, indent, prefabName) {
+      const lines: string[] = [];
+      for (const [childName, child] of Object.entries<any>(children || {})) {
+        const path = pathPrefix ? `${pathPrefix}.${childName}` : childName;
+        const varName = `child_${path.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+        const location = `child "${path}" of prefab "${prefabName}"`;
+        const pathLit = JSON.stringify(path);
+
+        for (const compName of Object.keys(child.components || {})) allComponents.add(compName);
+        for (const scriptName of child.scripts || []) addScriptRef(scriptName, location);
+
+        lines.push(`${indent}const ${varName} = engine.createEntity(\`\${entity.id}.${path}\`);`);
+        lines.push(`${indent}${varName}.childName = ${JSON.stringify(childName)};`);
+        for (const [compName, data] of Object.entries(child.components || {})) {
+          checkAnimatorClipRefs(compName, data, location);
+          lines.push(
+            `${indent}${varName}.addComponent(${compName}_component, { ...${JSON.stringify(data)}, ...(childOverrides[${pathLit}]?.${compName} || {}) });`
+          );
+        }
+        for (const scriptName of child.scripts || []) {
+          lines.push(`${indent}${varName}.attachScript(${scriptSymbol(scriptName)}_script);`);
+        }
+        lines.push(`${indent}${parentVar}.addChild(${varName});`);
+        lines.push(...renderPrefabChildren(child.children, varName, path, indent, prefabName));
+      }
+      return lines;
+    }
+
     const sceneFunctions: string[] = [];
     const sceneCameraIds = new Map<string, string | null>();
 
@@ -460,6 +496,18 @@ export default class ProjectHandler {
           for (const scriptName of entity.scripts || []) {
             addScriptRef(scriptName, location);
             bodyLines.push(`    ${varName}.attachScript(${scriptSymbol(scriptName)}_script);`);
+          }
+          // Extra scripts on a prefab's ghost children (component-field overrides
+          // for children flow at runtime through overrides.children, already
+          // passed into instantiate() above — but attachScript needs a static
+          // import, so any additional per-child scripts are wired here instead.
+          for (const [childPath, childOverride] of Object.entries<any>(entity.overrides?.children || {})) {
+            for (const scriptName of childOverride?.scripts || []) {
+              addScriptRef(scriptName, `child "${childPath}" override in ${location}`);
+              bodyLines.push(
+                `    ${varName}.getChild(${JSON.stringify(childPath)}).attachScript(${scriptSymbol(scriptName)}_script);`
+              );
+            }
           }
         } else {
           bodyLines.push(...renderEntity(entity, `entity_${entity.id}`, `"${entity.id}"`, "    ", location));
@@ -511,6 +559,10 @@ export default class ProjectHandler {
       }
       for (const scriptName of prefab.scripts || []) {
         rootLines.push(`  entity.attachScript(${scriptSymbol(scriptName)}_script);`);
+      }
+      if (prefab.children && Object.keys(prefab.children).length > 0) {
+        rootLines.push(`  const childOverrides = overrides.children || {};`);
+        rootLines.push(...renderPrefabChildren(prefab.children, "entity", "", "  ", prefabName));
       }
       rootLines.push(`  return entity;`);
 

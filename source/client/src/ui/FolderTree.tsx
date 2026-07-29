@@ -18,6 +18,10 @@ export interface TreeNode {
   children?: TreeNode[]; // absence of children = leaf/file
   onClick?: (node: TreeNode) => void; // per-node click handler, leaf nodes only
   badges?: TreeNodeBadge[]; // small icons rendered next to the label (e.g. "start scene" star)
+  // Marks a node as inherited-but-not-real — e.g. a prefab's child shown
+  // under an instance before any override has been made for it. Renders
+  // dimmed/italic so it reads as "not a real entity yet" at a glance.
+  ghost?: boolean;
   // Free-form data a tree instance can stash on a node and read back out of
   // the node passed to onDropNode — e.g. Explorer.tsx uses this to carry
   // an entity's sceneId/parentId so drop targeting can resolve "same parent
@@ -174,7 +178,12 @@ export function FolderTree({
           <span className="w-3 shrink-0" />
         )}
 
-        <span className="flex flex-1 items-center gap-1 truncate font-mono text-xs text-(--color-text)">
+        <span
+          className={cn(
+            "flex flex-1 items-center gap-1 truncate font-mono text-xs text-(--color-text)",
+            node.ghost && "italic text-(--color-text-faint) opacity-70"
+          )}
+        >
           <span className="truncate">{node.label}</span>
           <div className="flex items-center gap-1 pl-1">
             {node.badges?.map((badge) => (

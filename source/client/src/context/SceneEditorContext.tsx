@@ -12,8 +12,71 @@ import {
   Entity,
   ComponentDefinition,
   PrefabData,
+  PrefabChildData,
   graphScriptsApi,
 } from "../api";
+
+// Prefab names are stored/keyed without their file extension throughout this
+// context (entity.prefab, prefabCache, openPrefab) — matches Explorer.tsx's
+// and Inspector.tsx's own copies of the same helper.
+const stripExt = (name: string) => name.replace(/\.(js|ts|json)$/i, "");
+
+// --- prefab children tree helpers ---
+// A prefab's `children` is a real nested tree (Record<string, PrefabChildData>,
+// each of which can have its own `children`), addressed everywhere else in
+// this feature (overrides, Entity.getChild/query) by a dot-joined path of
+// childName segments, e.g. "description.badge". These three helpers are the
+// only place that walks/rewrites that tree; everything else just calls them.
+
+function getPrefabChildNode(
+  root: PrefabData | PrefabChildData,
+  path: string
+): PrefabChildData | undefined {
+  let node: PrefabData | PrefabChildData = root;
+  for (const segment of path.split(".")) {
+    const next = node.children?.[segment];
+    if (!next) return undefined;
+    node = next;
+  }
+  return node as PrefabChildData;
+}
+
+// The children record a new/removed/renamed child lives in — the prefab's
+// own `children` when parentPath is "" (root), otherwise the named node's.
+function getChildrenContainer(
+  prefab: PrefabData,
+  parentPath: string
+): Record<string, PrefabChildData> {
+  if (!parentPath) return prefab.children ?? {};
+  return getPrefabChildNode(prefab, parentPath)?.children ?? {};
+}
+
+function setChildrenContainer(
+  prefab: PrefabData,
+  parentPath: string,
+  children: Record<string, PrefabChildData>
+): PrefabData {
+  if (!parentPath) return { ...prefab, children };
+  return updatePrefabChildNode(prefab, parentPath, (node) => ({ ...node, children }));
+}
+
+// Immutably rewrites the node at `path` using `updater`; a no-op if any
+// segment of `path` doesn't exist (e.g. the child was deleted concurrently).
+function updatePrefabChildNode(
+  prefab: PrefabData,
+  path: string,
+  updater: (node: PrefabChildData) => PrefabChildData
+): PrefabData {
+  const segments = path.split(".");
+  function recur(node: PrefabData | PrefabChildData, i: number): PrefabData | PrefabChildData {
+    const segment = segments[i];
+    const child = node.children?.[segment];
+    if (!child) return node;
+    const updatedChild = i === segments.length - 1 ? updater(child) : (recur(child, i + 1) as PrefabChildData);
+    return { ...node, children: { ...node.children, [segment]: updatedChild } };
+  }
+  return recur(prefab, 0) as PrefabData;
+}
 
 const MAX_HISTORY = 100;
 
@@ -87,6 +150,13 @@ export type InspectorTarget =
   | { kind: "scene"; sceneId: string }
   | { kind: "entity"; sceneId: string; entityId: string }
   | { kind: "prefab"; prefabName: string }
+  // A child *within a prefab's own definition* (authoring the prefab, e.g.
+  // adding/editing Card's "icon" child) — distinct from instanceChild below.
+  | { kind: "prefabChild"; prefabName: string; path: string }
+  // A "ghost" child of a prefab instance in a scene — inherited from the
+  // prefab, editable only via per-field overrides (see instanceChild
+  // functions below), not structurally.
+  | { kind: "instanceChild"; sceneId: string; entityId: string; path: string }
   | null;
 
 interface SceneEditorContextValue {
@@ -110,6 +180,8 @@ interface SceneEditorContextValue {
   openScene: (sceneId: string) => void;
   openEntity: (sceneId: string, entityId: string) => void;
   openPrefab: (prefabName: string) => void;
+  openPrefabChild: (prefabName: string, path: string) => void;
+  openInstanceChild: (sceneId: string, entityId: string, path: string) => void;
   clear: () => void;
 
   renameEntity: (entityId: string, newId: string) => void;
@@ -155,6 +227,38 @@ interface SceneEditorContextValue {
   removePrefabComponent: (componentName: string) => void;
   addPrefabScript: (scriptName: string) => void;
   removePrefabScript: (index: number) => void;
+
+  // structural editing of a prefab's own children tree (target.kind ===
+  // "prefab" or "prefabChild") — adding/renaming/removing a child, and
+  // editing its components/scripts. `path` is "" for a root-level child,
+  // otherwise the dot-path of the parent it's being added under/edited at.
+  addPrefabChild: (parentPath: string, childName: string) => void;
+  renamePrefabChild: (parentPath: string, oldName: string, newName: string) => void;
+  removePrefabChild: (parentPath: string, childName: string) => void;
+  updatePrefabChildComponentField: (
+    path: string,
+    componentName: string,
+    field: string,
+    value: unknown
+  ) => void;
+  addPrefabChildComponent: (path: string, componentName: string) => void;
+  removePrefabChildComponent: (path: string, componentName: string) => void;
+  addPrefabChildScript: (path: string, scriptName: string) => void;
+  removePrefabChildScript: (path: string, index: number) => void;
+
+  // per-instance overrides on a prefab's ghost children (target.kind ===
+  // "instanceChild") — field-level only, mirrors updateOverrideField/
+  // resetOverrideComponent above but addressed by child dot-path.
+  updateChildOverrideField: (
+    entityId: string,
+    path: string,
+    componentName: string,
+    field: string,
+    value: unknown
+  ) => void;
+  resetChildOverrideComponent: (entityId: string, path: string, componentName: string) => void;
+  addChildOverrideScript: (entityId: string, path: string, scriptName: string) => void;
+  removeChildOverrideScript: (entityId: string, path: string, index: number) => void;
 
   addEntity: (parentId?: string | null) => Promise<void>;
   deleteEntity: (entityId: string) => void; // cascades to the entity's whole child subtree
@@ -256,9 +360,15 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
   }
 
   // Load the scene whenever the selected scene changes (regardless of
-  // whether the target is the scene itself or an entity inside it).
+  // whether the target is the scene itself, an entity inside it, or one of
+  // that entity's ghost prefab children).
+  const targetSceneId =
+    target?.kind === "scene" || target?.kind === "entity" || target?.kind === "instanceChild"
+      ? target.sceneId
+      : null;
+
   useEffect(() => {
-    if (!target || target.kind === "prefab" || !currentProject) {
+    if (!targetSceneId || !currentProject) {
       setScene(null);
       return;
     }
@@ -267,7 +377,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     projectsApi
-      .getScene(currentProject, target.sceneId)
+      .getScene(currentProject, targetSceneId)
       .then((res) => setScene(res.scene))
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
@@ -275,12 +385,14 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     setDirty(false);
     sceneHistoryRef.current = { past: [], future: [] };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target?.kind === "prefab" ? null : target?.sceneId, currentProject]);
+  }, [targetSceneId, currentProject]);
 
-  // Load the prefab whenever a prefab becomes the inspector target. This is
-  // a separate working copy from prefabCache so editing it doesn't fight
-  // with the read-only snapshots used to compute overrides elsewhere.
-  const prefabTargetName = target?.kind === "prefab" ? target.prefabName : null;
+  // Load the prefab whenever a prefab (or one of its own children) becomes
+  // the inspector target. This is a separate working copy from prefabCache
+  // so editing it doesn't fight with the read-only snapshots used to compute
+  // overrides elsewhere.
+  const prefabTargetName =
+    target?.kind === "prefab" || target?.kind === "prefabChild" ? target.prefabName : null;
 
   useEffect(() => {
     if (!prefabTargetName || !currentProject) {
@@ -317,7 +429,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
   // being inspected, so the Overrides panel has defaults + a field shape
   // to merge the entity's own overrides against.
   useEffect(() => {
-    if (!currentProject || !scene || target?.kind !== "entity") return;
+    if (!currentProject || !scene || (target?.kind !== "entity" && target?.kind !== "instanceChild")) return;
     const entity = scene.entities.find((e) => e.id === target.entityId);
     if (!entity?.prefab || prefabCache[entity.prefab]) return;
 
@@ -339,6 +451,37 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     };
   }, [currentProject, scene, target, prefabCache]);
 
+  // Eagerly fetch EVERY project prefab into prefabCache (not just ones some
+  // inspected entity happens to reference) — the Explorer tree needs every
+  // prefab's `children` to render both a prefab's own authoring row and any
+  // instance's ghost children, and prefabCache is the one cache save()
+  // already keeps in sync (see updatePrefabComponentField and friends via
+  // save() below). A second, disconnected cache here would just go stale
+  // the moment an edit is saved while some other target is being inspected.
+  useEffect(() => {
+    if (!projectData || !currentProject) return;
+
+    let cancelled = false;
+
+    projectData.prefabs.forEach((prefabFile) => {
+      const prefabName = stripExt(prefabFile);
+      if (prefabCache[prefabName]) return;
+
+      prefabsApi
+        .get(currentProject, prefabName)
+        .then((data) => {
+          if (!cancelled) setPrefabCache((prev) => ({ ...prev, [prefabName]: data }));
+        })
+        .catch(() => {
+          // Leave uncached — re-attempted next time projectData/prefabCache changes.
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectData, currentProject, prefabCache]);
+
   const openScene = useCallback((sceneId: string) => {
     setTarget({ kind: "scene", sceneId });
   }, []);
@@ -349,6 +492,14 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
 
   const openPrefab = useCallback((prefabName: string) => {
     setTarget({ kind: "prefab", prefabName });
+  }, []);
+
+  const openPrefabChild = useCallback((prefabName: string, path: string) => {
+    setTarget({ kind: "prefabChild", prefabName, path });
+  }, []);
+
+  const openInstanceChild = useCallback((sceneId: string, entityId: string, path: string) => {
+    setTarget({ kind: "instanceChild", sceneId, entityId, path });
   }, []);
 
   const clear = useCallback(() => setTarget(null), []);
@@ -379,7 +530,9 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     });
     setDirty(true);
     setTarget((prev) =>
-      prev?.kind === "entity" && prev.entityId === entityId ? { ...prev, entityId: trimmed } : prev
+      (prev?.kind === "entity" || prev?.kind === "instanceChild") && prev.entityId === entityId
+        ? { ...prev, entityId: trimmed }
+        : prev
     );
   }, []);
 
@@ -507,6 +660,80 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     [updateEntity]
   );
 
+  const updateChildOverrideField = useCallback(
+    (entityId: string, path: string, componentName: string, field: string, value: unknown) => {
+      updateEntity(entityId, (e) => ({
+        ...e,
+        overrides: {
+          ...e.overrides,
+          children: {
+            ...e.overrides?.children,
+            [path]: {
+              ...e.overrides?.children?.[path],
+              [componentName]: {
+                ...(e.overrides?.children?.[path]?.[componentName] as Record<string, unknown> | undefined),
+                [field]: value,
+              },
+            },
+          },
+        },
+      }));
+    },
+    [updateEntity]
+  );
+
+  const resetChildOverrideComponent = useCallback(
+    (entityId: string, path: string, componentName: string) => {
+      updateEntity(entityId, (e) => {
+        const childOverride = { ...e.overrides?.children?.[path] };
+        delete childOverride[componentName];
+        return {
+          ...e,
+          overrides: { ...e.overrides, children: { ...e.overrides?.children, [path]: childOverride } },
+        };
+      });
+    },
+    [updateEntity]
+  );
+
+  const addChildOverrideScript = useCallback(
+    (entityId: string, path: string, scriptName: string) => {
+      updateEntity(entityId, (e) => {
+        const existing = e.overrides?.children?.[path]?.scripts ?? [];
+        return {
+          ...e,
+          overrides: {
+            ...e.overrides,
+            children: {
+              ...e.overrides?.children,
+              [path]: { ...e.overrides?.children?.[path], scripts: [...existing, scriptName] },
+            },
+          },
+        };
+      });
+    },
+    [updateEntity]
+  );
+
+  const removeChildOverrideScript = useCallback(
+    (entityId: string, path: string, index: number) => {
+      updateEntity(entityId, (e) => {
+        const existing = e.overrides?.children?.[path]?.scripts ?? [];
+        return {
+          ...e,
+          overrides: {
+            ...e.overrides,
+            children: {
+              ...e.overrides?.children,
+              [path]: { ...e.overrides?.children?.[path], scripts: existing.filter((_, i) => i !== index) },
+            },
+          },
+        };
+      });
+    },
+    [updateEntity]
+  );
+
   const addScript = useCallback(
     (entityId: string, scriptName: string) => {
       updateEntity(entityId, (e) => ({
@@ -596,8 +823,123 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     [updatePrefabDraft]
   );
 
+  const addPrefabChild = useCallback(
+    (parentPath: string, childName: string) => {
+      const trimmed = childName.trim();
+      if (!trimmed) return;
+      updatePrefabDraft((p) => {
+        const children = getChildrenContainer(p, parentPath);
+        if (children[trimmed]) return p; // name clash, no-op
+        return setChildrenContainer(p, parentPath, {
+          ...children,
+          [trimmed]: { components: {}, scripts: [] },
+        });
+      });
+    },
+    [updatePrefabDraft]
+  );
+
+  const renamePrefabChild = useCallback(
+    (parentPath: string, oldName: string, newName: string) => {
+      const trimmed = newName.trim();
+      if (!trimmed || trimmed === oldName) return;
+      updatePrefabDraft((p) => {
+        const children = getChildrenContainer(p, parentPath);
+        if (!children[oldName] || children[trimmed]) return p;
+        const { [oldName]: node, ...rest } = children;
+        return setChildrenContainer(p, parentPath, { ...rest, [trimmed]: node });
+      });
+    },
+    [updatePrefabDraft]
+  );
+
+  const removePrefabChild = useCallback(
+    (parentPath: string, childName: string) => {
+      updatePrefabDraft((p) => {
+        const children = { ...getChildrenContainer(p, parentPath) };
+        delete children[childName];
+        return setChildrenContainer(p, parentPath, children);
+      });
+    },
+    [updatePrefabDraft]
+  );
+
+  const updatePrefabChildComponentField = useCallback(
+    (path: string, componentName: string, field: string, value: unknown) => {
+      updatePrefabDraft((p) =>
+        updatePrefabChildNode(p, path, (node) => ({
+          ...node,
+          components: {
+            ...node.components,
+            [componentName]: { ...node.components[componentName], [field]: value },
+          },
+        }))
+      );
+    },
+    [updatePrefabDraft]
+  );
+
+  const addPrefabChildComponent = useCallback(
+    (path: string, componentName: string) => {
+      const schema: ComponentDefinition | undefined = projectData?.components?.[componentName];
+      if (!schema) return;
+
+      const defaults = Object.fromEntries(
+        schema.fields.map((f) => [
+          f.key,
+          f.type === "vector" ? { ...(f.defaultValue as Record<string, number>) } : f.defaultValue,
+        ])
+      );
+
+      updatePrefabDraft((p) =>
+        updatePrefabChildNode(p, path, (node) => ({
+          ...node,
+          components: { ...node.components, [componentName]: defaults },
+        }))
+      );
+    },
+    [projectData, updatePrefabDraft]
+  );
+
+  const removePrefabChildComponent = useCallback(
+    (path: string, componentName: string) => {
+      updatePrefabDraft((p) =>
+        updatePrefabChildNode(p, path, (node) => {
+          const rest = { ...node.components };
+          delete rest[componentName];
+          return { ...node, components: rest };
+        })
+      );
+    },
+    [updatePrefabDraft]
+  );
+
+  const addPrefabChildScript = useCallback(
+    (path: string, scriptName: string) => {
+      updatePrefabDraft((p) =>
+        updatePrefabChildNode(p, path, (node) => ({
+          ...node,
+          scripts: [...(node.scripts ?? []), scriptName],
+        }))
+      );
+    },
+    [updatePrefabDraft]
+  );
+
+  const removePrefabChildScript = useCallback(
+    (path: string, index: number) => {
+      updatePrefabDraft((p) =>
+        updatePrefabChildNode(p, path, (node) => ({
+          ...node,
+          scripts: (node.scripts ?? []).filter((_, i) => i !== index),
+        }))
+      );
+    },
+    [updatePrefabDraft]
+  );
+
   const addEntity = useCallback(async (parentId: string | null = null) => {
-    if (!scene || !target || target.kind === "prefab") return;
+    if (!scene || !target || target.kind === "prefab" || target.kind === "prefabChild") return;
 
     const existingIds = new Set(scene.entities.map((e) => e.id));
 
@@ -631,7 +973,9 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     setScene({ ...scene, entities: scene.entities.filter((e) => !removedIds.has(e.id)) });
     setDirty(true);
     setTarget((prev) =>
-      prev?.kind === "entity" && removedIds.has(prev.entityId) ? { kind: "scene", sceneId: prev.sceneId } : prev
+      (prev?.kind === "entity" || prev?.kind === "instanceChild") && removedIds.has(prev.entityId)
+        ? { kind: "scene", sceneId: prev.sceneId }
+        : prev
     );
   }, [scene]);
 
@@ -680,7 +1024,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
   // original), with fresh ids and internal parent links remapped so the
   // duplicated hierarchy's shape matches the original.
   const duplicateEntity = useCallback((entityId: string) => {
-    if (!scene || !target || target.kind === "prefab") return;
+    if (!scene || !target || target.kind === "prefab" || target.kind === "prefabChild") return;
     const entity = scene.entities.find((e) => e.id === entityId);
     if (!entity) return;
 
@@ -708,7 +1052,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
   // B, paste) since the clipboard is plain component state, not scoped to
   // one scene's entities array.
   const pasteEntity = useCallback((parentId: string | null = null) => {
-    if (!scene || !target || target.kind === "prefab" || !entityClipboard?.length) return;
+    if (!scene || !target || target.kind === "prefab" || target.kind === "prefabChild" || !entityClipboard?.length) return;
 
     const { entities: clones, newRootId } = cloneSubtreeWithNewIds(
       entityClipboard,
@@ -737,7 +1081,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
       onMoved?: () => void,
       newParentId: string | null = null
     ) => {
-      if (!scene || !currentProject || !target || target.kind === "prefab") return;
+      if (!scene || !currentProject || !target || target.kind === "prefab" || target.kind === "prefabChild") return;
       if (targetSceneId === target.sceneId) return;
 
       const subtree = collectSubtree(scene.entities, entityId);
@@ -773,7 +1117,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         setScene(nextSourceScene);
         setDirty(false);
         setTarget((prev) =>
-          prev?.kind === "entity" && removedIds.has(prev.entityId)
+          (prev?.kind === "entity" || prev?.kind === "instanceChild") && removedIds.has(prev.entityId)
             ? { kind: "scene", sceneId: prev.sceneId }
             : prev
         );
@@ -792,7 +1136,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     setSaving(true);
     setError(null);
     try {
-      if (target.kind === "prefab") {
+      if (target.kind === "prefab" || target.kind === "prefabChild") {
         if (!prefabDraft) return;
         await prefabsApi.save(currentProject, target.prefabName, prefabDraft);
         // Keep the read-only cache in sync so any entity currently showing
@@ -904,7 +1248,11 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
       try {
         await scenesApi.remove(currentProject, name);
         await reloadProject();
-        setTarget((prev) => (prev && prev.kind !== "prefab" && prev.sceneId === name ? null : prev));
+        setTarget((prev) =>
+          prev && prev.kind !== "prefab" && prev.kind !== "prefabChild" && prev.sceneId === name
+            ? null
+            : prev
+        );
       } catch (err) {
         setError((err as Error).message);
       }
@@ -943,7 +1291,11 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
           delete rest[name];
           return rest;
         });
-        setTarget((prev) => (prev?.kind === "prefab" && prev.prefabName === name ? null : prev));
+        setTarget((prev) =>
+          (prev?.kind === "prefab" || prev?.kind === "prefabChild") && prev.prefabName === name
+            ? null
+            : prev
+        );
       } catch (err) {
         setError((err as Error).message);
       }
@@ -1021,8 +1373,10 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     [currentProject, reloadProject]
   );
 
+  const targetIsPrefabFlavored = target?.kind === "prefab" || target?.kind === "prefabChild";
+
   const undo = useCallback(() => {
-    if (target?.kind === "prefab") {
+    if (targetIsPrefabFlavored) {
       const h = prefabHistoryRef.current;
       if (!h.past.length || !prefabDraft) return;
       h.future.push(structuredClone(prefabDraft));
@@ -1034,10 +1388,10 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
       setScene(h.past.pop()!);
     }
     setDirty(true);
-  }, [target, scene, prefabDraft]);
+  }, [targetIsPrefabFlavored, scene, prefabDraft]);
 
   const redo = useCallback(() => {
-    if (target?.kind === "prefab") {
+    if (targetIsPrefabFlavored) {
       const h = prefabHistoryRef.current;
       if (!h.future.length || !prefabDraft) return;
       h.past.push(structuredClone(prefabDraft));
@@ -1049,12 +1403,14 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
       setScene(h.future.pop()!);
     }
     setDirty(true);
-  }, [target, scene, prefabDraft]);
+  }, [targetIsPrefabFlavored, scene, prefabDraft]);
 
-  const canUndo =
-    target?.kind === "prefab" ? prefabHistoryRef.current.past.length > 0 : sceneHistoryRef.current.past.length > 0;
-  const canRedo =
-    target?.kind === "prefab" ? prefabHistoryRef.current.future.length > 0 : sceneHistoryRef.current.future.length > 0;
+  const canUndo = targetIsPrefabFlavored
+    ? prefabHistoryRef.current.past.length > 0
+    : sceneHistoryRef.current.past.length > 0;
+  const canRedo = targetIsPrefabFlavored
+    ? prefabHistoryRef.current.future.length > 0
+    : sceneHistoryRef.current.future.length > 0;
 
   return (
     <SceneEditorContext.Provider
@@ -1070,6 +1426,8 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         openScene,
         openEntity,
         openPrefab,
+        openPrefabChild,
+        openInstanceChild,
         clear,
         renameEntity,
         updateComponentField,
@@ -1087,6 +1445,18 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         removePrefabComponent,
         addPrefabScript,
         removePrefabScript,
+        addPrefabChild,
+        renamePrefabChild,
+        removePrefabChild,
+        updatePrefabChildComponentField,
+        addPrefabChildComponent,
+        removePrefabChildComponent,
+        addPrefabChildScript,
+        removePrefabChildScript,
+        updateChildOverrideField,
+        resetChildOverrideComponent,
+        addChildOverrideScript,
+        removeChildOverrideScript,
         addEntity,
         deleteEntity,
         setEntityParent,

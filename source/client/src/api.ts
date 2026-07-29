@@ -99,8 +99,12 @@ export interface Entity {
   components?: Record<string, Record<string, unknown>>;
   scripts?: string[];
   prefab?: string;
-  // used in place of components when the entity is a prefab instance
-  overrides?: Record<string, Record<string, unknown>>;
+  // used in place of components when the entity is a prefab instance.
+  // Keyed by component name -> field overrides; the reserved "children" key
+  // addresses the prefab's own children by dot-path (see PrefabChildOverride)
+  // so a "ghost" child inherited from the prefab (e.g. a card's "icon") can
+  // have its fields overridden per-instance without becoming a real entity.
+  overrides?: Record<string, Record<string, unknown>> & { children?: Record<string, PrefabChildOverride> };
   // id of this entity's parent within the same scene, or absent/null for a
   // top-level entity. Mirrors Entity.addChild()/parent in the engine
   // (source/engine/types/Entity.js) — the compiler wires these up into real
@@ -212,10 +216,26 @@ const stripGraphExt = (filename: string) =>
 const withGraphExt = (filename: string) => `${stripGraphExt(filename)}.lgscript.json`;
 const withCompiledExt = (filename: string) => `${stripGraphExt(filename)}.lgscript.js`;
 
+export interface PrefabChildData {
+  components: Record<string, Record<string, unknown>>;
+  scripts: string[];
+  children?: Record<string, PrefabChildData>;
+}
+
 export interface PrefabData {
   components: Record<string, Record<string, unknown>>;
   scripts: string[];
+  children?: Record<string, PrefabChildData>;
 }
+
+// Per-instance overrides for a prefab's children, keyed by dot-path from the
+// prefab root (e.g. "icon", or "description.badge" for a grandchild).
+// Component overrides are runtime data merges; `scripts` is additive-only
+// (extra scripts on top of whatever the prefab child already has) and must be
+// resolvable at build time, same as top-level entity/prefab scripts.
+export type PrefabChildOverride = Record<string, Record<string, unknown> | string[] | undefined> & {
+  scripts?: string[];
+};
 
 export const prefabsApi = {
   get: async (project: string, prefab: string): Promise<PrefabData> => {
