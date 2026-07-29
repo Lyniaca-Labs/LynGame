@@ -23,8 +23,17 @@ import { Inspector } from "./sections";
 import { SettingsModal } from "../components/SettingsModal";
 import { ProjectSettingsModal } from "../components/ProjectSettingsModal";
 import { ProjectSelector } from "../components/ProjectSelector";
+import { AnimationClipEditorModal } from "../components/AnimationClipEditorModal";
 import { GameView, type GameViewHandle } from "./sections/GameView";
 import { OutputPanel } from "./sections/OutputPanel";
+
+// Ctrl+Z/Y should defer to a locally-focused editor's own undo (GraphEditor's
+// react-flow canvas, or CodeMirror's contenteditable) rather than also
+// popping the scene-level history — neither of those currently stops the
+// keydown from also reaching this window-level listener.
+function isInsideLocalUndoScope(el: Element | null) {
+  return !!el?.closest(".react-flow, .cm-content");
+}
 
 export function EditorLayout() {
   return (
@@ -33,8 +42,18 @@ export function EditorLayout() {
 }
 
 function EditorLayoutContent() {
-  const { currentProject, openProject, deleteProject } = useProject();
-  const { save, dirty, saving: sceneSaving } = useSceneEditor();
+  const { currentProject, projectData, openProject, deleteProject } = useProject();
+  const {
+    save,
+    dirty,
+    saving: sceneSaving,
+    editingClipName,
+    closeClipEditor,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+  } = useSceneEditor();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
@@ -159,7 +178,32 @@ function EditorLayoutContent() {
       ctrl: true,
       handler: () => window.location.reload(),
       disabled: false,
-    }
+    },
+    {
+      key: "z",
+      ctrl: true,
+      handler: () => {
+        if (!isInsideLocalUndoScope(document.activeElement)) undo();
+      },
+      disabled: !canUndo,
+    },
+    {
+      key: "z",
+      ctrl: true,
+      shift: true,
+      handler: () => {
+        if (!isInsideLocalUndoScope(document.activeElement)) redo();
+      },
+      disabled: !canRedo,
+    },
+    {
+      key: "y",
+      ctrl: true,
+      handler: () => {
+        if (!isInsideLocalUndoScope(document.activeElement)) redo();
+      },
+      disabled: !canRedo,
+    },
   ]);
 
   return (
@@ -223,6 +267,14 @@ function EditorLayoutContent() {
       <OutputPanel />
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      <AnimationClipEditorModal
+        open={!!editingClipName}
+        clipName={editingClipName}
+        currentProject={currentProject}
+        componentRegistry={projectData?.components ?? {}}
+        onClose={closeClipEditor}
+      />
 
       {currentProject && (
         <ProjectSettingsModal

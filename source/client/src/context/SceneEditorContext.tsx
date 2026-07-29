@@ -1,5 +1,5 @@
 
-import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { useProject } from "./ProjectContext";
 import {
   projectsApi,
@@ -7,12 +7,15 @@ import {
   componentsApi,
   scriptsApi,
   scenesApi,
+  animationsApi,
   Scene,
   Entity,
   ComponentDefinition,
   PrefabData,
   graphScriptsApi,
 } from "../api";
+
+const MAX_HISTORY = 100;
 
 // Returns `rootId` plus every descendant reachable through Entity.parentId,
 // root first — the unit of work for delete/duplicate/copy/move, since those
@@ -140,7 +143,7 @@ interface SceneEditorContextValue {
   addPrefabScript: (scriptName: string) => void;
   removePrefabScript: (index: number) => void;
 
-  addEntity: (parentId?: string | null) => void;
+  addEntity: (parentId?: string | null) => Promise<void>;
   deleteEntity: (entityId: string) => void; // cascades to the entity's whole child subtree
 
   // hierarchy: reparenting, duplicate, copy/paste, cross-scene move
@@ -174,6 +177,22 @@ interface SceneEditorContextValue {
   deleteScene: (name: string) => Promise<void>;
   createPrefab: () => Promise<void>;
   deletePrefab: (name: string) => Promise<void>;
+  createAnimation: () => Promise<void>;
+  deleteAnimation: (name: string) => Promise<void>;
+
+  // dedicated full-screen clip editor (Explorer + Inspector both open it)
+  editingClipName: string | null;
+  openClipEditor: (name: string) => void;
+  closeClipEditor: () => void;
+
+  // undo/redo over the currently-open scene draft or prefab draft (whole-
+  // object snapshot per edit — see updateEntity/updatePrefabDraft). Does NOT
+  // cover moveEntityToScene or any create/delete-file operation, which
+  // already persist to the server immediately.
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 const SceneEditorContext = createContext<SceneEditorContextValue | null>(null);
@@ -198,6 +217,31 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
   // clipboard pattern in GraphEditor.tsx (copySelection/pasteClipboard).
   const [entityClipboard, setEntityClipboard] = useState<Entity[] | null>(null);
 
+  // Undo/redo history: refs (not state) since pushing a snapshot shouldn't
+  // itself trigger a re-render — every push already happens alongside a
+  // setScene/setPrefabDraft call that re-renders for its own reason. Mirrors
+  // the ref-based past/future stacks in GraphEditor.tsx.
+  const sceneHistoryRef = useRef<{ past: Scene[]; future: Scene[] }>({ past: [], future: [] });
+  const prefabHistoryRef = useRef<{ past: PrefabData[]; future: PrefabData[] }>({ past: [], future: [] });
+
+  const [editingClipName, setEditingClipName] = useState<string | null>(null);
+  const openClipEditor = useCallback((name: string) => setEditingClipName(name), []);
+  const closeClipEditor = useCallback(() => setEditingClipName(null), []);
+
+  function pushSceneSnapshot(snapshot: Scene) {
+    const h = sceneHistoryRef.current;
+    h.past.push(structuredClone(snapshot));
+    if (h.past.length > MAX_HISTORY) h.past.shift();
+    h.future = [];
+  }
+
+  function pushPrefabSnapshot(snapshot: PrefabData) {
+    const h = prefabHistoryRef.current;
+    h.past.push(structuredClone(snapshot));
+    if (h.past.length > MAX_HISTORY) h.past.shift();
+    h.future = [];
+  }
+
   // Load the scene whenever the selected scene changes (regardless of
   // whether the target is the scene itself or an entity inside it).
   useEffect(() => {
@@ -216,6 +260,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
 
     setDirty(false);
+    sceneHistoryRef.current = { past: [], future: [] };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target?.kind === "prefab" ? null : target?.sceneId, currentProject]);
 
@@ -232,6 +277,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
 
     setLoading(true);
     setError(null);
+    prefabHistoryRef.current = { past: [], future: [] };
 
     let cancelled = false;
 
@@ -297,6 +343,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
   const updateEntity = useCallback((entityId: string, updater: (e: Entity) => Entity) => {
     setScene((prev) => {
       if (!prev) return prev;
+      pushSceneSnapshot(prev);
       return { ...prev, entities: prev.entities.map((e) => (e.id === entityId ? updater(e) : e)) };
     });
     setDirty(true);
@@ -311,6 +358,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
       // Refuse silently on a collision — the Inspector checks this too and
       // shows an inline error before ever calling this.
       if (prev.entities.some((e) => e.id === trimmed)) return prev;
+      pushSceneSnapshot(prev);
       return {
         ...prev,
         entities: prev.entities.map((e) => (e.id === entityId ? { ...e, id: trimmed } : e)),
@@ -437,7 +485,11 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
   );
 
   const updatePrefabDraft = useCallback((updater: (p: PrefabData) => PrefabData) => {
-    setPrefabDraft((prev) => (prev ? updater(prev) : prev));
+    setPrefabDraft((prev) => {
+      if (!prev) return prev;
+      pushPrefabSnapshot(prev);
+      return updater(prev);
+    });
     setDirty(true);
   }, []);
 
@@ -501,26 +553,28 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     [updatePrefabDraft]
   );
 
-  const addEntity = useCallback((parentId: string | null = null) => {
+  const addEntity = useCallback(async (parentId: string | null = null) => {
     if (!scene || !target || target.kind === "prefab") return;
 
     const existingIds = new Set(scene.entities.map((e) => e.id));
-    let n = scene.entities.length + 1;
-    let id = `entity${n}`;
-    while (existingIds.has(id)) {
-      n += 1;
-      id = `entity${n}`;
+
+    const name = (await window.prompt("New entity name:"))?.trim();
+    if (!name) return;
+    if (existingIds.has(name)) {
+      setError(`An entity named "${name}" already exists.`);
+      return;
     }
 
     const newEntity: Entity = {
-      id,
+      id: name,
       components: { Transform: { x: 0, y: 0, rotation: 0 } },
       parentId: parentId ?? undefined,
     };
+    pushSceneSnapshot(scene);
     setScene({ ...scene, entities: [...scene.entities, newEntity] });
     setDirty(true);
     // Jump straight to the new entity so it's ready to edit.
-    setTarget({ kind: "entity", sceneId: target.sceneId, entityId: id });
+    setTarget({ kind: "entity", sceneId: target.sceneId, entityId: name });
   }, [scene, target]);
 
   // Deletes `entityId` AND its whole descendant subtree — mirrors the
@@ -530,6 +584,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
   const deleteEntity = useCallback((entityId: string) => {
     if (!scene) return;
     const removedIds = new Set(collectSubtree(scene.entities, entityId).map((e) => e.id));
+    pushSceneSnapshot(scene);
     setScene({ ...scene, entities: scene.entities.filter((e) => !removedIds.has(e.id)) });
     setDirty(true);
     setTarget((prev) =>
@@ -571,6 +626,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      pushSceneSnapshot(scene);
       setScene({ ...scene, entities });
       setDirty(true);
     },
@@ -592,6 +648,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
       entity.parentId ?? null
     );
 
+    pushSceneSnapshot(scene);
     setScene({ ...scene, entities: [...scene.entities, ...clones] });
     setDirty(true);
     setTarget({ kind: "entity", sceneId: target.sceneId, entityId: newRootId });
@@ -616,6 +673,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
       parentId
     );
 
+    pushSceneSnapshot(scene);
     setScene({ ...scene, entities: [...scene.entities, ...clones] });
     setDirty(true);
     setTarget({ kind: "entity", sceneId: target.sceneId, entityId: newRootId });
@@ -882,6 +940,79 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     [currentProject, reloadProject]
   );
 
+  const createAnimation = useCallback(async () => {
+    if (!currentProject) return;
+    const name = (await window.prompt("New animation clip name:"))?.trim();
+    if (!name) return;
+    if (projectData?.animations?.includes(`${name}.json`)) {
+      setError(`An animation clip named "${name}" already exists.`);
+      return;
+    }
+
+    try {
+      await animationsApi.save(currentProject, name, { duration: 0.4, loop: false, tracks: {} });
+      await reloadProject();
+      setEditingClipName(name);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }, [currentProject, projectData, reloadProject]);
+
+  const deleteAnimation = useCallback(
+    async (name: string) => {
+      if (!currentProject) return;
+
+      const ok = await window.confirm(
+        `Delete animation clip "${name}"? Any Animator still referencing it by name will fail to build.`
+      );
+      if (!ok) return;
+
+      try {
+        await animationsApi.remove(currentProject, name);
+        await reloadProject();
+        setEditingClipName((prev) => (prev === name ? null : prev));
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    },
+    [currentProject, reloadProject]
+  );
+
+  const undo = useCallback(() => {
+    if (target?.kind === "prefab") {
+      const h = prefabHistoryRef.current;
+      if (!h.past.length || !prefabDraft) return;
+      h.future.push(structuredClone(prefabDraft));
+      setPrefabDraft(h.past.pop()!);
+    } else {
+      const h = sceneHistoryRef.current;
+      if (!h.past.length || !scene) return;
+      h.future.push(structuredClone(scene));
+      setScene(h.past.pop()!);
+    }
+    setDirty(true);
+  }, [target, scene, prefabDraft]);
+
+  const redo = useCallback(() => {
+    if (target?.kind === "prefab") {
+      const h = prefabHistoryRef.current;
+      if (!h.future.length || !prefabDraft) return;
+      h.past.push(structuredClone(prefabDraft));
+      setPrefabDraft(h.future.pop()!);
+    } else {
+      const h = sceneHistoryRef.current;
+      if (!h.future.length || !scene) return;
+      h.past.push(structuredClone(scene));
+      setScene(h.future.pop()!);
+    }
+    setDirty(true);
+  }, [target, scene, prefabDraft]);
+
+  const canUndo =
+    target?.kind === "prefab" ? prefabHistoryRef.current.past.length > 0 : sceneHistoryRef.current.past.length > 0;
+  const canRedo =
+    target?.kind === "prefab" ? prefabHistoryRef.current.future.length > 0 : sceneHistoryRef.current.future.length > 0;
+
   return (
     <SceneEditorContext.Provider
       value={{
@@ -932,6 +1063,15 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         deleteScene,
         createPrefab,
         deletePrefab,
+        createAnimation,
+        deleteAnimation,
+        editingClipName,
+        openClipEditor,
+        closeClipEditor,
+        undo,
+        redo,
+        canUndo,
+        canRedo,
       }}
     >
       {children}

@@ -1,0 +1,19 @@
+{
+  "duration": 2,
+  "loop": true,
+  "tracks": {
+    "track1": {
+      "target": "Transform",
+      "property": "x",
+      "keyframes": [
+        {
+          "time": 0.98986180506462,
+          "value": 0,
+          "easing": "linear"
+        }
+      ],
+      "easing": "linear",
+      "mode": "additive"
+    }
+  }
+}

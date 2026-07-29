@@ -1,0 +1,20 @@
+{
+  "duration": 0.4,
+  "loop": false,
+  "tracks": {
+    "track1": {
+      "target": "Transform",
+      "property": "y",
+      "keyframes": [
+        {
+          "time": 0.007598784194528876,
+          "value": 0
+        },
+        {
+          "time": 0.9924012158054711,
+          "value": 0
+        }
+      ]
+    }
+  }
+}

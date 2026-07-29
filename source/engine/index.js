@@ -24,6 +24,7 @@ export class GameEngine {
     this.paused = false;
 
     this.scripts = {};
+    this.animations = {};
     this.state = {}; // for storing arbitrary state, e.g. scripts, player data, etc...
 
     this.camera = null; // optional Camera component, if one is added to an entity. If one is available, it will be used
@@ -94,6 +95,10 @@ export class GameEngine {
     const script = this.scripts[name];
     if (!script) return console.error(`Script "${name}" not found`);
     return script(...args);
+  }
+
+  registerAnimation(name, data) {
+    this.animations[name] = data;
   }
 
   get time() {

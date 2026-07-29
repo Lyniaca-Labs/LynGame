@@ -137,6 +137,7 @@ function ExplorerFiles() {
     openEntity,
     openPrefab,
     addEntity,
+    renameEntity,
     deleteEntity,
     setEntityParent,
     duplicateEntity,
@@ -154,6 +155,9 @@ function ExplorerFiles() {
     deleteScene,
     createPrefab,
     deletePrefab,
+    createAnimation,
+    deleteAnimation,
+    openClipEditor,
   } = useSceneEditor();
 
   const [sceneEntities, setSceneEntities] = useState<Record<string, Entity[]>>({});
@@ -219,8 +223,12 @@ function ExplorerFiles() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectData, currentProject]);
+    // `sceneEntities` is a dep (not just projectData/currentProject) so that
+    // invalidateSceneCache — which deletes a scene's cached entry after
+    // moveEntityToScene — actually triggers a re-fetch. Safe against loops:
+    // the `if (sceneEntities[sceneId]) return` guard above means a re-run
+    // only ever fetches scenes that are still missing from the cache.
+  }, [projectData, currentProject, sceneEntities]);
 
   if (!projectData) {
     return <PlaceholderPanel label="No project loaded" />;
@@ -303,6 +311,15 @@ function ExplorerFiles() {
         })),
     },
     {
+      id: "animations",
+      label: "Animations",
+      children: projectData.animations.map((a) => ({
+        id: a,
+        label: stripExt(a),
+        onClick: () => openClipEditor(stripExt(a)),
+      })),
+    },
+    {
       id: "components",
       label: "Components",
       children: Object.entries(projectData.components)
@@ -343,7 +360,22 @@ function ExplorerFiles() {
       const isActiveScene = activeSceneId === sceneId;
 
       const actions: MenuAction[] = [
-        { label: "Rename", icon: Pencil, onClick: () => openEntity(sceneId, entityId) },
+        {
+          label: "Rename",
+          icon: Pencil,
+          onClick: async () => {
+            // renameEntity only mutates the currently-loaded scene draft, so
+            // entities from a scene that isn't open yet just get opened —
+            // same as every other mutating action here (Duplicate/Delete/etc).
+            if (!isActiveScene) {
+              openEntity(sceneId, entityId);
+              return;
+            }
+            const next = (await window.prompt("Rename entity:", entityId))?.trim();
+            if (!next || next === entityId) return;
+            renameEntity(entityId, next);
+          },
+        },
       ];
 
       if (isActiveScene) {
@@ -446,6 +478,14 @@ function ExplorerFiles() {
       ];
     }
 
+    // Animation clip node — id is the raw filename (e.g. "hover.json")
+    if (projectData.animations.includes(node.id)) {
+      return [
+        { label: "Edit", icon: Pencil, onClick: () => openClipEditor(stripExt(node.id)) },
+        { label: "Delete", icon: Trash2, danger: true, onClick: () => deleteAnimation(stripExt(node.id)) },
+      ];
+    }
+
     // Everything else (section headers: Scenes / Prefabs / Scripts / Components)
     const base: MenuAction[] = [
       { label: "Rename", icon: Pencil, onClick: () => console.log("rename", node.id) },
@@ -465,6 +505,7 @@ function ExplorerFiles() {
         scenes: createScene,
         prefabs: createPrefab,
         components: createComponent,
+        animations: createAnimation,
       }[node.id];
 
       return [

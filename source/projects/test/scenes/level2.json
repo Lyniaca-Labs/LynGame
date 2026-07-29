@@ -12,12 +12,13 @@
         "SpriteRenderer": {
           "width": 100,
           "height": 100,
-          "color": "#271065"
+          "color": "#271065",
+          "sprite": "tree"
         },
-        "Gravity": {
-          "force": 500,
-          "velocityY": 0,
-          "grounded": false
+        "Animator": {
+          "clips": [
+            "test"
+          ]
         }
       },
       "scripts": [
@@ -38,11 +39,6 @@
           "width": 32,
           "height": 32,
           "color": "#fff"
-        },
-        "Gravity": {
-          "force": 500,
-          "velocityY": 0,
-          "grounded": false
         }
       }
     }

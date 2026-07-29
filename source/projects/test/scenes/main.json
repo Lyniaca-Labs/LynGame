@@ -79,7 +79,7 @@
       "id": "text",
       "components": {
         "Transform": {
-          "x": 0,
+          "x": 100,
           "y": 0,
           "rotation": 0
         },
@@ -119,8 +119,16 @@
           "onDrag": null,
           "onDragEnd": null,
           "autoDimensions": true
+        },
+        "Animator": {
+          "clips": [
+            "test"
+          ]
         }
-      }
+      },
+      "scripts": [
+        "LogScript"
+      ]
     },
     {
       "id": "fallingBox",
@@ -174,9 +182,57 @@
       },
       "scripts": [
         "DoorScript",
-        "LogScript",
         "InputScript"
       ]
+    },
+    {
+      "id": "gui",
+      "components": {
+        "Transform": {
+          "x": 64,
+          "y": 0,
+          "rotation": 0
+        },
+        "Anchor": {
+          "anchor": "top-left",
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      }
+    },
+    {
+      "id": "entity7",
+      "components": {
+        "Transform": {
+          "x": 0,
+          "y": 0,
+          "rotation": 0
+        },
+        "ShapeRenderer": {
+          "shape": "rect",
+          "width": 32,
+          "height": 32,
+          "color": "#f24545"
+        }
+      },
+      "parentId": "gui"
+    },
+    {
+      "id": "entity8",
+      "components": {
+        "Transform": {
+          "x": 0,
+          "y": 0,
+          "rotation": 0
+        },
+        "ShapeRenderer": {
+          "shape": "rect",
+          "width": 32,
+          "height": 32,
+          "color": "#252bd4"
+        }
+      },
+      "parentId": "gui"
     }
   ]
 }

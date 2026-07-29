@@ -1,15 +1,15 @@
 // Inspector.tsx — full file
 
 import { ReactNode, useEffect, useState } from "react";
-import { Trash2, RefreshCw, X } from "lucide-react";
+import { Trash2, RefreshCw, X, Pencil } from "lucide-react";
 import { Container } from "../../ui/Container";
 import { Select, SelectOption } from "../../ui/Select";
+import { Button } from "../../ui/Button";
 import { useSceneEditor } from "../../context/SceneEditorContext";
 import { useProject } from "../../context/ProjectContext";
 import { Entity, ComponentDefinition, ComponentFieldDefinition, PrefabData } from "../../api";
 import type { GameViewHandle } from "../sections/GameView";
 import { CodeStringEditorModal } from "../../components/CodeStringEditorModal";
-import { Button } from "../../ui/Button";
 
 type FieldType = ComponentFieldDefinition["type"];
 
@@ -266,6 +266,7 @@ function InspectorEntity({
                 componentName={componentName}
                 schema={componentRegistry[componentName]}
                 values={fields as Record<string, unknown>}
+                componentRegistry={componentRegistry}
                 onFieldChange={onFieldChange}
                 onRemove={() => onRemoveComponent(entity.id, componentName)}
               />
@@ -375,6 +376,7 @@ function InspectorPrefab({
                 componentName={componentName}
                 schema={componentRegistry[componentName]}
                 values={fields as Record<string, unknown>}
+                componentRegistry={componentRegistry}
                 onFieldChange={(_entityId, cName, field, value) => onFieldChange(cName, field, value)}
                 onRemove={() => onRemoveComponent(componentName)}
               />
@@ -618,6 +620,7 @@ function OverridesSection({
             schema={componentRegistry[componentName]}
             values={merged}
             hasOverride={hasOverride}
+            componentRegistry={componentRegistry}
             onFieldChange={onOverrideFieldChange}
             onReset={() => onResetOverride(entity.id, componentName)}
           />
@@ -633,6 +636,7 @@ function OverrideComponentPanel({
   schema,
   values,
   hasOverride,
+  componentRegistry,
   onFieldChange,
   onReset,
 }: {
@@ -641,6 +645,7 @@ function OverrideComponentPanel({
   schema?: ComponentDefinition;
   values: Record<string, unknown>;
   hasOverride: boolean;
+  componentRegistry: Record<string, ComponentDefinition>;
   onFieldChange: (entityId: string, componentName: string, field: string, value: unknown) => void;
   onReset: () => void;
 }) {
@@ -685,6 +690,7 @@ function OverrideComponentPanel({
             options={def.options}
             type={def.type}
             value={values[def.key] ?? def.defaultValue}
+            componentRegistry={componentRegistry}
             onChange={(v) => onFieldChange(entityId, componentName, def.key, v)}
           />
         ))}
@@ -709,6 +715,7 @@ function ComponentPanel({
   componentName,
   schema,
   values,
+  componentRegistry,
   onFieldChange,
   onRemove,
 }: {
@@ -716,6 +723,7 @@ function ComponentPanel({
   componentName: string;
   schema?: ComponentDefinition;
   values: Record<string, unknown>;
+  componentRegistry: Record<string, ComponentDefinition>;
   onFieldChange: (entityId: string, componentName: string, field: string, value: unknown) => void;
   onRemove: () => void;
 }) {
@@ -752,6 +760,7 @@ function ComponentPanel({
             type={def.type}
             description={def.description}
             value={values[def.key] ?? def.defaultValue}
+            componentRegistry={componentRegistry}
             onChange={(v) => onFieldChange(entityId, componentName, def.key, v)}
           />
         ))}
@@ -794,6 +803,7 @@ function SchemaField({
   onChange,
   options,
   description,
+  componentRegistry,
 }: {
   label: string;
   type: FieldType;
@@ -801,7 +811,17 @@ function SchemaField({
   onChange: (value: unknown) => void;
   options?: SelectOption[];
   description?: string;
+  componentRegistry?: Record<string, ComponentDefinition>;
 }) {
+  if (type === "animationRefs") {
+    return (
+      <div className="space-y-1">
+        <FieldLabel label={label} description={description} />
+        <AnimationRefsField value={(value as string[]) ?? []} onChange={onChange} />
+      </div>
+    );
+  }
+
   if (type === "vector") {
     const vec = (value as { x?: number; y?: number }) ?? {};
     return (
@@ -924,6 +944,91 @@ function SchemaField({
         />
       )}
     </label>
+  );
+}
+
+// Compact reference-list field for Animator.clips — the actual clip data now
+// lives in project-level animation assets (edited via the dedicated
+// AnimationClipEditorModal, opened from here or the Explorer's Animations
+// section), so this just curates which clips show up for this entity.
+function AnimationRefsField({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  const { projectData, currentProject } = useProject();
+  const { openClipEditor, createAnimation } = useSceneEditor();
+
+  const clips = value ?? [];
+  const stripJson = (name: string) => name.replace(/\.json$/i, "");
+  const available = (projectData?.animations ?? []).map(stripJson);
+  const options: SelectOption[] = available
+    .filter((name) => !clips.includes(name))
+    .map((name) => ({ value: name, label: name }));
+
+  const addClip = (name: string) => {
+    if (!name || clips.includes(name)) return;
+    onChange([...clips, name]);
+  };
+
+  const removeClip = (name: string) => onChange(clips.filter((c) => c !== name));
+
+  const handleNewClip = async () => {
+    await createAnimation();
+    // createAnimation() opens the new clip in the modal; the user still
+    // needs to explicitly reference it here since a clip can be shared by
+    // many entities and this list is per-entity curation.
+  };
+
+  return (
+    <div className="space-y-1.5">
+      {clips.length === 0 && <div className="text-xs italic text-[var(--color-text-faint)]">No clips</div>}
+      {clips.map((name) => {
+        const missing = currentProject && !available.includes(name);
+        return (
+          <div
+            key={name}
+            className="flex items-center justify-between gap-2 rounded border border-[var(--color-border)] px-2 py-1 text-xs"
+          >
+            <span className={missing ? "text-[var(--color-danger)]" : "text-[var(--color-text)]"}>
+              {name}
+              {missing && " (missing)"}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => openClipEditor(name)}
+                className="text-[var(--color-text-faint)] hover:text-[var(--color-text)]"
+                aria-label={`Edit ${name}`}
+                title="Edit clip"
+              >
+                <Pencil size={12} />
+              </button>
+              <button
+                type="button"
+                onClick={() => removeClip(name)}
+                className="text-[var(--color-text-faint)] hover:text-[var(--color-danger)]"
+                aria-label={`Remove ${name}`}
+                title="Remove reference"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          </div>
+        );
+      })}
+
+      <div className="flex items-center gap-1.5">
+        {options.length > 0 && (
+          <Select
+            options={options}
+            onChange={addClip}
+            placeholder="+ Add clip…"
+            emptyMessage="No more clips"
+            className="flex-1"
+          />
+        )}
+        <Button variant="ghost" onClick={handleNewClip} className="shrink-0">
+          + New Clip
+        </Button>
+      </div>
+    </div>
   );
 }
 

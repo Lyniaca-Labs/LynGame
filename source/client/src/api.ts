@@ -121,11 +121,36 @@ export interface SceneResponse extends ApiResult {
 
 export interface ComponentFieldDefinition {
   key: string;
-  type: "number" | "text" | "string" | "boolean" | "color" | "vector" | "code" | "select";
+  type: "number" | "text" | "string" | "boolean" | "color" | "vector" | "code" | "select" | "animationRefs";
   defaultValue: unknown;
   description?: string;
   options?: SelectOption[];
 }
+
+// ---- Animator keyframe clips ----
+// Mirrors the runtime shape read by source/engine/components/Animator.js.
+
+export interface AnimatorKeyframe {
+  time: number; // normalized 0-1
+  value: number;
+  easing?: "linear" | "easeIn" | "easeOut" | "easeInOut";
+}
+
+export interface AnimatorTrack {
+  target: string; // component name on the entity, e.g. "Transform"
+  property: string; // property on that component, e.g. "y"
+  easing?: "linear" | "easeIn" | "easeOut" | "easeInOut";
+  keyframes: AnimatorKeyframe[];
+  mode?: "fixed" | "additive"; // "fixed" (default) sets the absolute value; "additive" adds keyframe values to the value the property had when the clip started
+}
+
+export interface AnimatorClip {
+  duration: number; // seconds
+  loop: boolean;
+  tracks: Record<string, AnimatorTrack>;
+}
+
+export type AnimatorClips = Record<string, AnimatorClip>;
 
 export interface ComponentDefinition {
   name: string;
@@ -153,12 +178,13 @@ export interface ProjectEditorData extends ApiResult {
   scenes: string[];
   prefabs: string[];
   scripts: string[];
+  animations: string[];
   assets: AssetEntry[];
 }
 
 // ---- Folder file listing / editing ----
 
-export type EditableFolder = "scenes" | "components" | "scripts" | "prefabs" | "assets";
+export type EditableFolder = "scenes" | "components" | "scripts" | "prefabs" | "assets" | "animations";
 
 export interface FileListResponse extends ApiResult {
   files: string[];
@@ -201,6 +227,24 @@ export const prefabsApi = {
   },
   remove: (project: string, prefab: string): Promise<ApiResult> =>
     projectsApi.deleteFile(project, "prefabs", withJsonExt(prefab)),
+};
+
+// ---- Animation clips ----
+// Same story as prefabs — plain JSON files under "animations", get/save
+// built on the generic readFile/writeFile. Referenced by name from an
+// Animator component's `clips` field and resolved at runtime against
+// engine.animations (see source/engine/components/Animator.js).
+
+export const animationsApi = {
+  get: async (project: string, clip: string): Promise<AnimatorClip> => {
+    const res = await projectsApi.readFile(project, "animations", withJsonExt(clip));
+    return JSON.parse(res.content) as AnimatorClip;
+  },
+  save: async (project: string, clip: string, data: AnimatorClip): Promise<ApiResult> => {
+    return projectsApi.writeFile(project, "animations", withJsonExt(clip), JSON.stringify(data, null, 2));
+  },
+  remove: (project: string, clip: string): Promise<ApiResult> =>
+    projectsApi.deleteFile(project, "animations", withJsonExt(clip)),
 };
 
 // ---- Components ----

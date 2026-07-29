@@ -69,7 +69,7 @@ LATER
   - [x] tooltips, descriptions, and usage everywhere, proper documentation (every built-in component field now has a `description`, rendered as a native tooltip in the Inspector)
   - [ ] custom cursor support
   - [ ] editor dragging and dropping
-  - [ ] keyframes for animation
+  - [x] keyframes for animation
   - [x] camera component -> attaches to entity, can set isactive on camera component and it will turn off all others in scene and attach to scene
   - [x] stop reshipping LGEngine with every single texture
   - [ ] screen effects (blur, bloom, vignette, etc)
@@ -215,7 +215,7 @@ LATER
 - [ ] Tilemap creator
 - [ ] Audio creator 
 - [ ] Pixel art editor
-- [ ] Animation editor
+- [ ] visual Animation editor
 - [ ] google magenta tensorflow running in browser for music generation
 - [ ] drums too
 

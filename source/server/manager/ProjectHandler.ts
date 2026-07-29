@@ -217,14 +217,17 @@ export default class ProjectHandler {
       const ComponentClass = await this.loadComponentClass(projectName, entry);
       const declaredSchema = ComponentClass?.schema as Record<string, ComponentSchemaFieldDef> | undefined;
 
-      // NOTE: `declaredSchema !== undefined` (not a length check) — a component
-      // with `static schema = {}` has legitimately declared "no fields" and
-      // should NOT fall through to the regex-based legacy inference below,
-      // which only knows how to read constructor *parameter* defaults and
-      // would otherwise misreport things like `constructor(overrides = {})`
-      // as a real "overrides" field.
-      const fields: Field[] = declaredSchema !== undefined
-        ? Object.entries(declaredSchema).map(([key, def]) => ({
+      // NOTE: check `hasOwnProperty`, not `declaredSchema !== undefined` —
+      // `Component` itself declares `static schema = {}`, and JS static
+      // members are inherited, so `ComponentClass.schema` resolves to that
+      // inherited `{}` for EVERY component, even ones that never declare
+      // their own schema. A plain `!== undefined` check therefore always
+      // takes this branch and the regex-based legacy inference below never
+      // runs. Only a component that explicitly writes `static schema = {}`
+      // itself should skip inference (a real, legitimate "no fields").
+      const hasOwnSchema = Object.prototype.hasOwnProperty.call(ComponentClass ?? {}, "schema");
+      const fields: Field[] = hasOwnSchema
+        ? Object.entries(declaredSchema ?? {}).map(([key, def]) => ({
           key,
           type: def.type,
           defaultValue: def.default,
@@ -302,6 +305,7 @@ export default class ProjectHandler {
       components: await this.componentSchemas(projectName),
       scenes: this.scanFiles(projectName, "scenes").filter((file) => file.endsWith(".json")),
       prefabs: this.scanFiles(projectName, "prefabs").filter((file) => file.endsWith(".json")),
+      animations: this.scanFiles(projectName, "animations").filter((file) => file.endsWith(".json")),
       // scripts: this.scanFiles(projectName, "scripts").filter((file) => file.endsWith(".js")),
       scripts: this.scanFiles(projectName, "scripts").filter(
         (file) => file.endsWith(".js") || file.endsWith(".lgscript.json")
@@ -325,8 +329,31 @@ export default class ProjectHandler {
 
     const scriptsDir = path.join(sourceRoot, "projects", projectName, "scripts");
 
+    const animationsDir = path.join(sourceRoot, "projects", projectName, "animations");
+    const animationFiles = fs.existsSync(animationsDir)
+      ? fs.readdirSync(animationsDir).filter((f) => f.endsWith(".json"))
+      : [];
+    const animationNames = new Set(animationFiles.map((f) => path.basename(f, ".json")));
+
     const allComponents = new Set<string>();
     const allScripts = new Map<string, Set<string>>();
+
+    // Animator.clips is just an array of clip names (curated for the editor,
+    // not enforced at runtime — Animator.play() resolves against the global
+    // engine.animations registry the same way engine.callScript() isn't
+    // restricted to entity.scripts). Still worth catching a typo'd/deleted
+    // clip name loudly at build time rather than a silent no-op play() later.
+    function checkAnimatorClipRefs(compName: string, data: any, location: string) {
+      if (compName !== "Animator" || !data || !Array.isArray(data.clips)) return;
+      for (const clipName of data.clips) {
+        if (!animationNames.has(clipName)) {
+          throw new Error(
+            `Missing animation clip "${clipName}" (referenced by ${location}) — ` +
+            `no file named "${clipName}.json" exists in ${animationsDir}.`
+          );
+        }
+      }
+    }
 
     // ---------------------------------------------------------------------
     // Script name canonicalization
@@ -397,6 +424,7 @@ export default class ProjectHandler {
 
       const lines = [`${indent}const ${varName} = engine.createEntity(${idExpr});`];
       for (const [compName, data] of Object.entries(node.components || {})) {
+        checkAnimatorClipRefs(compName, data, location);
         lines.push(`${indent}${varName}.addComponent(${compName}_component, ${JSON.stringify(data)});`);
       }
       for (const scriptName of node.scripts || []) {
@@ -426,6 +454,7 @@ export default class ProjectHandler {
 
           for (const [compName, data] of Object.entries(entity.components || {})) {
             allComponents.add(compName);
+            checkAnimatorClipRefs(compName, data, location);
             bodyLines.push(`    ${varName}.addComponent(${compName}_component, ${JSON.stringify(data)});`);
           }
           for (const scriptName of entity.scripts || []) {
@@ -475,6 +504,7 @@ export default class ProjectHandler {
         `  entity.prefabName = "${prefabName}";`,
       ];
       for (const [compName, data] of Object.entries(prefab.components || {})) {
+        checkAnimatorClipRefs(compName, data, location);
         rootLines.push(
           `  entity.addComponent(${compName}_component, { ...${JSON.stringify(data)}, ...(overrides.${compName} || {}) });`
         );
@@ -560,6 +590,17 @@ export default class ProjectHandler {
       return lines.join("\n");
     })();
 
+    // Clips are invoked on demand by name (Animator.play("clipName")), never
+    // auto-run, so — like scripts — they're registered into a flat runtime
+    // registry rather than baked per-reference like prefab component data.
+    const animationRegistrations = animationFiles
+      .map((file) => {
+        const name = path.basename(file, ".json");
+        const data = JSON.parse(fs.readFileSync(path.join(animationsDir, file), "utf-8"));
+        return `  engine.registerAnimation(${JSON.stringify(name)}, ${JSON.stringify(data)});`;
+      })
+      .join("\n");
+
     return `${componentImports}
   
   
@@ -574,6 +615,7 @@ export default class ProjectHandler {
   ${prefabRegistrations.join("\n")}
   ${sceneRegistrations}
   ${engineScriptRegistrations}
+  ${animationRegistrations}
     engine.loadScene("${config.startScene}");
     engine.start();
   }

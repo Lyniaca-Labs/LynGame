@@ -3,9 +3,11 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "./cn";
 
 /**
@@ -44,6 +46,13 @@ export interface DropdownMenuProps {
   onOpenChange?: (open: boolean) => void;
 }
 
+interface MenuPosition {
+  top: number;
+  left: number;
+}
+
+const MENU_MARGIN = 8;
+
 export function DropdownMenu({
   trigger,
   children,
@@ -65,14 +74,59 @@ export function DropdownMenu({
   );
 
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<MenuPosition | null>(null);
+
+  // Portaled to document.body and positioned with fixed coordinates measured
+  // from the trigger — an in-flow `absolute` menu gets clipped by any
+  // scrollable/overflow-hidden ancestor (e.g. the Explorer sidebar), which a
+  // higher z-index can't fix since that's a clipping problem, not a
+  // stacking-order one.
+  const updatePosition = useCallback(() => {
+    const trigger = rootRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = menuRef.current?.offsetWidth ?? 0;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let left = align === "end" ? rect.right - menuWidth : rect.left;
+    left = Math.min(left, viewportWidth - menuWidth - MENU_MARGIN);
+    left = Math.max(left, MENU_MARGIN);
+
+    let top = rect.bottom + 4;
+    const menuHeight = menuRef.current?.offsetHeight ?? 0;
+    if (top + menuHeight > viewportHeight - MENU_MARGIN) {
+      top = Math.max(rect.top - menuHeight - 4, MENU_MARGIN);
+    }
+
+    setPosition({ top, left });
+  }, [align]);
+
+  // Measure before paint so the menu doesn't flash in the wrong spot, and
+  // re-measure on resize/scroll (capture phase catches scrolling in
+  // ancestor containers, not just the window) so it tracks the trigger.
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePosition();
+
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open, updatePosition]);
 
   useEffect(() => {
     if (!open) return;
 
     function handlePointerDown(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     }
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -93,20 +147,28 @@ export function DropdownMenu({
       <div ref={rootRef} className="relative inline-block">
         <div onClick={() => setOpen(!open)}>{trigger}</div>
 
-        {open && (
-          <div
-            role="menu"
-            className={cn(
-              "absolute z-50 mt-1 min-w-[11rem] overflow-visible rounded-[var(--radius-md)] select-none",
-              "border border-[var(--color-border)] bg-[var(--color-bg-elevated)]",
-              "py-1 shadow-[var(--shadow-panel)]",
-              align === "end" ? "right-0" : "left-0",
-              className
-            )}
-          >
-            {children}
-          </div>
-        )}
+        {open &&
+          createPortal(
+            <div
+              ref={menuRef}
+              role="menu"
+              style={{
+                position: "fixed",
+                top: position?.top ?? -9999,
+                left: position?.left ?? -9999,
+                visibility: position ? "visible" : "hidden",
+              }}
+              className={cn(
+                "z-50 min-w-[11rem] overflow-visible rounded-[var(--radius-md)] select-none",
+                "border border-[var(--color-border)] bg-[var(--color-bg-elevated)]",
+                "py-1 shadow-[var(--shadow-panel)]",
+                className
+              )}
+            >
+              {children}
+            </div>,
+            document.body
+          )}
       </div>
     </DropdownContext.Provider>
   );

@@ -140,7 +140,7 @@ app.post("/api/projects/:project", (req, res) => {
     return res.status(400).json({ success: false, error: "Project already exists" });
   }
 
-  for (const folder of ["assets", "components", "scripts", "scenes", "prefabs"]) {
+  for (const folder of ["assets", "components", "scripts", "scenes", "prefabs", "animations"]) {
     fs.mkdirSync(path.join(dir, folder), { recursive: true });
   }
 
@@ -194,7 +194,7 @@ app.get("/output/*splat", (_req, res) => {
 
 // --- Generic project file editing (scenes / components / scripts) ---
 
-const EDITABLE_FOLDERS = ["scenes", "components", "scripts", "prefabs", "assets"];
+const EDITABLE_FOLDERS = ["scenes", "components", "scripts", "prefabs", "assets", "animations"];
 
 function safeProjectFilePath(project, folder, filename) {
   if (!EDITABLE_FOLDERS.includes(folder)) {
