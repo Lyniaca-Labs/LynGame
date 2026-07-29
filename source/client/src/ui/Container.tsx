@@ -39,7 +39,7 @@ export function Container({
     <div
       {...rest}
       className={cn(
-        "flex h-full w-full flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-elevated)]",
+        "flex h-full w-full flex-col overflow-hidden border-[length:var(--border-width)] border-[var(--color-border)] rounded-[var(--radius-md)] bg-[var(--color-bg-elevated)]",
         className
       )}
     >

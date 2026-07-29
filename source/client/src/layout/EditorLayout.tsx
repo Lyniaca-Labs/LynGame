@@ -239,40 +239,42 @@ function EditorLayoutContent() {
 
   return (
     <main className="flex h-screen min-h-screen flex-col gap-3 bg-[var(--color-bg)] p-3 text-[var(--color-text)]">
-      <div className="flex shrink-0 items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-2.5">
-        <div className="flex items-center gap-4">
-          <span className="text-sm font-semibold">Editor</span>
-          <ProjectSelector currentProject={currentProject} onSelect={openProject} />
-        </div>
+      <div className="flex shrink-0">
+        <Container bodyClassName="flex items-center justify-between px-4 py-2.5">
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-semibold">Editor</span>
+            <ProjectSelector currentProject={currentProject} onSelect={openProject} />
+          </div>
 
-        <div className="flex gap-2">
-          <Button onClick={runGame} disabled={!currentProject || isBuilding}>
-            <Play size={16} />
-            {isBuilding ? "Building..." : "Run"}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={runGame} disabled={!currentProject || isBuilding}>
+              <Play size={16} />
+              {isBuilding ? "Building..." : "Run"}
+            </Button>
 
-          <Button onClick={togglePause} disabled={!gameUrl}>
-            <Pause size={16} />
-            {isPaused ? "Resume" : "Pause"}
-          </Button>
+            <Button onClick={togglePause} disabled={!gameUrl}>
+              <Pause size={16} />
+              {isPaused ? "Resume" : "Pause"}
+            </Button>
 
-          <Button onClick={handleSave} disabled={!dirty || sceneSaving}>
-            <SaveIcon size={16} />
-            {sceneSaving ? "Saving..." : dirty ? "Save" : "Saved"}
-          </Button>
+            <Button onClick={handleSave} disabled={!dirty || sceneSaving}>
+              <SaveIcon size={16} />
+              {sceneSaving ? "Saving..." : dirty ? "Save" : "Saved"}
+            </Button>
 
-          <Button disabled={!currentProject} onClick={() => setProjectSettingsOpen(true)}>
-            <FolderCog size={16} />
-          </Button>
+            <Button disabled={!currentProject} onClick={() => setProjectSettingsOpen(true)}>
+              <FolderCog size={16} />
+            </Button>
 
-          <Button title="Extensions" disabled={!currentProject} onClick={() => setExtensionsOpen(true)}>
-            <Puzzle size={16} />
-          </Button>
+            <Button title="Extensions" disabled={!currentProject} onClick={() => setExtensionsOpen(true)}>
+              <Puzzle size={16} />
+            </Button>
 
-          <Button onClick={() => setSettingsOpen(true)}>
-            <SettingsIcon size={16} />
-          </Button>
-        </div>
+            <Button onClick={() => setSettingsOpen(true)}>
+              <SettingsIcon size={16} />
+            </Button>
+          </div>
+        </Container>
       </div>
 
       <div className="flex min-h-0 flex-1">

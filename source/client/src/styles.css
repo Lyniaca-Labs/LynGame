@@ -12,7 +12,8 @@
    ============================================================ */
 
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-family);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 
@@ -38,6 +39,117 @@
 body {
   margin: 0;
   min-width: 320px;
+}
+
+:root,
+[data-sharpness="medium"] {
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 32px;
+}
+
+[data-sharpness="low"] {
+  --radius-sm: 32px;
+  --radius-md: 48px;
+  --radius-lg: 64px;
+}
+
+[data-sharpness="balanced"] {
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+}
+
+[data-sharpness="high"] {
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+}
+
+[data-sharpness="maximum"] {
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+}
+
+
+:root,
+[data-font="modern"] {
+  --font-family: "Inter", sans-serif;
+}
+
+[data-font="clean"] {
+  --font-family: "Arial", sans-serif;
+}
+
+[data-font="classic"] {
+  --font-family: "Georgia", serif;
+}
+
+[data-font="technical"] {
+  --font-family: "JetBrains Mono", monospace;
+}
+
+[data-font="retro"] {
+  --font-family: "Courier New", monospace;
+}
+
+:root,
+[data-density="compact"] {
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-6: 16px;
+  --space-8: 24px;
+}
+
+[data-density="balanced"] {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+}
+
+[data-density="comfortable"] {
+  --space-1: 6px;
+  --space-2: 12px;
+  --space-3: 16px;
+  --space-4: 20px;
+  --space-6: 32px;
+  --space-8: 48px;
+}
+
+:root,
+[data-depth="flat"] {
+  --shadow-panel: none;
+}
+
+[data-depth="soft"] {
+  --shadow-panel: 0 4px 12px rgba(0, 0, 0, .2);
+}
+
+[data-depth="layered"] {
+  --shadow-panel: 0 8px 24px rgba(0, 0, 0, .35);
+}
+
+:root,
+[data-border="none"] {
+  --border-width: 0px;
+}
+
+[data-border="minimal"] {
+  --border-width: 1px;
+}
+
+[data-border="standard"] {
+  --border-width: 2px;
+}
+
+[data-border="strong"] {
+  --border-width: 4px;
 }
 
 /* ------------------------------------------------------------

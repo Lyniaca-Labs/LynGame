@@ -1,5 +1,10 @@
 # Engine Roadmap
 
+next: 
+- go through my css and actually use the variables in all of my components instead of hardcoding them
+- more pixel art features
+- organize TODO better / make a new todo file and deprecate this one
+
 ## ULTRA PRIORITY (3-Day Jam: Card Game / Time-Strategy / Deck Builder)
 
 - [x] show preview on edit before you have to click on it — the new Scene Canvas (see "Editor/Game viewport split" below) renders every entity's thumbnail up front, not just the selected one
@@ -37,7 +42,22 @@
 - [x] Audio system — basic SFX for playing cards / timers
   - New `engine.audio` module (`source/engine/modules/Audio.js`): `engine.audio.play("key", { volume, loop, playbackRate })` clones the cached `<audio>` element per call so overlapping SFX (e.g. rapid card plays) layer instead of restarting each other; `stopAll()` (now wired into `loadScene()`) and `setMasterVolume()` round it out. Built on top of `AssetLoader`'s existing per-key `<audio>` cache — no engine-wide changes needed.
 - [ ] SpriteSheets — faster card art iteration than one texture per card
+- [ ] icons in graph editor per node
+- [ ] more icons overall
 - [ ] Collision/simple hit-detection — drop zones for cards (could piggyback on event component instead if time-crunched)
+- [ ] more pixel art features
+  - [ ] allow zooming out and panning
+  - [ ] automatic color scheme detection
+  - [ ] tool that changes your entire sprite to fit a new color scheme
+  - [ ] color scheme generator (like coolors.co)
+  - [ ] ability to actually change colors
+  - [ ] ability to change opacity
+  - [ ] change brush size
+  - [ ] just overall good pixel art tools
+- [ ] spritesheet partitioner
+  - [ ] load asset -> select which frames are keyed at indexes -> save as a new asset
+  - [ ] needs spritesheet support -> should kinda work like animation clips
+
 
 ### Explicitly defer (not needed for this jam)
 Tilemaps, Physics, Pathfinding, Inverse Kinematics, Particles, Screen effects, Keyframe animation, Undo/redo, ESLint, Visual scripting, TypeScript parser, Node backend/save endpoints, Editor extensions (sprite/texture/tilemap/audio creators), Icon pack, comfyui/magenta stuff.
@@ -208,7 +228,7 @@ LATER
 - [ ] sprite batching
 - [ ] texture batching
 - [ ] lazy loading
-- [ ] editor performance mode (lowers animations and roundness)
+- [x] editor performance mode (lowers animations and roundness)
 
 ## Networking & Backend
 
