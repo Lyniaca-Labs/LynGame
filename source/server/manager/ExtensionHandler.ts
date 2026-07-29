@@ -52,6 +52,7 @@ interface LoadedExtension {
 export interface ExtensionContext {
   projectsDir: string;
   resolveProjectAssetPath(project: string, filename: string): string;
+  resolveProjectDataPath(project: string, extensionName: string, filename: string): string;
 }
 
 function resolveProjectAssetPath(project: string, filename: string): string {
@@ -69,7 +70,24 @@ function resolveProjectAssetPath(project: string, filename: string): string {
   return filePath;
 }
 
-const context: ExtensionContext = { projectsDir, resolveProjectAssetPath };
+// Non-asset per-project storage for extensions (board data, etc.) — kept
+// out of assets/ so it never shows up in the Explorer's Assets tab.
+function resolveProjectDataPath(project: string, extensionName: string, filename: string): string {
+  for (const part of [project, extensionName, filename]) {
+    if (!/^[a-zA-Z0-9_.-]+$/.test(part)) {
+      throw new Error(`Invalid name "${part}"`);
+    }
+  }
+  const dir = path.join(projectsDir, project, ".extensions", extensionName);
+  const filePath = path.join(dir, filename);
+  if (!filePath.startsWith(dir)) {
+    throw new Error("Invalid path");
+  }
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return filePath;
+}
+
+const context: ExtensionContext = { projectsDir, resolveProjectAssetPath, resolveProjectDataPath };
 
 function loadManifests(): LoadedExtension[] {
   if (!fs.existsSync(extensionsDir)) return [];
