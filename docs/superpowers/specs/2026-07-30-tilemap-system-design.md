@@ -13,7 +13,9 @@ earlier in this session.
 ## Summary
 
 A new **tileset** asset type (an existing image + a `.tileset.json` sidecar
-defining the grid, per-tile solidity, and bitmask-based autotile rules) and
+defining the grid, per-tile solidity, bitmask-based autotile rules, and
+optional per-slot cell variations — weighted-random static variants or
+looping animated frames, both drawn from the tileset's own grid) and
 a new **tilemap** asset type (`.tilemap.json`, a sparse multi-layer grid of
 painted cells referencing a tileset). A new `Tilemap` engine component reads
 a tilemap asset, flattens each layer into a typed array at spawn time (no
@@ -79,13 +81,20 @@ layers.
     { "index": 0, "solid": false, "terrainId": "grass" },
     { "index": 1, "solid": true, "terrainId": "wall" }
   ],
+  "variantGroups": {
+    "grassVariants": { "tiles": [0, 8, 9], "weights": [3, 1, 1] }
+  },
+  "animations": {
+    "waterAnim": { "frames": [12, 13, 14, 15], "fps": 4, "loop": true }
+  },
   "autotile": {
     "type": "bitmask4",
     "rules": {
-      "grass": { "0": 0, "1": 4, "2": 5, "3": 6, "4": 7, "5": 8, "6": 9,
-                 "7": 10, "8": 11, "9": 12, "10": 13, "11": 14, "12": 15,
-                 "13": 2, "14": 3, "15": 1 },
-      "wall": { "0": 16, "1": 20 }
+      "grass": { "0": { "variant": "grassVariants" }, "1": 4, "2": 5, "3": 6,
+                 "4": 7, "5": 8, "6": 9, "7": 10, "8": 11, "9": 12, "10": 13,
+                 "11": 14, "12": 15, "13": 2, "14": 3, "15": 1 },
+      "wall": { "0": 16, "1": 20 },
+      "water": { "0": { "anim": "waterAnim" } }
     }
   }
 }
@@ -96,6 +105,32 @@ but `"wfc"` (matching the roadmap's literal "wave function collapse"
 wording) can be added later as a sibling value without touching how
 `Tilemap` consumes an already-resolved tile index — the runtime never sees
 bitmasks, only final `tileIndex` values (see Runtime below).
+
+### Cell variations & animated tiles
+
+Anywhere a rule table or a cell resolves "what tile goes here," the value is
+one of three shapes (a **TileResolver**): a plain `tileIndex` number
+(unchanged, existing behavior), `{ "variant": groupId }` (pick one of
+`variantGroups[groupId].tiles`, weighted by `weights`, **stably per-cell** —
+not re-rolled on every load), or `{ "anim": animId }` (cycles through
+`animations[animId].frames` over time). This is the same shape whether it
+appears inside `autotile.rules[terrain][bitmask]` (as above) or directly on
+an explicit tilemap cell in place of `tileIndex` (e.g. a decoration cell
+painted as `{ "variant": "grassVariants" }` with no `terrainId` at all).
+
+Both are resolved from cells in the **tile's own tileset image only** —
+per the earlier scope decision, a variant/animation frame is always another
+`tileIndex` in the same grid, never a reference to a different asset. This
+keeps the single-image-per-tileset invariant intact and means variant/anim
+resolution reuses the exact same sheet-slicing math as a plain tile.
+
+Static variant picking is resolved **once, at load time**, via a
+deterministic hash of the cell's position (e.g. a small integer hash of
+`(layerIndex, x, y)`, weighted by `variantGroups[id].weights`) and baked
+straight into the flattened `Int16Array` alongside plain tiles — no extra
+render-time cost, and the same cell always resolves to the same variant
+across reloads without needing to store which variant was picked. Animated
+tiles can't be baked to a single static value; see Runtime below.
 
 **`<name>.tilemap.json`**:
 
@@ -164,17 +199,24 @@ spritesheet's PNG-is-the-asset shape). `Asset["type"]` union grows to
 2. Fetches and parses its referenced `.tileset.json`, and loads the
    tileset's image via the existing `_loadImage`.
 3. For each layer, walks the sparse `cells` dict once, resolving every
-   `terrainId` cell to a concrete `tileIndex` (computing its 4-bit bitmask
-   from same-terrain neighbor lookups in the same dict) and writes into an
-   `Int16Array(width * height)` initialized to `-1` (empty). This is the
+   `terrainId` cell to a TileResolver (computing its 4-bit bitmask from
+   same-terrain neighbor lookups in the same dict, then looking it up in
+   `autotile.rules`) or taking an explicit cell's TileResolver directly.
+   Plain `tileIndex` and `{variant}` values resolve to a concrete index
+   immediately (variant picked via the deterministic weighted hash) and are
+   written into an `Int16Array(width * height)` initialized to `-1`
+   (empty). `{anim}` values write their clip's frame-0 index into the same
+   array (a safe fallback) and additionally record `{cellIndex, animId}`
+   into a small sparse `animatedCells: Map` for that layer. This is the
    "optimized, not a giant array of entities" requirement — O(1) indexed
-   lookup at render/collision time, no per-tile objects or entities, and the
-   neighbor-resolution cost is paid once at load, not per frame.
+   lookup at render/collision time, no per-tile objects or entities, and all
+   resolution cost (bitmask, variant hash) is paid once at load, not per
+   frame.
 4. Also builds a packed collision bitset (one bit per cell, OR'd across only
    the layers with `collision: true`) for O(1) collision queries.
-5. Caches `{ layers: [{ name, tiles: Int16Array, ... }], collisionBits,
-   tileset: { image, columns, cellWidth, cellHeight } }` under the tilemap's
-   asset key.
+5. Caches `{ layers: [{ name, tiles: Int16Array, animatedCells: Map,
+   collision }], collisionBits, tileset: { image, columns, cellWidth,
+   cellHeight }, animations }` under the tilemap's asset key.
 
 ## Runtime: `Tilemap` component
 
@@ -192,16 +234,26 @@ static schema = {
 - `onSpawn(entity, engine)`: resolves `engine.assets.get(this.mapAsset)`
   (already loaded/flattened by `AssetLoader`, per above) and caches the
   reference on `this._resolved`.
+- `onTick(entity, engine, dt)`: only if the resolved map has any
+  `animatedCells` at all, accumulates `this._elapsed += dt` — cost is
+  skipped entirely for maps with no animated tiles.
 - `render(ctx, transform, entity, engine)`: computes the visible cell range
   from `engine.camera.x/y` + `engine.getViewportSize()` and this entity's
   world transform (map origin), clamped to `[0, width) x [0, height)`, then
   for each layer loops **only that sub-range**, drawing each non-`-1` cell
   by slicing the tileset image (`col = index % columns`, `row =
   Math.floor(index / columns)`) — the same sheet-slicing math
-  `SpriteRenderer` already uses for spritesheets. Cost is bounded by screen
-  size in cells, not map size — this is the offscreen culling requirement,
-  achieved as a natural consequence of the range computation rather than a
-  separate system.
+  `SpriteRenderer` already uses for spritesheets. For each layer, animated
+  cells are looked up via `animatedCells.get(cellIndex)` only for cells
+  already in the visible sub-range (still bounded by screen size, not map
+  size); the frame index per distinct `animId` seen this render call is
+  computed once (`Math.floor(this._elapsed / (1/fps)) % frames.length`, or
+  clamped to the last frame if `!loop`, matching `SpriteAnimation`'s
+  existing math) and reused for every cell sharing that animation, so cost
+  stays proportional to visible cells, not to distinct animations. Cost is
+  bounded by screen size in cells, not map size — this is the offscreen
+  culling requirement, achieved as a natural consequence of the range
+  computation rather than a separate system.
 - Collision: new `static checkEntity(tilemapEntity, otherEntity, engine)`,
   called from `_update()` alongside the existing `Collision.checkPair` loop
   (`index.js:524-529`) for every entity carrying a `Collision` component.
@@ -239,11 +291,17 @@ Structurally identical to `spritesheet`:
 2. **Autotile rule authoring**: per terrain, paint a fixed 16-cell "blob
    sheet" layout once (standard 4-bit corner/edge arrangement) — the
    extension derives the full bitmask→tileIndex table from that single pass
-   rather than hand-authoring 16 mappings per terrain.
+   rather than hand-authoring 16 mappings per terrain. Any one of those 16
+   slots (or a plain explicit tile, outside autotiling) can instead be
+   assigned a **variant group** (multi-select several tiles, optional
+   per-tile weight — reusing the spritesheet clip-panel's "select cells,
+   build a named list" interaction) or an **animation** (ordered tile
+   sequence + fps + loop, same list-building interaction, one frame's worth
+   of preview playback in the editor).
 3. **Map painting**: multi-layer canvas — add/remove/reorder/toggle-visible
    layers, brush with a terrain (bitmask auto-computed live from
-   already-painted same-terrain neighbors) or an explicit tile index,
-   erase, resize map bounds.
+   already-painted same-terrain neighbors), a variant group, an animation,
+   or an explicit tile index; erase; resize map bounds.
 4. **Save**: POSTs `{ project, tilesetFilename, tilesetMeta,
    tilemapFilename, tilemapMeta }` to `/api/extensions/tilemap/save`, then
    `window.parent.postMessage({ type: "EXTENSION_ASSET_SAVED" })` (existing
@@ -259,6 +317,10 @@ Structurally identical to `spritesheet`:
 - Per-cell collision overrides independent of tile type — collision is a
   flag on the tile definition (plus the per-layer on/off switch), not a
   separately painted layer.
+- Variant/animation frames pulled from a different asset than the cell's
+  own tileset — variants and animations only ever reference other
+  `tileIndex` values within the same tileset image (see Cell variations
+  above).
 
 ## Inspector
 
@@ -284,10 +346,19 @@ Plain Node `.mjs` scripts, following `source/engine/test/follow.test.mjs` /
 - `tilemapLoad.test.mjs` — sparse-cells-to-`Int16Array` flattening is
   correct; `terrainId` cells resolve to the right `tileIndex` given a fake
   neighbor layout and rule table; explicit `tileIndex` cells bypass
-  autotiling; empty cells stay `-1`.
+  autotiling; empty cells stay `-1`; `{variant}` cells resolve to a member
+  of the group's `tiles` and the same `(layer, x, y)` always picks the same
+  member across repeated loads (determinism), with a distribution check
+  over many synthetic cells roughly matching configured `weights`;
+  `{anim}` cells bake frame 0 into the array and register in
+  `animatedCells`.
 - `tilemapRender.test.mjs` — visible cell range computation against a fake
   camera/viewport (off-map camera positions clamp correctly; range size
-  matches viewport size, independent of total map size).
+  matches viewport size, independent of total map size); animated cells
+  step frames at the right wall-clock rate for a given `fps`/`speed` and
+  loop-vs-clamp per `loop` (mirroring `spriteAnimation.test.mjs`'s existing
+  coverage of the same math); cells sharing one `animId` compute the frame
+  index once per render call, not once per cell.
 - `tilemapCollision.test.mjs` — entity AABB → cell range conversion; solid
   vs. non-solid tiles; per-layer `collision: false` is excluded from the
   bitset; static/resolve-disabled entities do not move on overlap (matching
@@ -302,7 +373,8 @@ this is built is still useful:
    a hand-written test `.tilemap.json` — a tilemap visibly renders and
    culls in a scene with zero editor UI.
 2. `Tilemap.checkEntity` collision pass.
-3. Extension: tileset definition + autotile blob authoring.
+3. Extension: tileset definition + autotile blob authoring + variant/
+   animation group authoring.
 4. Extension: map painting UI + save.
 5. Inspector `tilemapRef` field + "Edit" button wiring.
 
