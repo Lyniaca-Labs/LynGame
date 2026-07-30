@@ -61,12 +61,12 @@ extension, went through its own design pass and shipped — see
 
 - [x] ability to query in engine with name.child.subchild and name.child.subchild:component or :component.property (`engine.query()`, see `docs/changelogs/changelog4.md`)
 - [ ] ability to rotate around a point / other entity. transform.centerpoint (relative / absolute)
-- [ ] layout component for entities -> like flexbox / grid, will auto format children
+- [x] layout component for entities -> like flexbox / grid, will auto format children
 - [ ] debug mode that shows bounding box
 - [ ] icons for premade components
 - [ ] shadow component > renders a pixelated or high def shadow underneath (cached)
 - [ ] ability to turn off antialiasing in config / set frame rate and tick speed
-- [ ] screen effects (blur, bloom, vignette, etc)
+- [ ] screen effects (blur, bloom, vignette, etc) / post-processing effects
 - [ ] prefabs should be able to have children (root-level ghost overrides shipped; revisit if gaps remain)
 - [ ] cache randomness / seeds per entity that uses them to avoid regenerating -> destroy on entity delete
 - [ ] icons in graph editor per node
@@ -138,7 +138,8 @@ extension, went through its own design pass and shipped — see
 - [ ] Code blocks → generated source
 - [ ] Compile to optimized import map
 - [ ] Strip comments during build
-- [ ] premade engine.assetname -> prebuild assets
+- [ ] premade engine/assetname -> prebuild assets
+- [ ] foldered assets myfoler/subfolder/assetname
 - [ ] special cursors -> assets
 
 ## Performance
