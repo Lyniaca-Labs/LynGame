@@ -59,7 +59,7 @@ extension, went through its own design pass and shipped — see
 
 ## Graphics Framework
 
-- [ ] ability to query in engine with name.child.subchild and name.child.subchild:component or :component.property
+- [x] ability to query in engine with name.child.subchild and name.child.subchild:component or :component.property (`engine.query()`, see `docs/changelogs/changelog4.md`)
 - [ ] ability to rotate around a point / other entity. transform.centerpoint (relative / absolute)
 - [ ] layout component for entities -> like flexbox / grid, will auto format children
 - [ ] debug mode that shows bounding box
@@ -71,7 +71,7 @@ extension, went through its own design pass and shipped — see
 - [ ] cache randomness / seeds per entity that uses them to avoid regenerating -> destroy on entity delete
 - [ ] icons in graph editor per node
 - [ ] more icons overall
-- [ ] Collision/simple hit-detection
+- [x] Collision/simple hit-detection (`Collision` component — AABB only, no circle/polygon shapes yet)
 - [ ] text, shapes, and sprites should have properties on where to draw them (center, top-left, etc.)
   - [ ] shape renderer
   - [ ] text renderer (may already be done)
@@ -80,6 +80,7 @@ extension, went through its own design pass and shipped — see
 ## Game Framework
 
 - [ ] init function loading animation (as LynGame)
+- [ ] ability to load multiple scenes at once / have one in a saved / cached state
 
 ## Editor / Engine GUI
 
@@ -114,7 +115,7 @@ extension, went through its own design pass and shipped — see
 - [ ] Particles (emitter component) component.emit (or constant emitter)
 - [ ] Pathfinding
 - [ ] Inverse kinematics
-- [ ] Following/math utilities
+- [x] Following/math utilities (`Follow` component — exponential/spring/maxSpeed modes)
 - [ ] have ai go through and make full documentation of app, components, handlers, etc. (info buttons)
 
 ## Prefabs & Components
@@ -124,6 +125,7 @@ extension, went through its own design pass and shipped — see
 - [ ] Built-in icon pack
 - [ ] text to speech support
 - [ ] container system
+- [ ] tilemap / collision based following / pathfinding
 
 ## Compilation
 
@@ -133,6 +135,7 @@ extension, went through its own design pass and shipped — see
 - [ ] Code blocks → generated source
 - [ ] Compile to optimized import map
 - [ ] Strip comments during build
+- [ ] premade engine.assetname -> prebuild assets
 
 ## Performance
 
