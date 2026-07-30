@@ -60,7 +60,9 @@ Field types are drawn from the existing `SchemaField` union (`number`,
 
 Grid-mode fallback: if both `maxCols` and `maxRows` are `0`, Layout treats
 the grid as a single row (`maxCols` = child count) so the component is never
-a silent no-op with default settings.
+a silent no-op with default settings. If only one of the two is set, the
+other grows to fit all children (e.g. `maxCols: 3`, `maxRows: 0` → as many
+rows as needed for 3 columns).
 
 Children with no `Transform` component are skipped (can't be positioned —
 not counted in the layout at all). Children's size is read via
@@ -88,17 +90,19 @@ Two passes:
      column's width as the widest child assigned to it, and each row's
      height as the tallest child assigned to it (CSS-grid-style auto
      tracks — not fixed cell sizes, since children keep natural sizes).
-2. **Placement.** Starting from the Layout entity's own Transform position
-   offset by `paddingX`/`paddingY`, walk lines/cells and assign each child's
-   `Transform.x`/`Transform.y` (positions are relative to parent, matching
-   the existing parent-relative convention in `Transform`/
-   `getWorldTransform`). `justify` distributes items along the main axis
-   within a line (flow) or horizontally within a cell (grid); `align`
-   positions items along the cross axis within a line's thickness (flow) or
-   vertically within a cell (grid). Since renderers draw centered on their
-   Transform position (`ctx.translate` then draw from `-width/2, -height/2`),
-   each child's final `x`/`y` is its box's top-left plus half its own
-   width/height.
+2. **Placement.** Child `Transform.x`/`y` are already parent-relative (per
+   `Transform`'s own field descriptions), so placement happens in the
+   Layout entity's own local space, starting at `(paddingX, paddingY)` —
+   the Layout entity's own Transform position is *not* added on top; that
+   composition already happens separately via `getWorldTransform`. Walk
+   lines/cells and assign each child's `Transform.x`/`Transform.y`:
+   `justify` distributes items along the main axis within a line (flow) or
+   horizontally within a cell (grid); `align` positions items along the
+   cross axis within a line's thickness (flow) or vertically within a cell
+   (grid). Since renderers draw centered on their Transform position
+   (`ctx.translate` then draw from `-width/2, -height/2`), each child's
+   final `x`/`y` is its box's top-left (within the line/cell) plus half its
+   own width/height.
 
 ## Non-goals (v1)
 
