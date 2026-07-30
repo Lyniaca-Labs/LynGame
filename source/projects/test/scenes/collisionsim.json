@@ -1,0 +1,229 @@
+{
+  "name": "collisionsim",
+  "entities": [
+    {
+      "id": "cam",
+      "components": {
+        "Transform": {
+          "x": 200,
+          "y": 220,
+          "rotation": 0,
+          "fixed": false
+        },
+        "Camera": {
+          "zoom": 1,
+          "offset": { "x": 0, "y": 0 },
+          "bounds": null,
+          "target": null
+        }
+      }
+    },
+    {
+      "id": "floor",
+      "components": {
+        "Transform": {
+          "x": 200,
+          "y": 380,
+          "rotation": 0,
+          "zIndex": 0
+        },
+        "ShapeRenderer": {
+          "shape": "rect",
+          "width": 400,
+          "height": 40,
+          "color": "#5c4242"
+        },
+        "Collision": {
+          "group": "wall",
+          "collidesWith": "ball",
+          "resolve": true,
+          "isStatic": true,
+          "mass": 1,
+          "width": 400,
+          "height": 40,
+          "offsetX": 0,
+          "offsetY": 0,
+          "onCollide": null
+        }
+      }
+    },
+    {
+      "id": "wallLeft",
+      "components": {
+        "Transform": {
+          "x": 0,
+          "y": 200,
+          "rotation": 0,
+          "zIndex": 0
+        },
+        "ShapeRenderer": {
+          "shape": "rect",
+          "width": 20,
+          "height": 400,
+          "color": "#5c4242"
+        },
+        "Collision": {
+          "group": "wall",
+          "collidesWith": "ball",
+          "resolve": true,
+          "isStatic": true,
+          "mass": 1,
+          "width": 20,
+          "height": 400,
+          "offsetX": 0,
+          "offsetY": 0,
+          "onCollide": null
+        }
+      }
+    },
+    {
+      "id": "wallRight",
+      "components": {
+        "Transform": {
+          "x": 400,
+          "y": 200,
+          "rotation": 0,
+          "zIndex": 0
+        },
+        "ShapeRenderer": {
+          "shape": "rect",
+          "width": 20,
+          "height": 400,
+          "color": "#5c4242"
+        },
+        "Collision": {
+          "group": "wall",
+          "collidesWith": "ball",
+          "resolve": true,
+          "isStatic": true,
+          "mass": 1,
+          "width": 20,
+          "height": 400,
+          "offsetX": 0,
+          "offsetY": 0,
+          "onCollide": null
+        }
+      }
+    },
+    {
+      "id": "ballA",
+      "components": {
+        "Transform": {
+          "x": 180,
+          "y": 0,
+          "rotation": 0,
+          "zIndex": 1
+        },
+        "ShapeRenderer": {
+          "shape": "circle",
+          "width": 40,
+          "height": 40,
+          "color": "#e0475b"
+        },
+        "Movement": {
+          "maxSpeed": 900,
+          "acceleration": 800,
+          "friction": 200,
+          "gravity": 980,
+          "gravityDirection": { "x": 0, "y": 1 },
+          "drag": 0,
+          "bounce": 0.55,
+          "mass": 1,
+          "velocity": { "x": 0, "y": 0 }
+        },
+        "Collision": {
+          "group": "ball",
+          "collidesWith": "wall,ball",
+          "resolve": true,
+          "isStatic": false,
+          "mass": 1,
+          "width": 40,
+          "height": 40,
+          "offsetX": 0,
+          "offsetY": 0,
+          "onCollide": null
+        }
+      }
+    },
+    {
+      "id": "ballB",
+      "components": {
+        "Transform": {
+          "x": 210,
+          "y": -120,
+          "rotation": 0,
+          "zIndex": 1
+        },
+        "ShapeRenderer": {
+          "shape": "circle",
+          "width": 40,
+          "height": 40,
+          "color": "#4b8bf5"
+        },
+        "Movement": {
+          "maxSpeed": 900,
+          "acceleration": 800,
+          "friction": 200,
+          "gravity": 980,
+          "gravityDirection": { "x": 0, "y": 1 },
+          "drag": 0,
+          "bounce": 0.55,
+          "mass": 1,
+          "velocity": { "x": 0, "y": 0 }
+        },
+        "Collision": {
+          "group": "ball",
+          "collidesWith": "wall,ball",
+          "resolve": true,
+          "isStatic": false,
+          "mass": 1,
+          "width": 40,
+          "height": 40,
+          "offsetX": 0,
+          "offsetY": 0,
+          "onCollide": null
+        }
+      }
+    },
+    {
+      "id": "boxC",
+      "components": {
+        "Transform": {
+          "x": 300,
+          "y": -260,
+          "rotation": 0,
+          "zIndex": 1
+        },
+        "ShapeRenderer": {
+          "shape": "rect",
+          "width": 40,
+          "height": 40,
+          "color": "#68d38b"
+        },
+        "Movement": {
+          "maxSpeed": 900,
+          "acceleration": 800,
+          "friction": 200,
+          "gravity": 980,
+          "gravityDirection": { "x": 0, "y": 1 },
+          "drag": 0,
+          "bounce": 0.3,
+          "mass": 2,
+          "velocity": { "x": 0, "y": 0 }
+        },
+        "Collision": {
+          "group": "ball",
+          "collidesWith": "wall,ball",
+          "resolve": true,
+          "isStatic": false,
+          "mass": 2,
+          "width": 40,
+          "height": 40,
+          "offsetX": 0,
+          "offsetY": 0,
+          "onCollide": null
+        }
+      }
+    }
+  ]
+}
