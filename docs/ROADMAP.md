@@ -32,7 +32,7 @@ top of that file). Completed work with implementation detail lives in
 
 ## Open Bugs
 
-- [ ] save lastproject in local storage and default to it on startup
+- [x] save lastproject in local storage and default to it on startup
 - [x] switching projects does not fully refresh everything
 - [x] need checkbox component for editor
 - [x] standardize the code editor modal
@@ -44,7 +44,7 @@ top of that file). Completed work with implementation detail lives in
 - [ ] there should be an ability to import a pallete into pixel art editor and also ability to use a certain pallete for applying to sprite / ability to edit the colors in generated pallete
 - [ ] graph editor laggy when panning around
   - [ ] also have connector dots come slightly out and bigger
-  - [ ] replace moving lines with arrows
+  - [ ] replace moving lines with arrows (or add this to settings)
   - [ ] texture editor lines do not evenly connect with nodes
   - [ ] upload image (dataurl) to texture graph (hardcoded const image node)
 
@@ -54,11 +54,11 @@ top of that file). Completed work with implementation detail lives in
 - [ ] ability to rotate around a point / other entity. transform.centerpoint (relative / absolute)
 - [x] layout component for entities -> like flexbox / grid, will auto format children
 - [ ] debug mode that shows bounding box
-- [ ] icons for premade components
+- [ ] icons for premade components 
 - [ ] shadow component > renders a pixelated or high def shadow underneath (cached)
-- [ ] ability to turn off antialiasing in config / set frame rate and tick speed
+- [ ] ability to turn off antialiasing in config / set frame rate and tick speed (defered)
 - [ ] screen effects (blur, bloom, vignette, etc) / post-processing effects
-- [ ] prefabs should be able to have children (root-level ghost overrides shipped; revisit if gaps remain)
+- [x] prefabs should be able to have children (root-level ghost overrides shipped; revisit if gaps remain)
 - [ ] cache randomness / seeds per entity that uses them to avoid regenerating -> destroy on entity delete
 - [ ] icons in graph editor per node
 - [ ] more icons overall
@@ -82,6 +82,7 @@ top of that file). Completed work with implementation detail lives in
 - [ ] undo / redo
 - [ ] component visual editor
 - [ ] icons for components (color coded as well)
+  - [ ] categories of premade components too (movement, physics, etc.)
 - [ ] ESLint in code editor
 - [ ] autosave option in settings
 - [ ] preview render for prefabs
@@ -159,8 +160,8 @@ Backend-hosted extensions system: `source/extensions/*`, loaded by
 toolbar via `ExtensionsModal.tsx`. Each item below can be built as its own
 extension instead of needing engine/editor changes.
 
-- [ ] Sprite creator
-- [ ] Texture creator
+- [x] Spritesheet creator
+- [x] Texture creator
 - [ ] Tilemap creator
 - [ ] voice to notes / music
 - [ ] visual Animation editor
@@ -173,7 +174,7 @@ extension instead of needing engine/editor changes.
 - [ ] Custom save format
 - [ ] Documentation
 - [ ] Ability to keep alive scenes after switching / auto scene cache
-- [ ] spriterenderer filter component
+- [ ] spriterenderer filter component -> individual post processing
 
 ---
 

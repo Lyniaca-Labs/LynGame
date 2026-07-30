@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { projectsApi } from "../api";
+import { getLastProject } from "../lib/lastProject";
 import { Button } from "../ui/Button";
 import { Select } from "../ui/Select";
 import { Input } from "../ui/Input";
@@ -30,7 +31,12 @@ export function ProjectSelector({ currentProject, onSelect }: ProjectSelectorPro
       const data = await projectsApi.list();
       setProjects(data.projects);
       if (!currentProject && data.projects.length > 0) {
-        onSelect(data.projects[0]);
+        const lastProject = getLastProject();
+        const defaultProject =
+          lastProject && data.projects.includes(lastProject)
+            ? lastProject
+            : data.projects[0];
+        onSelect(defaultProject);
       }
     } catch (err) {
       setListError(err instanceof Error ? err.message : "Failed to load projects");

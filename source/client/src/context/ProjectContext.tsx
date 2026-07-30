@@ -5,6 +5,7 @@ import {
   ReactNode,
 } from "react";
 import { projectsApi } from "../api";
+import { setLastProject } from "../lib/lastProject";
 
 export interface ProjectField {
   key: string;
@@ -57,6 +58,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       setCurrentProject(name);
       setProjectData(data as ProjectEditorData);
+      setLastProject(name);
 
       console.log("Loaded project data:", data);
     } catch (err) {

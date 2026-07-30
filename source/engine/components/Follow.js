@@ -2,6 +2,7 @@ import { Component } from "../types/Component.js";
 import { Transform } from "./Transform.js";
 
 export class Follow extends Component {
+  // TODO: option for mouse following / separate component
   static schema = {
     targetId: { type: "entity", default: "", description: "Query path to the entity this one follows." },
     mode: {
