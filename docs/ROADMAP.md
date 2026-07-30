@@ -126,6 +126,9 @@ extension, went through its own design pass and shipped — see
 - [ ] text to speech support
 - [ ] container system
 - [ ] tilemap / collision based following / pathfinding
+- [ ] filter component -> hue shift, blur, pixelate, etc.
+- [ ] component for children to render underneath mask of parent / MASK COMPONENT 
+- [ ] polygon entity / component
 
 ## Compilation
 
@@ -136,6 +139,7 @@ extension, went through its own design pass and shipped — see
 - [ ] Compile to optimized import map
 - [ ] Strip comments during build
 - [ ] premade engine.assetname -> prebuild assets
+- [ ] special cursors -> assets
 
 ## Performance
 

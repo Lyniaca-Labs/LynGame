@@ -139,10 +139,17 @@
           "onDragEnd": null,
           "autoDimensions": true
         },
-        "Animator": {
-          "clips": [
-            "test"
-          ]
+        "Follow": {
+          "targetId": "fallingBox",
+          "mode": "exponential",
+          "roundness": 0.85,
+          "stiffness": 120,
+          "damping": 14,
+          "offsetX": 0,
+          "offsetY": 0,
+          "axisLock": "both",
+          "deadzone": 0,
+          "maxSpeed": 0
         }
       },
       "scripts": [
