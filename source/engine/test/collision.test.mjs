@@ -170,4 +170,86 @@ const engine = {}; // unused by Collision.checkPair beyond pass-through to onCol
   assert.notEqual(pusher.getComponent(Transform).x, 10, "other side still absorbs the push");
 }
 
+// --- compound: a child's collision moves the PARENT (includeChildren),
+// using the parent's own resolve/isStatic (the child's own resolve:false,
+// isStatic:true are deliberately set here and must be ignored), with mass
+// summed across parent + child. ---
+{
+  const car = new Entity("car");
+  car.addComponent(Transform, { x: 0, y: 0 });
+  car.addComponent(Collision, {
+    group: "car", collidesWith: "ball", resolve: true, isStatic: false,
+    mass: 1, includeChildren: true, shape: "none",
+  });
+
+  const wheel = new Entity("wheel");
+  wheel.addComponent(Transform, { x: 5, y: 0 });
+  wheel.addComponent(Collision, {
+    group: "car", collidesWith: "ball", resolve: false, isStatic: true, // must be ignored — car's flags govern
+    mass: 1, width: 20, height: 20,
+  });
+  car.addChild(wheel);
+
+  const ball = makeEntity("ball", 15, 0, 20, 20, { group: "ball", collidesWith: "car", resolve: true, mass: 1 });
+
+  Collision.checkPair(wheel, ball, engine);
+
+  // total mass = car(1) + wheel(1) = 2, vs ball's 1 -> car's share is 1/3, ball's is 2/3
+  const carX = car.getComponent(Transform).x;
+  const ballX = ball.getComponent(Transform).x;
+  assert.ok(Math.abs(carX - -10 / 3) < 1e-9, `expected car pushed by 1/3 share, got ${carX}`);
+  assert.ok(Math.abs(ballX - (15 + 20 / 3)) < 1e-9, `expected ball pushed by 2/3 share, got ${ballX}`);
+  assert.equal(wheel.getComponent(Transform).x, 5, "wheel's own local Transform must not move — the parent moved instead");
+}
+
+// --- compound: two children of the same includeChildren parent overlapping
+// each other must not resolve (they'd both redirect to the same parent
+// Transform, which can't meaningfully push apart from itself). ---
+{
+  const car = new Entity("car2");
+  car.addComponent(Transform, { x: 0, y: 0 });
+  car.addComponent(Collision, { group: "car", collidesWith: "car", resolve: true, mass: 1, includeChildren: true, shape: "none" });
+
+  const wheelA = new Entity("wheelA");
+  wheelA.addComponent(Transform, { x: 0, y: 0 });
+  wheelA.addComponent(Collision, { group: "car", collidesWith: "car", resolve: true, mass: 1, width: 20, height: 20 });
+  car.addChild(wheelA);
+
+  const wheelB = new Entity("wheelB");
+  wheelB.addComponent(Transform, { x: 5, y: 0 });
+  wheelB.addComponent(Collision, { group: "car", collidesWith: "car", resolve: true, mass: 1, width: 20, height: 20 });
+  car.addChild(wheelB);
+
+  Collision.checkPair(wheelA, wheelB, engine);
+  assert.equal(car.getComponent(Transform).x, 0, "compound parent must not move from its own children overlapping each other");
+}
+
+// --- compound: the root's OWN hitbox getting hit directly (not via a
+// child) must still use the full compound mass (self + children), not
+// just its own — the rigid body shouldn't weigh less depending on which
+// part got hit. ---
+{
+  const car = new Entity("car3");
+  car.addComponent(Transform, { x: 0, y: 0 });
+  car.addComponent(Collision, {
+    group: "car", collidesWith: "ball", resolve: true, isStatic: false,
+    mass: 1, includeChildren: true, shape: "rect", width: 20, height: 20,
+  });
+  const wheel = new Entity("wheel3");
+  wheel.addComponent(Transform, { x: 5, y: 0 });
+  wheel.addComponent(Collision, { group: "car", collidesWith: "ball", mass: 1, width: 20, height: 20 });
+  car.addChild(wheel);
+
+  const ball = makeEntity("ball3", 15, 0, 20, 20, { group: "ball", collidesWith: "car", resolve: true, mass: 1 });
+
+  Collision.checkPair(car, ball, engine);
+
+  // car box (width 20, no offset) vs ball box (width 20 at x=15): overlapX = 5.
+  // Same 1/3 vs 2/3 split as the child-hit case: compound mass = car(1) + wheel(1) = 2 vs ball's 1.
+  const carX = car.getComponent(Transform).x;
+  const ballX = ball.getComponent(Transform).x;
+  assert.ok(Math.abs(carX - -5 / 3) < 1e-9, `expected car's own hitbox to use full compound mass, got carX=${carX}`);
+  assert.ok(Math.abs(ballX - (15 + 10 / 3)) < 1e-9, `expected ball pushed by 2/3 share, got ${ballX}`);
+}
+
 console.log("collision.test.mjs: all assertions passed");

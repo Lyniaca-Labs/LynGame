@@ -29,13 +29,18 @@ export class Collision extends Component {
     resolve: { type: "boolean", default: false, description: "If true, overlaps are physically resolved (pushed apart). If false, detection-only (trigger)." },
     isStatic: { type: "boolean", default: false, description: "Infinite mass — never moved by resolution; the other side absorbs 100% of the push." },
     mass: { type: "number", default: 1, description: "Used for the push-apart ratio between two dynamic bodies." },
+    includeChildren: {
+      type: "boolean", default: false,
+      description: "Treat direct children's own Collision components as part of this rigid body: resolution uses THIS entity's resolve/isStatic, mass is summed across this entity + every direct child that has a Collision component, and the resulting push/bounce is applied to this entity's Transform/Movement instead of the child's.",
+    },
     shape: {
       type: "select", default: "auto",
-      description: "Collision shape. \"auto\" derives from this entity's ShapeRenderer (falls back to rect if there isn't one, or it's not a circle).",
+      description: "Collision shape. \"auto\" derives from this entity's ShapeRenderer (falls back to rect if there isn't one, or it's not a circle). \"none\" means no hitbox of its own — for use with includeChildren, to contribute mass/resolve/isStatic to the group without a shape.",
       options: [
         { value: "auto", label: "Auto (from ShapeRenderer)" },
         { value: "rect", label: "Rectangle" },
         { value: "circle", label: "Circle" },
+        { value: "none", label: "None (no hitbox)" },
       ],
     },
     width: { type: "number", default: 0, description: "Hitbox width (diameter, for circles). 0 = derive from SpriteRenderer/ShapeRenderer/TextRenderer size." },
@@ -107,6 +112,7 @@ export class Collision extends Component {
 
     const shapeA = a._resolvedShape(entityA);
     const shapeB = b._resolvedShape(entityB);
+    if (shapeA === "none" || shapeB === "none") return; // no hitbox of its own
 
     // manifold.nx/ny always points in the direction entityA should move to
     // separate from entityB (entityB moves along the opposite vector).
@@ -127,8 +133,45 @@ export class Collision extends Component {
     a.onCollide?.(entityA, entityB, engine);
     b.onCollide?.(entityB, entityA, engine);
 
-    if (!a.resolve && !b.resolve) return;
-    Collision._resolve(entityA, entityB, a, b, manifold);
+    const bodyA = Collision._body(entityA, a);
+    const bodyB = Collision._body(entityB, b);
+    if (!bodyA.resolve && !bodyB.resolve) return;
+    Collision._resolve(bodyA, bodyB, manifold);
+  }
+
+  // Resolves which entity/physics-values actually govern resolution for a
+  // given collider: normally itself, but if its direct parent has
+  // includeChildren set, resolution redirects to the parent — one level up
+  // only, no recursive/grandchild absorption (see design doc).
+  static _body(entity, collision) {
+    const parentCollision = entity.parent?.getComponent("Collision");
+    if (parentCollision?.includeChildren) {
+      return {
+        transformEntity: entity.parent,
+        resolve: parentCollision.resolve,
+        isStatic: parentCollision.isStatic,
+        mass: Collision._compoundMass(entity.parent, parentCollision),
+      };
+    }
+    // This entity IS a compound root hit via its own hitbox (not a child
+    // delegating up) — still use the full compound mass, not just its own,
+    // so the rigid body weighs the same regardless of which part got hit.
+    if (collision.includeChildren) {
+      return { transformEntity: entity, resolve: collision.resolve, isStatic: collision.isStatic, mass: Collision._compoundMass(entity, collision) };
+    }
+    return { transformEntity: entity, resolve: collision.resolve, isStatic: collision.isStatic, mass: collision.mass };
+  }
+
+  // Total rigid-body mass for a compound: the parent's own mass (always
+  // counted, even with shape: "none") plus every direct child's mass that
+  // itself carries a Collision component.
+  static _compoundMass(parent, parentCollision) {
+    let total = parentCollision.mass;
+    for (const child of parent.children) {
+      const childCollision = child.getComponent("Collision");
+      if (childCollision) total += childCollision.mass;
+    }
+    return total;
   }
 
   // Axis-aligned box vs box: overlap on both axes, push apart along whichever
@@ -199,23 +242,28 @@ export class Collision extends Component {
     return { nx: 0, ny: 1, depth: overlapBottom + circle.radius };
   }
 
-  static _resolve(entityA, entityB, a, b, manifold) {
-    // An entity is only moved by resolution if it opted in (resolve: true)
+  static _resolve(bodyA, bodyB, manifold) {
+    // Two colliders that both redirect to the same compound parent (e.g.
+    // two wheels on the same car overlapping each other) can't meaningfully
+    // resolve against themselves.
+    if (bodyA.transformEntity === bodyB.transformEntity) return;
+
+    // A body is only moved by resolution if it opted in (resolve: true)
     // AND isn't pinned (isStatic: false). Either flag alone is enough to
     // keep it fully immovable — including its velocity (see _applyBounce
     // below), not just its position, so it can't drift on a later frame.
-    const movableA = a.resolve && !a.isStatic;
-    const movableB = b.resolve && !b.isStatic;
-    const invMassA = movableA ? 1 / a.mass : 0;
-    const invMassB = movableB ? 1 / b.mass : 0;
+    const movableA = bodyA.resolve && !bodyA.isStatic;
+    const movableB = bodyB.resolve && !bodyB.isStatic;
+    const invMassA = movableA ? 1 / bodyA.mass : 0;
+    const invMassB = movableB ? 1 / bodyB.mass : 0;
     const totalInvMass = invMassA + invMassB;
     if (totalInvMass === 0) return; // neither side can move
 
     const shareA = invMassA / totalInvMass;
     const shareB = invMassB / totalInvMass;
 
-    const transformA = entityA.getComponent("Transform");
-    const transformB = entityB.getComponent("Transform");
+    const transformA = bodyA.transformEntity.getComponent("Transform");
+    const transformB = bodyB.transformEntity.getComponent("Transform");
     if (!transformA || !transformB) return;
 
     const { nx, ny, depth } = manifold;
@@ -224,8 +272,8 @@ export class Collision extends Component {
     transformB.x -= nx * depth * shareB;
     transformB.y -= ny * depth * shareB;
 
-    if (movableA) Collision._applyBounce(entityA, nx, ny);
-    if (movableB) Collision._applyBounce(entityB, -nx, -ny);
+    if (movableA) Collision._applyBounce(bodyA.transformEntity, nx, ny);
+    if (movableB) Collision._applyBounce(bodyB.transformEntity, -nx, -ny);
   }
 
   // After separation along normal (nx, ny) — already pointing away from the

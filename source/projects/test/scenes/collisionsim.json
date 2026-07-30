@@ -470,6 +470,127 @@
         }
       },
       "parentId": "boxes"
+    },
+    {
+      "id": "cars",
+      "components": {
+        "Transform": {
+          "x": 0,
+          "y": 0,
+          "rotation": 0
+        }
+      }
+    },
+    {
+      "id": "car1",
+      "components": {
+        "Transform": {
+          "x": 340,
+          "y": -450,
+          "rotation": 0,
+          "zIndex": 1
+        },
+        "ShapeRenderer": {
+          "shape": "rect",
+          "width": 60,
+          "height": 20,
+          "color": "#3a6ea5"
+        },
+        "Movement": {
+          "maxSpeed": 900,
+          "acceleration": 800,
+          "friction": 200,
+          "gravity": 980,
+          "gravityDirection": {
+            "x": 0,
+            "y": 1
+          },
+          "drag": 0,
+          "bounce": 0.3,
+          "mass": 3,
+          "velocity": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        "Collision": {
+          "group": "ball",
+          "collidesWith": "wall,ball",
+          "resolve": true,
+          "isStatic": false,
+          "mass": 3,
+          "includeChildren": true,
+          "shape": "rect",
+          "width": 60,
+          "height": 20,
+          "offsetX": 0,
+          "offsetY": 0,
+          "onCollide": null
+        }
+      },
+      "parentId": "cars"
+    },
+    {
+      "id": "car1WheelL",
+      "components": {
+        "Transform": {
+          "x": -20,
+          "y": 14,
+          "rotation": 0,
+          "zIndex": 1
+        },
+        "ShapeRenderer": {
+          "shape": "circle",
+          "width": 16,
+          "height": 16,
+          "color": "#222222"
+        },
+        "Collision": {
+          "group": "ball",
+          "collidesWith": "wall,ball",
+          "resolve": true,
+          "isStatic": false,
+          "mass": 1,
+          "shape": "circle",
+          "width": 16,
+          "height": 16,
+          "offsetX": 0,
+          "offsetY": 0,
+          "onCollide": null
+        }
+      },
+      "parentId": "car1"
+    },
+    {
+      "id": "car1WheelR",
+      "components": {
+        "Transform": {
+          "x": 20,
+          "y": 14,
+          "rotation": 0,
+          "zIndex": 1
+        },
+        "ShapeRenderer": {
+          "shape": "circle",
+          "width": 16,
+          "height": 16,
+          "color": "#222222"
+        },
+        "Collision": {
+          "group": "ball",
+          "collidesWith": "wall,ball",
+          "resolve": true,
+          "isStatic": false,
+          "mass": 1,
+          "shape": "circle",
+          "width": 16,
+          "height": 16,
+          "offsetX": 0,
+          "offsetY": 0,
+          "onCollide": null
+        }
+      },
+      "parentId": "car1"
     }
   ]
 }

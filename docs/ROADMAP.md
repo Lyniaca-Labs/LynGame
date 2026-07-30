@@ -108,6 +108,7 @@ top of that file). Completed work with implementation detail lives in
 - [ ] Inverse kinematics (limbs are children)
 - [x] Following/math utilities (`Follow` component — exponential/spring/maxSpeed modes)
 - [ ] have ai go through and make full documentation of app, components, handlers, etc. (info buttons)
+  - [ ] an ai readme for making scenes
 
 ## Prefabs & Components
 
@@ -118,7 +119,7 @@ top of that file). Completed work with implementation detail lives in
 - [ ] container system
 - [ ] tilemap / collision based following / pathfinding
 - [ ] filter component -> hue shift, blur, pixelate, etc.
-- [ ] component for children to render underneath mask of parent / MASK COMPONENT 
+- [ ] component for children to render underneath mask of parent / MASK COMPONENT (bounds, color, etc.)
 - [ ] polygon entity / component
 
 ## Compilation
