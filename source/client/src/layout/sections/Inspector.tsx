@@ -1,7 +1,7 @@
 // Inspector.tsx — full file
 
 import { ReactNode, useEffect, useState } from "react";
-import { Trash2, RefreshCw, X, Pencil, ChevronDown, ChevronRight } from "lucide-react";
+import { Trash2, RefreshCw, X, Pencil, ChevronDown, ChevronRight, Star } from "lucide-react";
 import { Container } from "../../ui/Container";
 import { Select, SelectOption } from "../../ui/Select";
 import { Button } from "../../ui/Button";
@@ -69,6 +69,7 @@ export function Inspector({ onEdit }: InspectorProps) {
     resetChildOverrideComponent,
     addChildOverrideScript,
     removeChildOverrideScript,
+    setStartScene,
   } = useSceneEditor();
   const { projectData } = useProject();
 
@@ -91,9 +92,25 @@ export function Inspector({ onEdit }: InspectorProps) {
   }
 
   if (target.kind === "scene") {
+    const isStart = projectData?.project.startScene === target.sceneId;
     return (
       <Container title={`Inspector — ${target.sceneId}`}>
-        <PlaceholderPanel label="Scene properties aren't editable yet" />
+        <div className="flex items-center justify-between gap-2 rounded border border-[var(--color-border)] p-2 text-xs">
+          <span className="flex items-center gap-1.5 text-[var(--color-text-faint)]">
+            <Star
+              size={12}
+              className={
+                isStart
+                  ? "fill-[var(--color-accent-secondary)] text-[var(--color-accent-secondary)]"
+                  : "text-[var(--color-text-faint)]"
+              }
+            />
+            {isStart ? "Default scene" : "Not the default scene"}
+          </span>
+          {!isStart && (
+            <Button onClick={() => setStartScene(target.sceneId)}>Set as Default</Button>
+          )}
+        </div>
       </Container>
     );
   }

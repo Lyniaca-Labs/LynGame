@@ -260,6 +260,7 @@ function ExplorerFiles() {
     deleteGraphScript,
     createScene,
     deleteScene,
+    setStartScene,
     createPrefab,
     deletePrefab,
     createAnimation,
@@ -359,11 +360,6 @@ function ExplorerFiles() {
 
   const startScene = projectData.project.startScene;
 
-  const setStartScene = (sceneId: string) => {
-    console.log("set start scene:", sceneId);
-    // e.g. projectData.project.startScene = sceneId; then persist/update context
-  };
-
   const sceneBadges = (sceneId: string): TreeNodeBadge[] => {
     const isStart = sceneId.replace(".json", "") === startScene;
     return [
@@ -380,7 +376,7 @@ function ExplorerFiles() {
           />
         ),
         tooltip: isStart ? "Start scene" : "Set as start scene",
-        onClick: () => setStartScene(sceneId),
+        onClick: () => setStartScene(sceneId.replace(".json", "")),
         persistent: isStart,
       },
     ];

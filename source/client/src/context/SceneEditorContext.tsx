@@ -292,6 +292,7 @@ interface SceneEditorContextValue {
   deleteGraphScript: (name: string) => Promise<void>;
   createScene: () => Promise<void>;
   deleteScene: (name: string) => Promise<void>;
+  setStartScene: (sceneId: string) => Promise<void>;
   createPrefab: () => Promise<void>;
   deletePrefab: (name: string) => Promise<void>;
   createAnimation: () => Promise<void>;
@@ -1278,6 +1279,19 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     [currentProject, reloadProject]
   );
 
+  const setStartScene = useCallback(
+    async (sceneId: string) => {
+      if (!currentProject || sceneId === projectData?.project.startScene) return;
+      try {
+        await projectsApi.setStartScene(currentProject, sceneId);
+        await reloadProject();
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    },
+    [currentProject, projectData, reloadProject]
+  );
+
   const createPrefab = useCallback(async () => {
     if (!currentProject) return;
     const name = (await window.prompt("New prefab name:"))?.trim();
@@ -1494,6 +1508,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
         deleteGraphScript,
         createScene,
         deleteScene,
+        setStartScene,
         createPrefab,
         deletePrefab,
         createAnimation,

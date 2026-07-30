@@ -398,6 +398,9 @@ export const projectsApi = {
 
   get: (name: string) => api.get<ProjectEditorData>(`api/projects/${enc(name)}/editor`),
 
+  setStartScene: (name: string, sceneId: string) =>
+    api.put<ApiResult>(`api/projects/${enc(name)}/config`, { startScene: sceneId }),
+
   // -- scenes (dedicated endpoints) --
   getScene: (project: string, scene: string) =>
     api.get<SceneResponse>(`api/projects/${enc(project)}/scenes/${enc(scene)}`),

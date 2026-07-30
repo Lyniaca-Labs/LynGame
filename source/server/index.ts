@@ -122,6 +122,25 @@ app.put("/api/projects/:project/scenes/:scene", (req, res) => {
   } catch (err) { res.status(400).json({ success: false, error: err.message }); }
 });
 
+// --- Set the project's start scene (project.lg) ---
+app.put("/api/projects/:project/config", (req, res) => {
+  try {
+    const { startScene } = req.body;
+    if (typeof startScene !== "string" || !startScene) {
+      return res.status(400).json({ success: false, error: "Missing startScene" });
+    }
+    const scenePath = path.join(projectsDir, req.params.project, "scenes", `${startScene}.json`);
+    if (!fs.existsSync(scenePath)) {
+      return res.status(400).json({ success: false, error: `Scene "${startScene}" not found` });
+    }
+    const configPath = ProjectHandler.getProjectFile(req.params.project);
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    config.startScene = startScene;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    res.json({ success: true });
+  } catch (err) { res.status(400).json({ success: false, error: err instanceof Error ? err.message : String(err) }); }
+});
+
 // TODO: implement
 app.post("/api/projects/:project/open-script", (req, res) => {
   try {
