@@ -10,6 +10,7 @@ import { Animator } from "../components/Animator.js";
 import { Opacity } from "../components/Opacity.js";
 import { Collision } from "../components/Collision.js";
 import { Follow } from "../components/Follow.js";
+import { Layout } from "../components/Layout.js";
 
 export const DEFAULT_COMPONENTS = {
   Interactable,
@@ -24,4 +25,5 @@ export const DEFAULT_COMPONENTS = {
   Opacity,
   Collision,
   Follow,
+  Layout,
 };
