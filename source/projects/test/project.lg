@@ -1,5 +1,5 @@
 {
   "name": "test",
-  "startScene": "collisionsim",
+  "startScene": "spritesheet_demo",
   "assets": []
 }

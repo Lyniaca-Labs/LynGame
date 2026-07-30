@@ -1,0 +1,1053 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Spritesheet Editor</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #17181c;
+    --bg-elevated: #202127;
+    --bg-inset: #1b1c21;
+    --border: #33343b;
+    --text: #e8e8ec;
+    --text-faint: #8a8b93;
+    --accent: #4f9eff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 12px/1.4 -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  header strong { font-size: 13px; }
+  label { color: var(--text-faint); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+  select, input[type="text"], input[type="number"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font: inherit;
+  }
+  input[type="number"] { width: 4em; }
+  button {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font: inherit;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--text-faint); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: #06121f; border-color: var(--accent); font-weight: 600; }
+  main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .sidebar {
+    width: 190px;
+    border-right: 1px solid var(--border);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .sidebar h3 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-faint); }
+  .source-list { display: flex; flex-direction: column; gap: 4px; }
+  .source-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-inset);
+    cursor: grab;
+  }
+  .source-item img { width: 20px; height: 20px; object-fit: cover; image-rendering: pixelated; border-radius: 2px; }
+  .source-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .source-item.local { border-color: var(--accent); }
+  .hidden-input { display: none; }
+  .grid-area {
+    flex: 1;
+    min-width: 0;
+    overflow: auto;
+    padding: 16px;
+    outline-offset: -8px;
+    background:
+      linear-gradient(45deg, #23242a 25%, transparent 25%, transparent 75%, #23242a 75%),
+      linear-gradient(45deg, #23242a 25%, transparent 25%, transparent 75%, #23242a 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
+  }
+  .grid-area.drag-over { outline: 2px dashed var(--accent); }
+  .grid {
+    display: grid;
+    gap: 6px;
+    width: max-content;
+  }
+  .cell {
+    width: 72px;
+    height: 88px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-elevated);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    cursor: grab;
+    position: relative;
+  }
+  .cell.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cell.drag-over { border-color: var(--accent); }
+  .cell canvas { width: 100%; height: 64px; image-rendering: pixelated; display: block; background: repeating-conic-gradient(#2a2b31 0% 25%, #202127 0% 50%) 0 0 / 8px 8px; }
+  .cell input.frame-name {
+    width: 100%;
+    border: none;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    background: var(--bg-inset);
+    font-size: 10px;
+    padding: 3px 4px;
+    text-align: center;
+  }
+  .cell .remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 16px;
+    height: 16px;
+    line-height: 14px;
+    padding: 0;
+    font-size: 11px;
+    border-radius: 3px;
+    opacity: 0;
+    background: rgba(0,0,0,0.6);
+  }
+  .cell:hover .remove { opacity: 1; }
+  .cell.add-cell {
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+    border-style: dashed;
+    color: var(--text-faint);
+    font-size: 22px;
+  }
+  .cell.add-cell.drag-over { color: var(--accent); border-color: var(--accent); }
+  .clips-panel {
+    width: 260px;
+    border-left: 1px solid var(--border);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .clip {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    background: var(--bg-elevated);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .clip-header { display: flex; align-items: center; gap: 6px; }
+  .clip-header input.clip-name { flex: 1; min-width: 0; }
+  .clip-settings { display: flex; align-items: center; gap: 8px; }
+  .clip-frames {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 30px;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 4px;
+  }
+  .clip-frames.drag-over { border-color: var(--accent); }
+  .clip-frame-chip {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-size: 10px;
+    cursor: grab;
+  }
+  .clip-frame-chip button {
+    padding: 0 2px;
+    border: none;
+    background: none;
+    font-size: 10px;
+    line-height: 1;
+  }
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .modal-box p { margin: 0; line-height: 1.5; }
+  .modal-actions { display: flex; flex-direction: column; gap: 6px; }
+  .modal-actions button { width: 100%; text-align: left; }
+  .status { color: var(--text-faint); overflow-wrap: break-word; }
+  .status.error { color: #ff6b6b; }
+  .status.ok { color: #4ade80; }
+  .empty-hint { color: var(--text-faint); font-size: 10px; padding: 6px; }
+</style>
+</head>
+<body>
+  <header>
+    <strong>🎞️ Spritesheet Editor</strong>
+
+    <button id="newBtn">New</button>
+    <button id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
+    <button id="redoBtn" title="Redo (Ctrl+Y)">Redo</button>
+
+    <label>Open
+      <select id="openSelect"><option value="">Load existing…</option></select>
+    </label>
+
+    <label>Cell
+      <input type="number" id="cellWidth" min="1" value="32" style="width:3.5em" title="Cell width" />
+      ×
+      <input type="number" id="cellHeight" min="1" value="32" style="width:3.5em" title="Cell height" />
+    </label>
+    <button id="applyCellSizeBtn" title="Re-crop every frame to the new cell size">Apply size</button>
+
+    <label>Columns
+      <input type="number" id="columns" min="1" value="4" />
+    </label>
+
+    <span style="flex:1"></span>
+
+    <label>Save as
+      <input type="text" id="filename" placeholder="my_sheet" />
+    </label>
+    <button id="saveBtn" class="primary">Save Sheet</button>
+    <button id="exportBtn" title="Export the selected frame(s) as individual image assets">Export selected</button>
+    <span class="status" id="status"></span>
+  </header>
+
+  <main>
+    <div class="sidebar">
+      <h3>Source Images</h3>
+      <button id="importBtn">+ Import from disk…</button>
+      <input type="file" id="importInput" accept="image/*" multiple class="hidden-input" />
+      <div class="source-list" id="sourceList"></div>
+    </div>
+
+    <div class="grid-area" id="gridArea">
+      <div class="grid" id="grid"></div>
+    </div>
+
+    <div class="clips-panel">
+      <h3>Clips</h3>
+      <button id="addClipBtn">+ New Clip</button>
+      <div id="clipsList"></div>
+    </div>
+  </main>
+
+  <div class="modal-overlay" id="importModeOverlay">
+    <div class="modal-box">
+      <p id="importModeText"></p>
+      <div class="modal-actions">
+        <button id="importModeCombineBtn" class="primary">Partition into frames</button>
+        <button id="importModeSingleBtn">Add as one frame (crop)</button>
+        <button id="importModeCancelBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+  import { uniqueFrameName, cropToCell, cropTile, moveFrame } from "./js/frames.mjs";
+  import { rowsFor, frameIndexToCell, compositeSheet, buildMeta } from "./js/grid.mjs";
+  import {
+    createClip, uniqueClipName, addFrameToClip, removeFrameFromClip,
+    moveFrameInClip, renameFrameInClips, removeFrameFromClips,
+  } from "./js/clips.mjs";
+  import { createUndoStack, pushSnapshot, undo, redo, resetUndoStack } from "./js/undo.mjs";
+
+  const params = new URLSearchParams(location.search);
+  const project = params.get("project") || "";
+
+  const statusEl = document.getElementById("status");
+  const gridEl = document.getElementById("grid");
+  const gridAreaEl = document.getElementById("gridArea");
+  const sourceListEl = document.getElementById("sourceList");
+  const clipsListEl = document.getElementById("clipsList");
+  const openSelect = document.getElementById("openSelect");
+  const filenameInput = document.getElementById("filename");
+  const cellWidthInput = document.getElementById("cellWidth");
+  const cellHeightInput = document.getElementById("cellHeight");
+  const columnsInput = document.getElementById("columns");
+  const importBtn = document.getElementById("importBtn");
+  const importInput = document.getElementById("importInput");
+  const undoBtn = document.getElementById("undoBtn");
+  const redoBtn = document.getElementById("redoBtn");
+  const importModeOverlay = document.getElementById("importModeOverlay");
+  const importModeText = document.getElementById("importModeText");
+  const importModeCombineBtn = document.getElementById("importModeCombineBtn");
+  const importModeSingleBtn = document.getElementById("importModeSingleBtn");
+  const importModeCancelBtn = document.getElementById("importModeCancelBtn");
+
+  function setStatus(text, kind = "") {
+    statusEl.textContent = text;
+    statusEl.className = `status ${kind}`;
+  }
+
+  // Asks whether a dropped image (bigger than one cell) should become a
+  // single cropped frame or be sliced into a cols x rows grid of frames.
+  // Resolves "single" | "combine" | null (cancelled — backdrop/Cancel/Esc).
+  function askImportMode(cols, rows) {
+    return new Promise((resolve) => {
+      importModeText.textContent =
+        `This image is bigger than one cell. Partition it into ${cols * rows} frames (${cols}×${rows}), or add it as a single cropped frame?`;
+      importModeOverlay.classList.add("open");
+
+      function cleanup(result) {
+        importModeOverlay.classList.remove("open");
+        importModeCombineBtn.removeEventListener("click", onCombine);
+        importModeSingleBtn.removeEventListener("click", onSingle);
+        importModeCancelBtn.removeEventListener("click", onCancel);
+        importModeOverlay.removeEventListener("click", onOverlayClick);
+        window.removeEventListener("keydown", onKeydown);
+        resolve(result);
+      }
+      const onCombine = () => cleanup("combine");
+      const onSingle = () => cleanup("single");
+      const onCancel = () => cleanup(null);
+      const onOverlayClick = (e) => { if (e.target === importModeOverlay) cleanup(null); };
+      const onKeydown = (e) => { if (e.key === "Escape") cleanup(null); };
+
+      importModeCombineBtn.addEventListener("click", onCombine);
+      importModeSingleBtn.addEventListener("click", onSingle);
+      importModeCancelBtn.addEventListener("click", onCancel);
+      importModeOverlay.addEventListener("click", onOverlayClick);
+      window.addEventListener("keydown", onKeydown);
+    });
+  }
+
+  // --- State ---
+  let cellWidth = 32;
+  let cellHeight = 32;
+  let columns = 4;
+  let frames = []; // { name, canvas }
+  let clips = {}; // { [name]: { frames: [frameName...], fps, loop } }
+  let selected = new Set(); // selected frame indices, for export
+  let localSources = []; // { id, name, bitmap } — imported from the OS filesystem, not project assets
+  let localSourceSeq = 0;
+
+  if (!project) setStatus("No project — open this from the editor.", "error");
+
+  // --- Undo / redo ---
+  // A snapshot deep-copies everything mutable (frame canvases, clips) so the
+  // stacks never alias the live state — see js/undo.mjs for why cloning
+  // happens here rather than inside that generic module.
+  const undoStack = createUndoStack();
+
+  function cloneCanvas(canvas) {
+    const c = document.createElement("canvas");
+    c.width = canvas.width;
+    c.height = canvas.height;
+    c.getContext("2d").drawImage(canvas, 0, 0);
+    return c;
+  }
+
+  function snapshotState() {
+    return {
+      cellWidth, cellHeight, columns,
+      frames: frames.map((f) => ({ name: f.name, canvas: cloneCanvas(f.canvas) })),
+      clips: JSON.parse(JSON.stringify(clips)),
+      selected: new Set(selected),
+    };
+  }
+
+  function applyState(snap) {
+    cellWidth = snap.cellWidth;
+    cellHeight = snap.cellHeight;
+    columns = snap.columns;
+    frames = snap.frames;
+    clips = snap.clips;
+    selected = snap.selected;
+    cellWidthInput.value = String(cellWidth);
+    cellHeightInput.value = String(cellHeight);
+    columnsInput.value = String(columns);
+    render();
+  }
+
+  // Call before every mutation, while state still reflects the pre-mutation
+  // version — mirrors pixel-art's pushSnapshot-before-paint convention.
+  function recordUndo() {
+    pushSnapshot(undoStack, snapshotState());
+    updateUndoRedoButtons();
+  }
+
+  function performUndo() {
+    const prev = undo(undoStack, snapshotState());
+    if (prev) { applyState(prev); setStatus("Undid last change."); }
+    updateUndoRedoButtons();
+  }
+
+  function performRedo() {
+    const next = redo(undoStack, snapshotState());
+    if (next) { applyState(next); setStatus("Redid change."); }
+    updateUndoRedoButtons();
+  }
+
+  function updateUndoRedoButtons() {
+    undoBtn.disabled = undoStack.undoStack.length === 0;
+    redoBtn.disabled = undoStack.redoStack.length === 0;
+  }
+
+  undoBtn.addEventListener("click", performUndo);
+  redoBtn.addEventListener("click", performRedo);
+
+  window.addEventListener("keydown", (e) => {
+    if (document.activeElement.tagName === "INPUT") return;
+    const key = e.key.toLowerCase();
+    if (e.ctrlKey && key === "z" && !e.shiftKey) {
+      e.preventDefault();
+      performUndo();
+    } else if (e.ctrlKey && (key === "y" || (key === "z" && e.shiftKey))) {
+      e.preventDefault();
+      performRedo();
+    }
+  });
+
+  // --- Networking helpers ---
+
+  async function fetchAssetFiles() {
+    const res = await fetch(`/api/projects/${encodeURIComponent(project)}/assets`);
+    const data = await res.json();
+    return data.files ?? [];
+  }
+
+  async function loadImageBitmap(filename) {
+    const res = await fetch(`/api/projects/${encodeURIComponent(project)}/assets/raw/${encodeURIComponent(filename)}`);
+    if (!res.ok) throw new Error(`Failed to load "${filename}"`);
+    const blob = await res.blob();
+    return createImageBitmap(blob);
+  }
+
+  async function loadJson(filename) {
+    const res = await fetch(`/api/projects/${encodeURIComponent(project)}/assets/raw/${encodeURIComponent(filename)}`);
+    if (!res.ok) throw new Error(`Failed to load "${filename}"`);
+    return res.json();
+  }
+
+  const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i;
+  const stripExt = (name) => name.replace(/\.[^./]+$/, "");
+
+  // A "source" is either a project asset (by filename) or an image imported
+  // straight from the OS filesystem (by localSources id) — both drag the
+  // same way and feed the same placeSource() pipeline, so they're carried
+  // as one JSON-encoded dataTransfer payload.
+  const encodeSourceRef = (ref) => JSON.stringify(ref);
+  const decodeSourceRef = (str) => { try { return JSON.parse(str); } catch { return null; } };
+
+  async function resolveSourceBitmap(ref) {
+    if (!ref) return null;
+    if (ref.kind === "local") return localSources.find((s) => s.id === ref.id)?.bitmap ?? null;
+    return loadImageBitmap(ref.filename);
+  }
+
+  let projectImageFiles = []; // cached list of the project's own image-shaped asset filenames
+
+  function renderSourceList() {
+    sourceListEl.innerHTML = "";
+    for (const file of projectImageFiles) {
+      const item = document.createElement("div");
+      item.className = "source-item";
+      item.draggable = true;
+      item.title = file;
+      const img = document.createElement("img");
+      img.src = `/api/projects/${encodeURIComponent(project)}/assets/raw/${encodeURIComponent(file)}`;
+      const label = document.createElement("span");
+      label.textContent = stripExt(file);
+      item.append(img, label);
+      item.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/spritesheet-source", encodeSourceRef({ kind: "asset", filename: file }));
+        e.dataTransfer.effectAllowed = "copy";
+      });
+      sourceListEl.appendChild(item);
+    }
+    for (const local of localSources) {
+      const item = document.createElement("div");
+      item.className = "source-item local";
+      item.draggable = true;
+      item.title = `${local.name} (imported, not yet a project asset)`;
+      const img = document.createElement("img");
+      const previewCanvas = document.createElement("canvas");
+      previewCanvas.width = local.bitmap.width;
+      previewCanvas.height = local.bitmap.height;
+      previewCanvas.getContext("2d").drawImage(local.bitmap, 0, 0);
+      img.src = previewCanvas.toDataURL();
+      const label = document.createElement("span");
+      label.textContent = local.name;
+      item.append(img, label);
+      item.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/spritesheet-source", encodeSourceRef({ kind: "local", id: local.id }));
+        e.dataTransfer.effectAllowed = "copy";
+      });
+      sourceListEl.appendChild(item);
+    }
+    if (sourceListEl.children.length === 0) {
+      sourceListEl.innerHTML = '<div class="empty-hint">Import images from disk, or drag them in here, or import them in the editor\'s Explorer first.</div>';
+    }
+  }
+
+  // Imports File objects (from the file picker or an OS drag-drop) as new
+  // local sources; doesn't touch the project's assets — they only become a
+  // real asset if/when the composited sheet is saved.
+  async function importLocalFiles(fileList) {
+    const added = [];
+    for (const file of Array.from(fileList)) {
+      if (!file.type.startsWith("image/")) continue;
+      try {
+        const bitmap = await createImageBitmap(file);
+        const id = `local_${++localSourceSeq}`;
+        const source = { id, name: stripExt(file.name), bitmap };
+        localSources.push(source);
+        added.push(source);
+      } catch {
+        setStatus(`Couldn't read "${file.name}" as an image.`, "error");
+      }
+    }
+    renderSourceList();
+    return added;
+  }
+
+  importBtn.addEventListener("click", () => importInput.click());
+  importInput.addEventListener("change", async () => {
+    if (importInput.files?.length) await importLocalFiles(importInput.files);
+    importInput.value = "";
+  });
+
+  // Dropping OS files onto the sidebar just imports them (into the source
+  // list) without placing a frame; dropping them onto empty grid-area space
+  // (not a specific cell — those have their own handlers above) also just
+  // imports, since there's no single target cell to place into.
+  sourceListEl.addEventListener("dragover", (e) => {
+    if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+  });
+  sourceListEl.addEventListener("drop", async (e) => {
+    if (!e.dataTransfer.files?.length) return;
+    e.preventDefault();
+    await importLocalFiles(e.dataTransfer.files);
+  });
+  gridAreaEl.addEventListener("dragover", (e) => {
+    if (e.dataTransfer.types.includes("Files")) {
+      e.preventDefault();
+      gridAreaEl.classList.add("drag-over");
+    }
+  });
+  gridAreaEl.addEventListener("dragleave", (e) => {
+    if (e.target === gridAreaEl) gridAreaEl.classList.remove("drag-over");
+  });
+  gridAreaEl.addEventListener("drop", async (e) => {
+    gridAreaEl.classList.remove("drag-over");
+    if (!e.dataTransfer.files?.length) return;
+    e.preventDefault();
+    await importLocalFiles(e.dataTransfer.files);
+    setStatus("Imported — drag from the Source Images list onto a cell to use.", "ok");
+  });
+
+  async function refreshLists() {
+    if (!project) return;
+    let files = [];
+    try { files = await fetchAssetFiles(); } catch { return; }
+
+    const sheetBases = new Set(
+      files.filter((f) => f.endsWith(".spritesheet.json")).map((f) => stripExt(stripExt(f)))
+    );
+
+    // A sheet's own composited PNG is a perfectly valid source too (nesting
+    // sheets is allowed), so nothing is filtered out beyond "is this an
+    // image file".
+    projectImageFiles = files.filter((f) => IMAGE_EXT.test(f));
+    renderSourceList();
+
+    // Existing sheets, for "Open existing".
+    const selectedValue = openSelect.value;
+    openSelect.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Load existing…";
+    openSelect.appendChild(placeholder);
+    for (const base of sheetBases) {
+      const opt = document.createElement("option");
+      opt.value = base;
+      opt.textContent = base;
+      openSelect.appendChild(opt);
+    }
+    if ([...sheetBases].includes(selectedValue)) openSelect.value = selectedValue;
+  }
+
+  // --- Rendering ---
+
+  function render() {
+    renderGrid();
+    renderClips();
+  }
+
+  function renderGrid() {
+    gridEl.style.gridTemplateColumns = `repeat(${columns}, 72px)`;
+    gridEl.innerHTML = "";
+
+    frames.forEach((frame, index) => {
+      const cell = document.createElement("div");
+      cell.className = "cell" + (selected.has(index) ? " selected" : "");
+      cell.draggable = true;
+      cell.dataset.index = String(index);
+
+      const canvasPreview = document.createElement("canvas");
+      canvasPreview.width = frame.canvas.width;
+      canvasPreview.height = frame.canvas.height;
+      canvasPreview.getContext("2d").drawImage(frame.canvas, 0, 0);
+
+      const nameInput = document.createElement("input");
+      nameInput.className = "frame-name";
+      nameInput.value = frame.name;
+      nameInput.addEventListener("click", (e) => e.stopPropagation());
+      nameInput.addEventListener("change", () => renameFrame(index, nameInput.value));
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "remove";
+      removeBtn.textContent = "×";
+      removeBtn.title = "Delete frame";
+      removeBtn.addEventListener("click", (e) => { e.stopPropagation(); deleteFrame(index); });
+
+      cell.append(canvasPreview, nameInput, removeBtn);
+
+      cell.addEventListener("click", () => {
+        if (selected.has(index)) selected.delete(index); else selected.add(index);
+        renderGrid();
+      });
+
+      cell.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/spritesheet-frame-index", String(index));
+        e.dataTransfer.setData("text/spritesheet-frame-name", frame.name);
+        e.dataTransfer.effectAllowed = "copyMove";
+      });
+      cell.addEventListener("dragover", (e) => {
+        if (
+          e.dataTransfer.types.includes("text/spritesheet-source") ||
+          e.dataTransfer.types.includes("text/spritesheet-frame-index") ||
+          e.dataTransfer.types.includes("Files")
+        ) {
+          e.preventDefault();
+          cell.classList.add("drag-over");
+        }
+      });
+      cell.addEventListener("dragleave", () => cell.classList.remove("drag-over"));
+      cell.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        cell.classList.remove("drag-over");
+        if (e.dataTransfer.files?.length) {
+          const [imported] = await importLocalFiles(e.dataTransfer.files);
+          if (imported) await placeSource({ kind: "local", id: imported.id }, index);
+          return;
+        }
+        const sourceRefRaw = e.dataTransfer.getData("text/spritesheet-source");
+        const fromIndexRaw = e.dataTransfer.getData("text/spritesheet-frame-index");
+        if (sourceRefRaw) {
+          await placeSource(decodeSourceRef(sourceRefRaw), index);
+        } else if (fromIndexRaw !== "") {
+          recordUndo();
+          frames = moveFrame(frames, Number(fromIndexRaw), index);
+          renderGrid();
+        }
+      });
+
+      gridEl.appendChild(cell);
+    });
+
+    // Trailing "add" slot — the only drop target for brand-new source images.
+    const addCell = document.createElement("div");
+    addCell.className = "cell add-cell";
+    addCell.textContent = "+";
+    addCell.title = "Drag a source image here to add a frame";
+    addCell.addEventListener("dragover", (e) => {
+      if (e.dataTransfer.types.includes("text/spritesheet-source") || e.dataTransfer.types.includes("Files")) {
+        e.preventDefault();
+        addCell.classList.add("drag-over");
+      }
+    });
+    addCell.addEventListener("dragleave", () => addCell.classList.remove("drag-over"));
+    addCell.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      addCell.classList.remove("drag-over");
+      if (e.dataTransfer.files?.length) {
+        const imported = await importLocalFiles(e.dataTransfer.files);
+        for (const source of imported) await placeSource({ kind: "local", id: source.id });
+        return;
+      }
+      const sourceRefRaw = e.dataTransfer.getData("text/spritesheet-source");
+      if (sourceRefRaw) await placeSource(decodeSourceRef(sourceRefRaw));
+    });
+    gridEl.appendChild(addCell);
+  }
+
+  function renderClips() {
+    clipsListEl.innerHTML = "";
+    const names = Object.keys(clips);
+    if (names.length === 0) {
+      clipsListEl.innerHTML = '<div class="empty-hint">No clips yet. Add one, then drag frames from the grid into its sequence.</div>';
+      return;
+    }
+
+    for (const clipName of names) {
+      const clip = clips[clipName];
+      const clipEl = document.createElement("div");
+      clipEl.className = "clip";
+
+      const header = document.createElement("div");
+      header.className = "clip-header";
+      const nameInput = document.createElement("input");
+      nameInput.className = "clip-name";
+      nameInput.value = clipName;
+      nameInput.addEventListener("change", () => renameClip(clipName, nameInput.value));
+      const deleteBtn = document.createElement("button");
+      deleteBtn.textContent = "×";
+      deleteBtn.title = "Delete clip";
+      deleteBtn.addEventListener("click", () => { recordUndo(); delete clips[clipName]; renderClips(); });
+      header.append(nameInput, deleteBtn);
+
+      const settings = document.createElement("div");
+      settings.className = "clip-settings";
+      const fpsLabel = document.createElement("label");
+      const fpsInput = document.createElement("input");
+      fpsInput.type = "number";
+      fpsInput.min = "1";
+      fpsInput.value = String(clip.fps);
+      fpsInput.addEventListener("change", () => { recordUndo(); clip.fps = Math.max(1, Number(fpsInput.value) || 1); });
+      fpsLabel.append("fps ", fpsInput);
+      const loopLabel = document.createElement("label");
+      const loopInput = document.createElement("input");
+      loopInput.type = "checkbox";
+      loopInput.checked = clip.loop;
+      loopInput.addEventListener("change", () => { recordUndo(); clip.loop = loopInput.checked; });
+      loopLabel.append(loopInput, " loop");
+      settings.append(fpsLabel, loopLabel);
+
+      const framesZone = document.createElement("div");
+      framesZone.className = "clip-frames";
+      clip.frames.forEach((frameName, seqIndex) => {
+        const chip = document.createElement("span");
+        chip.className = "clip-frame-chip";
+        chip.draggable = true;
+        chip.dataset.seqIndex = String(seqIndex);
+        const label = document.createElement("span");
+        label.textContent = frameName;
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "×";
+        removeBtn.addEventListener("click", () => {
+          recordUndo();
+          clips[clipName] = removeFrameFromClip(clip, seqIndex);
+          renderClips();
+        });
+        chip.append(label, removeBtn);
+        chip.addEventListener("dragstart", (e) => {
+          e.dataTransfer.setData("text/spritesheet-clip-seq", String(seqIndex));
+          e.dataTransfer.setData("text/spritesheet-clip-name", clipName);
+        });
+        chip.addEventListener("dragover", (e) => {
+          if (e.dataTransfer.types.includes("text/spritesheet-clip-seq")) e.preventDefault();
+        });
+        chip.addEventListener("drop", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.dataTransfer.getData("text/spritesheet-clip-name") !== clipName) return;
+          const from = Number(e.dataTransfer.getData("text/spritesheet-clip-seq"));
+          recordUndo();
+          clips[clipName] = moveFrameInClip(clip, from, seqIndex);
+          renderClips();
+        });
+        framesZone.appendChild(chip);
+      });
+
+      framesZone.addEventListener("dragover", (e) => {
+        if (e.dataTransfer.types.includes("text/spritesheet-frame-name")) {
+          e.preventDefault();
+          framesZone.classList.add("drag-over");
+        }
+      });
+      framesZone.addEventListener("dragleave", () => framesZone.classList.remove("drag-over"));
+      framesZone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        framesZone.classList.remove("drag-over");
+        const frameName = e.dataTransfer.getData("text/spritesheet-frame-name");
+        if (!frameName) return;
+        recordUndo();
+        clips[clipName] = addFrameToClip(clip, frameName);
+        renderClips();
+      });
+
+      clipEl.append(header, settings, framesZone);
+      clipsListEl.appendChild(clipEl);
+    }
+  }
+
+  // --- Mutations ---
+
+  // Places a dropped/imported source into the sheet. `targetIndex === null`
+  // appends a new frame; otherwise replaces that one frame's image in place.
+  // If the source is bigger than one cell, asks whether to crop it down to
+  // a single frame or partition it into a cols x rows grid of new frames —
+  // "combine" always appends (partitioning onto one target slot doesn't
+  // make sense — it's about adding several new frames from one big image).
+  async function placeSource(ref, targetIndex = null) {
+    try {
+      const bitmap = await resolveSourceBitmap(ref);
+      if (!bitmap) throw new Error("Couldn't read that source image.");
+
+      const cols = Math.max(1, Math.floor(bitmap.width / cellWidth));
+      const rows = Math.max(1, Math.floor(bitmap.height / cellHeight));
+
+      let mode = "single";
+      if (cols * rows > 1) {
+        mode = await askImportMode(cols, rows);
+        if (!mode) return; // cancelled
+      }
+
+      const rawBase = ref.kind === "local" ? localSources.find((s) => s.id === ref.id)?.name : stripExt(ref.filename);
+      const baseName = (rawBase || "frame").replace(/[^a-zA-Z0-9_-]/g, "_");
+
+      recordUndo();
+
+      if (mode === "combine") {
+        let added = 0;
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const canvas = cropTile(bitmap, c * cellWidth, r * cellHeight, cellWidth, cellHeight);
+            const name = uniqueFrameName(frames, `${baseName}_${added}`);
+            frames.push({ name, canvas });
+            added++;
+          }
+        }
+        setStatus(`Added ${added} frames from "${baseName}"`, "ok");
+      } else if (targetIndex !== null) {
+        frames[targetIndex] = { name: frames[targetIndex].name, canvas: cropToCell(bitmap, cellWidth, cellHeight) };
+      } else {
+        const name = uniqueFrameName(frames, baseName);
+        frames.push({ name, canvas: cropToCell(bitmap, cellWidth, cellHeight) });
+        setStatus(`Added frame "${name}"`, "ok");
+      }
+      renderGrid();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err), "error");
+    }
+  }
+
+  function renameFrame(index, rawName) {
+    const oldName = frames[index].name;
+    const name = uniqueFrameName(frames.filter((_, i) => i !== index), rawName.trim() || oldName);
+    if (name === oldName) return;
+    recordUndo();
+    frames[index] = { ...frames[index], name };
+    clips = renameFrameInClips(clips, oldName, name);
+    render();
+  }
+
+  function deleteFrame(index) {
+    recordUndo();
+    const name = frames[index].name;
+    frames = frames.filter((_, i) => i !== index);
+    clips = removeFrameFromClips(clips, name);
+    selected = new Set([...selected].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+    render();
+  }
+
+  function renameClip(oldName, rawName) {
+    const name = rawName.trim();
+    if (!name || name === oldName || name in clips) { renderClips(); return; }
+    recordUndo();
+    const next = {};
+    for (const [k, v] of Object.entries(clips)) next[k === oldName ? name : k] = v;
+    clips = next;
+    renderClips();
+  }
+
+  // --- Toolbar actions ---
+
+  document.getElementById("newBtn").addEventListener("click", () => {
+    if (frames.length > 0 && !confirm("Discard the current sheet and start a new one?")) return;
+    frames = [];
+    clips = {};
+    selected = new Set();
+    filenameInput.value = "";
+    openSelect.value = "";
+    resetUndoStack(undoStack);
+    updateUndoRedoButtons();
+    render();
+  });
+
+  document.getElementById("addClipBtn").addEventListener("click", () => {
+    recordUndo();
+    const name = uniqueClipName(clips, "clip");
+    clips[name] = createClip();
+    renderClips();
+  });
+
+  document.getElementById("applyCellSizeBtn").addEventListener("click", () => {
+    const w = Math.max(1, Number(cellWidthInput.value) || cellWidth);
+    const h = Math.max(1, Number(cellHeightInput.value) || cellHeight);
+    recordUndo();
+    frames = frames.map((f) => ({ name: f.name, canvas: cropToCell(f.canvas, w, h) }));
+    cellWidth = w;
+    cellHeight = h;
+    renderGrid();
+  });
+
+  columnsInput.addEventListener("change", () => {
+    columns = Math.max(1, Number(columnsInput.value) || columns);
+    renderGrid();
+  });
+
+  document.getElementById("saveBtn").addEventListener("click", async () => {
+    const name = filenameInput.value.trim();
+    if (!project) { setStatus("No project — open this from the editor.", "error"); return; }
+    if (!name) { setStatus("Enter a filename first.", "error"); return; }
+    if (frames.length === 0) { setStatus("Add at least one frame first.", "error"); return; }
+
+    setStatus("Saving…");
+    try {
+      const composited = compositeSheet(frames, cellWidth, cellHeight, columns);
+      const meta = buildMeta(frames, clips, cellWidth, cellHeight, columns);
+      const res = await fetch("/api/extensions/spritesheet/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project, filename: name, dataUrl: composited.toDataURL("image/png"), meta }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Save failed");
+
+      setStatus(`Saved ${data.filename}`, "ok");
+      window.parent.postMessage({ type: "EXTENSION_ASSET_SAVED", extension: "spritesheet", project, filename: data.filename }, "*");
+      await refreshLists();
+      openSelect.value = stripExt(data.filename);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err), "error");
+    }
+  });
+
+  document.getElementById("exportBtn").addEventListener("click", async () => {
+    if (!project) { setStatus("No project — open this from the editor.", "error"); return; }
+    if (selected.size === 0) { setStatus("Select frame(s) in the grid first (click to select).", "error"); return; }
+
+    setStatus("Exporting…");
+    try {
+      const prefix = filenameInput.value.trim() || "frame";
+      let lastFilename = "";
+      for (const index of selected) {
+        const frame = frames[index];
+        if (!frame) continue;
+        const filename = `${prefix}_${frame.name}`.replace(/[^a-zA-Z0-9_.-]/g, "_");
+        const res = await fetch("/api/extensions/spritesheet/export-frame", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project, filename, dataUrl: frame.canvas.toDataURL("image/png") }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || `Failed to export "${frame.name}"`);
+        lastFilename = data.filename;
+      }
+      setStatus(`Exported ${selected.size} frame(s)`, "ok");
+      window.parent.postMessage({ type: "EXTENSION_ASSET_SAVED", extension: "spritesheet", project, filename: lastFilename }, "*");
+      await refreshLists();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err), "error");
+    }
+  });
+
+  openSelect.addEventListener("change", async () => {
+    const base = openSelect.value;
+    if (base) await openSheet(base);
+  });
+
+  async function openSheet(base) {
+    setStatus("Loading…");
+    try {
+      const meta = await loadJson(`${base}.spritesheet.json`);
+      const bitmap = await loadImageBitmap(`${base}.png`);
+
+      cellWidth = meta.cellWidth;
+      cellHeight = meta.cellHeight;
+      columns = meta.columns;
+      clips = meta.clips || {};
+      selected = new Set();
+
+      frames = [...meta.frames]
+        .sort((a, b) => a.index - b.index)
+        .map((frameDef) => {
+          const { col, row } = frameIndexToCell(frameDef.index, columns);
+          const canvas = document.createElement("canvas");
+          canvas.width = cellWidth;
+          canvas.height = cellHeight;
+          canvas.getContext("2d").drawImage(
+            bitmap,
+            col * cellWidth, row * cellHeight, cellWidth, cellHeight,
+            0, 0, cellWidth, cellHeight
+          );
+          return { name: frameDef.name, canvas };
+        });
+
+      cellWidthInput.value = String(cellWidth);
+      cellHeightInput.value = String(cellHeight);
+      columnsInput.value = String(columns);
+      filenameInput.value = base;
+
+      resetUndoStack(undoStack);
+      updateUndoRedoButtons();
+      render();
+      setStatus(`Opened ${base}`, "ok");
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err), "error");
+    }
+  }
+
+  refreshLists();
+  updateUndoRedoButtons();
+  render();
+</script>
+</body>
+</html>

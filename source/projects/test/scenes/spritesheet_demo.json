@@ -1,0 +1,198 @@
+{
+  "name": "spritesheet_demo",
+  "entities": [
+    {
+      "id": "cam",
+      "components": {
+        "Transform": {
+          "x": 200,
+          "y": 150,
+          "rotation": 0,
+          "fixed": false
+        },
+        "Camera": {
+          "zoom": 1,
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "bounds": null,
+          "target": null
+        }
+      }
+    },
+    {
+      "id": "staticLabel",
+      "components": {
+        "Transform": {
+          "x": 20,
+          "y": 20,
+          "rotation": 0,
+          "zIndex": 2
+        },
+        "TextRenderer": {
+          "text": "Static frame: SpriteRenderer.sprite=\"blob\", frame=\"idle_2\"",
+          "fontSize": 13,
+          "color": "#ffffff"
+        }
+      }
+    },
+    {
+      "id": "staticBlob",
+      "components": {
+        "Transform": {
+          "x": 60,
+          "y": 70,
+          "rotation": 0,
+          "zIndex": 1
+        },
+        "SpriteRenderer": {
+          "sprite": "blob",
+          "frame": "idle_2",
+          "width": 64,
+          "height": 64
+        }
+      }
+    },
+    {
+      "id": "idleLabel",
+      "components": {
+        "Transform": {
+          "x": 133,
+          "y": -11,
+          "rotation": 0,
+          "zIndex": 2
+        },
+        "TextRenderer": {
+          "text": "SpriteAnimation clip=\"idle\" (pulsing circle, 6fps, loop)",
+          "fontSize": 13,
+          "color": "#ffffff"
+        }
+      }
+    },
+    {
+      "id": "idleBlob",
+      "components": {
+        "Transform": {
+          "x": 200,
+          "y": 70,
+          "rotation": 0,
+          "zIndex": 1
+        },
+        "SpriteRenderer": {
+          "sprite": "blob",
+          "frame": "idle_0",
+          "width": 64,
+          "height": 64
+        },
+        "SpriteAnimation": {
+          "clip": "idle",
+          "playing": true,
+          "speed": 1
+        }
+      }
+    },
+    {
+      "id": "bounceLabel",
+      "components": {
+        "Transform": {
+          "x": 230,
+          "y": -53,
+          "rotation": 0,
+          "zIndex": 2
+        },
+        "TextRenderer": {
+          "text": "SpriteAnimation clip=\"bounce\" (8fps, loop)",
+          "fontSize": 13,
+          "color": "#ffffff"
+        }
+      }
+    },
+    {
+      "id": "bounceBlob",
+      "components": {
+        "Transform": {
+          "x": 340,
+          "y": 70,
+          "rotation": 0,
+          "zIndex": 1
+        },
+        "SpriteRenderer": {
+          "sprite": "blob",
+          "frame": "bounce_0",
+          "width": 64,
+          "height": 64
+        },
+        "SpriteAnimation": {
+          "clip": "bounce",
+          "playing": true,
+          "speed": 1
+        }
+      }
+    },
+    {
+      "id": "switchLabel",
+      "components": {
+        "Transform": {
+          "x": 20,
+          "y": 190,
+          "rotation": 0,
+          "zIndex": 2
+        },
+        "TextRenderer": {
+          "text": "Click the blob below to switch clips at runtime (SpriteAnimation.play)",
+          "fontSize": 13,
+          "color": "#ffffff"
+        }
+      }
+    },
+    {
+      "id": "switchLabel2",
+      "components": {
+        "Transform": {
+          "x": 20,
+          "y": 208,
+          "rotation": 0,
+          "zIndex": 2
+        },
+        "TextRenderer": {
+          "text": "entity.getComponent(\"SpriteAnimation\").play(next, { restart: true })",
+          "fontSize": 11,
+          "color": "#8a8b93"
+        }
+      }
+    },
+    {
+      "id": "switchBlob",
+      "components": {
+        "Transform": {
+          "x": 200,
+          "y": 250,
+          "rotation": 0,
+          "zIndex": 1
+        },
+        "SpriteRenderer": {
+          "sprite": "blob",
+          "frame": "idle_0",
+          "width": 80,
+          "height": 80
+        },
+        "SpriteAnimation": {
+          "clip": "idle",
+          "playing": true,
+          "speed": 1
+        },
+        "Interactable": {
+          "width": 0,
+          "height": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "cursor": "pointer",
+          "holdThreshold": 0.4,
+          "dragThreshold": 25,
+          "onClick": "const anim = entity.getComponent(\"SpriteAnimation\");\nconst next = anim.clip === \"idle\" ? \"bounce\" : \"idle\";\nanim.play(next, { restart: true });\n"
+        }
+      }
+    }
+  ]
+}

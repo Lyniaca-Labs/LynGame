@@ -1,0 +1,12 @@
+{
+  "name": "spritesheet",
+  "displayName": "Spritesheet Editor",
+  "description": "Compose sprite sheets from loose images, reorder/name frames, and build fps-timed animation clips.",
+  "icon": "🎞️",
+  "activation": ["toolbar"],
+  "view": {
+    "type": "modal",
+    "size": "full",
+    "entry": "index.html"
+  }
+}

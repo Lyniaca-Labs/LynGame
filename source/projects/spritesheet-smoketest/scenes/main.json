@@ -1,0 +1,25 @@
+{
+  "name": "main",
+  "entities": [
+    {
+      "id": "hero1",
+      "components": {
+        "Transform": {
+          "x": 50,
+          "y": 50,
+          "rotation": 0
+        },
+        "SpriteRenderer": {
+          "sprite": "hero",
+          "frame": "idle_0",
+          "width": 32,
+          "height": 32
+        },
+        "SpriteAnimation": {
+          "clip": "idle",
+          "playing": true
+        }
+      }
+    }
+  ]
+}

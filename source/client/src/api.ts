@@ -172,7 +172,7 @@ export interface ProjectInfo {
 export interface AssetEntry {
   key: string;
   relativePath: string;
-  type: "image" | "audio" | "texture" | "other";
+  type: "image" | "audio" | "texture" | "spritesheet" | "other";
   size?: number;
 }
 

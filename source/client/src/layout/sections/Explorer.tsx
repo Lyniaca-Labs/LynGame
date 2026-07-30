@@ -24,6 +24,7 @@ import {
   Search,
   X,
   WandSparkles,
+  LayoutGrid,
   Copy,
   ClipboardCopy,
   ClipboardPaste,
@@ -918,6 +919,7 @@ function ExplorerAssets() {
   );
   const imageCount = projectData.assets.filter((asset) => asset.type === "image").length;
   const textureCount = projectData.assets.filter((asset) => asset.type === "texture").length;
+  const spritesheetCount = projectData.assets.filter((asset) => asset.type === "spritesheet").length;
 
   return (
     <div
@@ -947,7 +949,7 @@ function ExplorerAssets() {
         <div>
           <div className="text-xs font-semibold text-[var(--color-text)]">Asset Library</div>
           <div className="mt-0.5 text-[10px] text-[var(--color-text-faint)]">
-            {projectData.assets.length} assets · {imageCount} images · {textureCount} textures
+            {projectData.assets.length} assets · {imageCount} images · {spritesheetCount} spritesheets · {textureCount} textures
           </div>
         </div>
         <Button
@@ -1092,11 +1094,13 @@ function AssetCard({ asset, project, assets, onOpen, onRename, onDelete }: Asset
     <WandSparkles size={22} className="text-[var(--color-accent-secondary)]" />
   ) : asset.type === "audio" ? (
     <Music size={22} />
+  ) : asset.type === "spritesheet" ? (
+    <LayoutGrid size={22} />
   ) : (
     <File size={22} />
   );
 
-  const hasVisual = (asset.type === "image") || (asset.type === "texture" && texturePreview);
+  const hasVisual = (asset.type === "image") || (asset.type === "spritesheet") || (asset.type === "texture" && texturePreview);
 
   const toggleAudioPreview = () => {
     if (!assetUrl) return;
@@ -1130,6 +1134,8 @@ function AssetCard({ asset, project, assets, onOpen, onRename, onDelete }: Asset
       <div className="absolute inset-0 flex items-center justify-center bg-black/25">
         {asset.type === "image" ? (
           <img src={assetUrl} alt={asset.key} className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" />
+        ) : asset.type === "spritesheet" ? (
+          <img src={assetUrl} alt={asset.key} className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" style={{ imageRendering: "pixelated" }} />
         ) : asset.type === "texture" && texturePreview ? (
           <img src={texturePreview} alt={`${asset.key} preview`} className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" />
         ) : asset.type === "texture" && !previewFailed ? (

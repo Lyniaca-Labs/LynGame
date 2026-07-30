@@ -23,15 +23,16 @@ top of that file). Completed work with implementation detail lives in
 
 ## Spritesheets
 
-- [ ] SpriteSheets — faster card art iteration than one texture per card
-- [ ] spritesheet partitioner (extension)
-  - [ ] load asset -> select which frames are keyed at indexes -> save as a new asset
-  - [ ] needs spritesheet support -> should kinda work like animation clips
-  - [ ] can select multiple assets to combine them into a spritesheet or split them up into multiple
+- [x] SpriteSheets — faster card art iteration than one texture per card
+- [x] spritesheet partitioner (extension)
+  - [x] load asset -> select which frames are keyed at indexes -> save as a new asset
+  - [x] needs spritesheet support -> should kinda work like animation clips
+  - [x] can select multiple assets to combine them into a spritesheet or split them up into multiple
 
 
 ## Open Bugs
 
+- [ ] save lastproject in local storage and default to it on startup
 - [x] switching projects does not fully refresh everything
 - [x] need checkbox component for editor
 - [x] standardize the code editor modal

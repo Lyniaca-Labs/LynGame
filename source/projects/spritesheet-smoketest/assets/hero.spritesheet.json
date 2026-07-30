@@ -1,0 +1,25 @@
+{
+  "cellWidth": 1,
+  "cellHeight": 1,
+  "columns": 1,
+  "frames": [
+    {
+      "index": 0,
+      "name": "idle_0"
+    },
+    {
+      "index": 1,
+      "name": "idle_1"
+    }
+  ],
+  "clips": {
+    "idle": {
+      "frames": [
+        "idle_0",
+        "idle_1"
+      ],
+      "fps": 8,
+      "loop": true
+    }
+  }
+}

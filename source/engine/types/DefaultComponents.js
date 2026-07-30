@@ -1,5 +1,6 @@
 import { Transform } from "../components/Transform.js";
 import { SpriteRenderer } from "../components/SpriteRenderer.js";
+import { SpriteAnimation } from "../components/SpriteAnimation.js";
 import { Movement } from "../components/Movement.js";
 import { ShapeRenderer } from "../components/ShapeRenderer.js";
 import { TextRenderer } from "../components/TextRenderer.js";
@@ -16,6 +17,7 @@ export const DEFAULT_COMPONENTS = {
   Interactable,
   Transform,
   SpriteRenderer,
+  SpriteAnimation,
   ShapeRenderer,
   TextRenderer,
   Camera,

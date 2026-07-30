@@ -16,6 +16,7 @@ export default class AssetLoader {
   async _loadOne(key, url, type) {
     if (type === "image") this.cache[key] = await this._loadImage(url);
     else if (type === "texture") this.cache[key] = await this._loadTexture(url);
+    else if (type === "spritesheet") this.cache[key] = await this._loadSpritesheet(url);
     else if (type === "audio") this.cache[key] = await this._loadAudio(url);
     else this.cache[key] = await this._loadRaw(url);
   }
@@ -43,6 +44,19 @@ export default class AssetLoader {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to load asset "${url}"`);
     return res;
+  }
+
+  // A spritesheet asset is a plain image plus a sidecar `<name>.spritesheet.json`
+  // (same basename, `.png`/etc swapped for the sidecar extension) describing
+  // its grid + named frames/clips. Cached as { image, meta } so SpriteRenderer
+  // can tell a spritesheet apart from a plain Image at render time.
+  async _loadSpritesheet(url) {
+    const image = await this._loadImage(url);
+    const metaUrl = url.replace(/\.[^./]+$/, ".spritesheet.json");
+    const res = await fetch(metaUrl);
+    if (!res.ok) throw new Error(`Failed to load spritesheet metadata "${metaUrl}"`);
+    const meta = await res.json();
+    return { image, meta };
   }
 
   async _loadTexture(url) {

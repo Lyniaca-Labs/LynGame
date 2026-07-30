@@ -15,7 +15,7 @@ const engineComponentsDir = path.join(sourceRoot, "engine/components");
 type ComponentSource = "engine" | "project";
 type ComponentEntry = { source: ComponentSource; filename: string; className?: string };
 type ComponentManifest = Record<string, ComponentEntry>;
-type Asset = { relativePath: string; type: "image" | "audio" | "texture" | "other"; size?: number };
+type Asset = { relativePath: string; type: "image" | "audio" | "texture" | "spritesheet" | "other"; size?: number };
 type AssetManifest = Record<string, Asset>;
 type JsonRecord = Record<string, any>;
 
@@ -101,7 +101,19 @@ export default class ProjectHandler {
     const AUDIO_EXT = new Set([".mp3", ".wav", ".ogg", ".m4a"]);
 
     function walk(dir, relPrefix) {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+      // A spritesheet is a plain image with a sidecar `<name>.spritesheet.json`
+      // sitting next to it — collected up front (per directory) so the sidecar
+      // can both be skipped as its own asset (like `.texture.js` below) and
+      // reclassify its sibling image's type in the same pass.
+      const spritesheetSidecars = new Set(
+        entries
+          .filter((entry) => !entry.isDirectory() && entry.name.endsWith(".spritesheet.json"))
+          .map((entry) => entry.name.slice(0, -".spritesheet.json".length))
+      );
+
+      for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
 
         if (entry.isDirectory()) {
@@ -109,6 +121,7 @@ export default class ProjectHandler {
           continue;
         }
         if (entry.name.endsWith(".texture.js")) continue;
+        if (entry.name.endsWith(".spritesheet.json")) continue; // sidecar, not its own asset
 
         const ext = path.extname(entry.name).toLowerCase();
         const nameNoExt = entry.name.slice(0, -ext.length);
@@ -122,7 +135,7 @@ export default class ProjectHandler {
         }
 
         let type: Asset["type"] = "other";
-        if (IMAGE_EXT.has(ext)) type = "image";
+        if (IMAGE_EXT.has(ext)) type = spritesheetSidecars.has(nameNoExt) ? "spritesheet" : "image";
         else if (AUDIO_EXT.has(ext)) type = "audio";
         else if (ext === ".texture.json" || entry.name.endsWith(".texture.json")) type = "texture";
 
@@ -335,6 +348,10 @@ export default class ProjectHandler {
       : [];
     const animationNames = new Set(animationFiles.map((f) => path.basename(f, ".json")));
 
+    // Computed up front (rather than down by the manifest emission below) so
+    // checkSpriteFrameRefs can consult it while entities/prefabs are rendered.
+    const assetManifest = ProjectHandler.scanAssets(projectName);
+
     const allComponents = new Set<string>();
     const allScripts = new Map<string, Set<string>>();
 
@@ -352,6 +369,48 @@ export default class ProjectHandler {
             `no file named "${clipName}.json" exists in ${animationsDir}.`
           );
         }
+      }
+    }
+
+    // SpriteRenderer.frame and SpriteAnimation.clip both name things that
+    // live inside the spritesheet asset SpriteRenderer.sprite points at — so,
+    // unlike checkAnimatorClipRefs, this needs an entity's whole `components`
+    // map in one call (not one component at a time) to see `sprite` and
+    // `frame`/`clip` together. Only validates when `sprite` is present in the
+    // same map being checked — e.g. a prefab-instance override that sets only
+    // `frame` without also overriding `sprite` is skipped here, same
+    // known limitation checkAnimatorClipRefs already documents above.
+    const spritesheetMetaCache = new Map<string, any | null>(); // assetKey -> parsed sidecar, or null if not a spritesheet
+    function loadSpritesheetMeta(assetKey: string) {
+      if (spritesheetMetaCache.has(assetKey)) return spritesheetMetaCache.get(assetKey);
+      const asset = assetManifest[assetKey];
+      if (!asset || asset.type !== "spritesheet") {
+        spritesheetMetaCache.set(assetKey, null);
+        return null;
+      }
+      const imagePath = path.join(sourceRoot, "projects", projectName, "assets", asset.relativePath);
+      const jsonPath = imagePath.replace(/\.[^./\\]+$/, ".spritesheet.json");
+      const meta = fs.existsSync(jsonPath) ? JSON.parse(fs.readFileSync(jsonPath, "utf-8")) : null;
+      spritesheetMetaCache.set(assetKey, meta);
+      return meta;
+    }
+
+    function checkSpriteFrameRefs(components: any, location: string) {
+      const renderer = components?.SpriteRenderer;
+      if (!renderer?.sprite) return;
+      const meta = loadSpritesheetMeta(renderer.sprite);
+      if (!meta) return; // plain image asset (or missing asset, caught elsewhere) — nothing to validate
+
+      if (renderer.frame && !meta.frames?.some((f) => f.name === renderer.frame)) {
+        throw new Error(
+          `Missing frame "${renderer.frame}" on spritesheet "${renderer.sprite}" (referenced by ${location}).`
+        );
+      }
+      const clip = components?.SpriteAnimation?.clip;
+      if (clip && !meta.clips?.[clip]) {
+        throw new Error(
+          `Missing clip "${clip}" on spritesheet "${renderer.sprite}" (referenced by ${location}).`
+        );
       }
     }
 
@@ -427,6 +486,7 @@ export default class ProjectHandler {
         checkAnimatorClipRefs(compName, data, location);
         lines.push(`${indent}${varName}.addComponent(${compName}_component, ${JSON.stringify(data)});`);
       }
+      checkSpriteFrameRefs(node.components, location);
       for (const scriptName of node.scripts || []) {
         lines.push(`${indent}${varName}.attachScript(${scriptSymbol(scriptName)}_script);`);
       }
@@ -460,6 +520,7 @@ export default class ProjectHandler {
             `${indent}${varName}.addComponent(${compName}_component, { ...${JSON.stringify(data)}, ...(childOverrides[${pathLit}]?.${compName} || {}) });`
           );
         }
+        checkSpriteFrameRefs(child.components, location);
         for (const scriptName of child.scripts || []) {
           lines.push(`${indent}${varName}.attachScript(${scriptSymbol(scriptName)}_script);`);
         }
@@ -493,6 +554,7 @@ export default class ProjectHandler {
             checkAnimatorClipRefs(compName, data, location);
             bodyLines.push(`    ${varName}.addComponent(${compName}_component, ${JSON.stringify(data)});`);
           }
+          checkSpriteFrameRefs(entity.components, location);
           for (const scriptName of entity.scripts || []) {
             addScriptRef(scriptName, location);
             bodyLines.push(`    ${varName}.attachScript(${scriptSymbol(scriptName)}_script);`);
@@ -557,6 +619,7 @@ export default class ProjectHandler {
           `  entity.addComponent(${compName}_component, { ...${JSON.stringify(data)}, ...(overrides.${compName} || {}) });`
         );
       }
+      checkSpriteFrameRefs(prefab.components, location);
       for (const scriptName of prefab.scripts || []) {
         rootLines.push(`  entity.attachScript(${scriptSymbol(scriptName)}_script);`);
       }
@@ -625,7 +688,6 @@ export default class ProjectHandler {
       })
       .join("\n");
 
-    const assetManifest = ProjectHandler.scanAssets(projectName);
     for (const asset of Object.values(assetManifest)) {
       if (asset.type === "texture") asset.relativePath = compiledTextureFilename(asset.relativePath);
     }
