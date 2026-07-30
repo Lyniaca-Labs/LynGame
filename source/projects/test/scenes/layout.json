@@ -1,0 +1,172 @@
+{
+  "name": "layout",
+  "entities": [
+    {
+      "id": "cam",
+      "components": {
+        "Transform": { "x": 200, "y": 250, "rotation": 0, "fixed": false },
+        "Camera": { "zoom": 1, "offset": { "x": 0, "y": 0 }, "bounds": null, "target": null }
+      }
+    },
+    {
+      "id": "flowLabel",
+      "components": {
+        "Transform": { "x": 20, "y": 15, "rotation": 0, "zIndex": 2 },
+        "TextRenderer": {
+          "text": "Flow: width=200, wrap, justify=space-between, align=center",
+          "fontSize": 14,
+          "color": "#ffffff"
+        }
+      }
+    },
+    {
+      "id": "flowContainer",
+      "components": {
+        "Transform": { "x": 20, "y": 50, "rotation": 0, "zIndex": 0 },
+        "Layout": {
+          "mode": "flow",
+          "direction": "row",
+          "wrap": true,
+          "width": 200,
+          "height": 0,
+          "gapX": 10,
+          "gapY": 10,
+          "maxCols": 0,
+          "maxRows": 0,
+          "justify": "space-between",
+          "align": "center",
+          "paddingX": 10,
+          "paddingY": 10
+        }
+      }
+    },
+    {
+      "id": "flowItem1",
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "zIndex": 1 },
+        "ShapeRenderer": { "shape": "rect", "width": 40, "height": 40, "color": "#e0475b" }
+      },
+      "parentId": "flowContainer"
+    },
+    {
+      "id": "flowItem2",
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "zIndex": 1 },
+        "ShapeRenderer": { "shape": "circle", "width": 30, "height": 30, "color": "#4b8bf5" }
+      },
+      "parentId": "flowContainer"
+    },
+    {
+      "id": "flowItem3",
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "zIndex": 1 },
+        "ShapeRenderer": { "shape": "rect", "width": 60, "height": 30, "color": "#f5c542" }
+      },
+      "parentId": "flowContainer"
+    },
+    {
+      "id": "flowItem4",
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "zIndex": 1 },
+        "ShapeRenderer": { "shape": "circle", "width": 45, "height": 45, "color": "#a557e0" }
+      },
+      "parentId": "flowContainer"
+    },
+    {
+      "id": "flowItem5",
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "zIndex": 1 },
+        "ShapeRenderer": { "shape": "rect", "width": 35, "height": 50, "color": "#68d38b" }
+      },
+      "parentId": "flowContainer"
+    },
+    {
+      "id": "flowItem6",
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "zIndex": 1 },
+        "ShapeRenderer": { "shape": "rect", "width": 50, "height": 50, "color": "#42d4c5" }
+      },
+      "parentId": "flowContainer"
+    },
+    {
+      "id": "gridLabel",
+      "components": {
+        "Transform": { "x": 20, "y": 210, "rotation": 0, "zIndex": 2 },
+        "TextRenderer": {
+          "text": "Grid: 3 cols x 2 rows, auto-sized tracks, justify=center, align=center",
+          "fontSize": 14,
+          "color": "#ffffff"
+        }
+      }
+    },
+    {
+      "id": "gridContainer",
+      "components": {
+        "Transform": { "x": 20, "y": 230, "rotation": 0, "zIndex": 0 },
+        "Layout": {
+          "mode": "grid",
+          "direction": "row",
+          "wrap": true,
+          "width": 0,
+          "height": 0,
+          "gapX": 12,
+          "gapY": 12,
+          "maxCols": 3,
+          "maxRows": 2,
+          "justify": "center",
+          "align": "center",
+          "paddingX": 10,
+          "paddingY": 10
+        }
+      }
+    },
+    {
+      "id": "gridItem1",
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "zIndex": 1 },
+        "ShapeRenderer": { "shape": "rect", "width": 30, "height": 30, "color": "#ff8c42" }
+      },
+      "parentId": "gridContainer"
+    },
+    {
+      "id": "gridItem2",
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "zIndex": 1 },
+        "ShapeRenderer": { "shape": "circle", "width": 40, "height": 40, "color": "#e0475b" }
+      },
+      "parentId": "gridContainer"
+    },
+    {
+      "id": "gridItem3",
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "zIndex": 1 },
+        "ShapeRenderer": { "shape": "rect", "width": 25, "height": 45, "color": "#4b8bf5" }
+      },
+      "parentId": "gridContainer"
+    },
+    {
+      "id": "gridItem4",
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "zIndex": 1 },
+        "ShapeRenderer": { "shape": "circle", "width": 35, "height": 35, "color": "#f5c542" }
+      },
+      "parentId": "gridContainer"
+    },
+    {
+      "id": "gridItem5",
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "zIndex": 1 },
+        "ShapeRenderer": { "shape": "rect", "width": 50, "height": 25, "color": "#a557e0" }
+      },
+      "parentId": "gridContainer"
+    },
+    {
+      "id": "gridItem6",
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "zIndex": 1 },
+        "ShapeRenderer": { "shape": "rect", "width": 30, "height": 30, "color": "#68d38b" }
+      },
+      "parentId": "gridContainer"
+    }
+  ]
+}
