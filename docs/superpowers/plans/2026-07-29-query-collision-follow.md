@@ -838,8 +838,10 @@ function fakeEngine(entities) {
   follower.addComponent(Follow, { targetId: "target", mode: "exponential", roundness: 0.85 });
   const engine = fakeEngine([target, follower]);
 
+  // roundness 0.85 means only 15% of the gap closes per second (near-1 =
+  // lazy/slow), so simulate 5 seconds of ticks to see substantial progress.
   const followComp = follower.getComponent(Follow);
-  for (let i = 0; i < 60; i++) followComp.onTick(follower, engine, 1 / 60);
+  for (let i = 0; i < 300; i++) followComp.onTick(follower, engine, 1 / 60);
 
   const x = follower.getComponent(Transform).x;
   assert.ok(x > 50 && x < 100, `expected partial progress toward target, got x=${x}`);
