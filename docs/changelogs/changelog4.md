@@ -3,7 +3,9 @@
 2026-07-29. Feature: a standard entity/component query system
 (`engine.query()`), a `Collision` component (AABB detection + optional
 mass-based resolution), and a `Follow` component (three smoothing modes),
-plus the Inspector support to author them.
+plus the Inspector support to author them. Includes a same-day fix for a
+circle-collision bug found while dogfooding the feature (see "Bug fix"
+below).
 
 ## `engine.query()` — the standard entity/component lookup
 
@@ -163,3 +165,55 @@ the engine's ESM `export`/`import` syntax as CommonJS and failed. `test/`
 and this new `package.json` are excluded from the engine copy in
 `source/server/compiler/build.ts` (same pattern already used to exclude
 `.extensions/` from the project copy) so they never ship in a built game.
+
+## Bug fix: Collision treated every shape as a box
+
+**Found while dogfooding** the `collisionsim` test scene: circles didn't
+correctly interact with other circles. `Collision.checkPair` always ran
+AABB box-vs-box overlap and resolution regardless of `ShapeRenderer.shape`
+— two circles were collision-tested as their bounding boxes, so
+diagonally-adjacent circles whose *boxes* overlapped but which weren't
+actually touching would incorrectly collide, and even when they were
+genuinely touching, the push-apart direction was locked to whichever world
+axis had less box overlap instead of following the real line between the
+two circle centers.
+
+**File:** `source/engine/components/Collision.js`
+
+- Added a `shape` schema field (`"auto"` default derives from the entity's
+  `ShapeRenderer.shape`, falling back to `"rect"`; can be overridden
+  explicitly).
+- Replaced the single box-only overlap check with three narrow-phase
+  routines, dispatched by the pair's resolved shapes:
+  - `_rectRect` — unchanged AABB minimum-translation-vector math.
+  - `_circleCircle` — overlap when center distance < sum of radii; the
+    separating normal is the actual direction between the two centers.
+  - `_circleRect` — closest-point-on-box-to-circle-center distance vs
+    radius, with a fallback for when the circle's center is inside the box
+    (pushes out through whichever edge is nearest, mirroring `_rectRect`'s
+    axis-of-minimum-penetration idea).
+- All three now return a normal vector (`nx`, `ny`) + penetration `depth`
+  instead of the old axis-only `overlapX`/`overlapY`, so `_resolve` and the
+  bounce reflection (`_applyBounce`) work off an arbitrary-direction normal
+  — not just the two world axes. Bounce reflection is now the standard
+  vector formula `v' = v - (1+bounce)*(v·n)*n` instead of only touching one
+  axis's velocity component.
+
+**Regression test**, `source/engine/test/collision.test.mjs`: two circles
+placed so their 40x40 bounding boxes overlap diagonally but the circles
+themselves are ~2.4px apart (distance 42.4 vs radius sum 40) now correctly
+report no collision — this is the exact failure mode the bug produced.
+Added alongside: circle-circle overlap resolves to exactly radius-sum
+apart (both axis-aligned and diagonal), and circle-rect resolution.
+
+**Test scene**, `source/projects/test/scenes/collisionsim.json`: expanded
+from 3 ad hoc entities into a properly structured demo — `walls`
+(floor/wallLeft/wallRight, grouped under a `walls` parent via `parentId`),
+`balls` (four same-size circles clustered tightly enough to overlap on
+landing, plus one larger circle — exercising circle-circle at both equal
+and unequal radii), and `boxes` (two rectangles, for rect-rect and
+circle-rect against the circles). Verified with a standalone 8-second
+simulation (no DOM): every entity settles into a single row on the floor,
+contained within the walls, with zero residual overlap between any pair —
+checked with a geometry re-check written independently of `Collision`'s
+own internals, not by reusing them.
