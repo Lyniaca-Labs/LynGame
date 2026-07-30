@@ -3,11 +3,21 @@ import { Entity } from "../types/Entity.js";
 import { Collision } from "../components/Collision.js";
 import { Movement } from "../components/Movement.js";
 import { Transform } from "../components/Transform.js";
+import { ShapeRenderer } from "../components/ShapeRenderer.js";
 
 function makeEntity(id, x, y, w, h, collisionOverrides = {}) {
   const e = new Entity(id);
   e.addComponent(Transform, { x, y });
   e.addComponent(Collision, { width: w, height: h, ...collisionOverrides });
+  return e;
+}
+
+// width = diameter, matching ShapeRenderer's own circle convention (height ignored).
+function makeCircleEntity(id, x, y, diameter, collisionOverrides = {}) {
+  const e = new Entity(id);
+  e.addComponent(Transform, { x, y });
+  e.addComponent(ShapeRenderer, { shape: "circle", width: diameter, height: diameter });
+  e.addComponent(Collision, { width: diameter, height: diameter, ...collisionOverrides });
   return e;
 }
 
@@ -78,6 +88,56 @@ const engine = {}; // unused by Collision.checkPair beyond pass-through to onCol
   Collision.checkPair(wall, player, engine);
   const vx = player.getComponent(Movement).velocity.x;
   assert.ok(vx > 0, `expected velocity reflected to positive x, got ${vx}`);
+}
+
+// --- regression: two circles whose AABBs overlap diagonally, but the
+// circles themselves don't actually touch, must NOT collide. Plain AABB
+// math (the old bug) reports overlap here since the two 40x40 boxes DO
+// intersect on both axes — only true circle-vs-circle distance math gets
+// this right. Centers are (0,0) and (30,30): distance ~42.43, radius sum 40.
+{
+  const a = makeCircleEntity("a", 0, 0, 40, { group: "a", collidesWith: "a", onCollide: "entity.state.hit = true;" });
+  const b = makeCircleEntity("b", 30, 30, 40, { group: "a", collidesWith: "a" });
+  Collision.checkPair(a, b, engine);
+  assert.equal(a.state.hit, undefined, "diagonally-adjacent circles whose AABBs overlap but circles don't must not collide");
+}
+
+// --- circle vs circle: overlapping circles separate along the line between
+// their centers (not axis-locked), ending up exactly radius-sum apart ---
+{
+  const a = makeCircleEntity("a", 0, 0, 40, { group: "a", collidesWith: "a", resolve: true, mass: 1 });
+  const b = makeCircleEntity("b", 25, 0, 40, { group: "a", collidesWith: "a", resolve: true, mass: 1 });
+  Collision.checkPair(a, b, engine);
+  const ax = a.getComponent(Transform).x;
+  const bx = b.getComponent(Transform).x;
+  assert.ok(Math.abs(bx - ax - 40) < 1e-9, `expected circles resting exactly radius-sum (40) apart, got dist=${bx - ax}`);
+}
+
+// --- circle vs circle: diagonal overlap separates along the actual center-to-center diagonal ---
+{
+  const a = makeCircleEntity("a", 0, 0, 40, { group: "a", collidesWith: "a", resolve: true, mass: 1 });
+  const b = makeCircleEntity("b", 20, 20, 40, { group: "a", collidesWith: "a", resolve: true, mass: 1 });
+  Collision.checkPair(a, b, engine);
+  const at = a.getComponent(Transform);
+  const bt = b.getComponent(Transform);
+  const dist = Math.hypot(bt.x - at.x, bt.y - at.y);
+  assert.ok(Math.abs(dist - 40) < 1e-9, `expected diagonal circles resting exactly radius-sum (40) apart, got dist=${dist}`);
+  // pushed apart along the diagonal, not axis-locked: both x and y should have moved
+  assert.notEqual(at.x, 0);
+  assert.notEqual(at.y, 0);
+}
+
+// --- circle vs rect: overlap detected and resolved correctly (static rect,
+// so only the circle moves — makes the expected resting position exact) ---
+{
+  const circle = makeCircleEntity("circle", 0, 0, 40, { group: "a", collidesWith: "b", resolve: true, mass: 1 });
+  const rect = makeEntity("rect", 30, 0, 40, 40, { group: "b", collidesWith: "a", resolve: true, isStatic: true });
+  Collision.checkPair(circle, rect, engine);
+  const circleT = circle.getComponent(Transform);
+  const rectT = rect.getComponent(Transform);
+  assert.equal(rectT.x, 30); // static — never moves
+  // circle's right edge (x + radius) should end up exactly at the rect's left edge (10)
+  assert.ok(Math.abs(circleT.x + 20 - 10) < 1e-9, `expected circle pushed clear of rect, got x=${circleT.x}`);
 }
 
 console.log("collision.test.mjs: all assertions passed");

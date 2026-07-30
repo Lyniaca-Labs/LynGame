@@ -29,8 +29,17 @@ export class Collision extends Component {
     resolve: { type: "boolean", default: false, description: "If true, overlaps are physically resolved (pushed apart). If false, detection-only (trigger)." },
     isStatic: { type: "boolean", default: false, description: "Infinite mass — never moved by resolution; the other side absorbs 100% of the push." },
     mass: { type: "number", default: 1, description: "Used for the push-apart ratio between two dynamic bodies." },
-    width: { type: "number", default: 0, description: "Hitbox width. 0 = derive from SpriteRenderer/ShapeRenderer/TextRenderer size." },
-    height: { type: "number", default: 0, description: "Hitbox height. 0 = derive from renderer size." },
+    shape: {
+      type: "select", default: "auto",
+      description: "Collision shape. \"auto\" derives from this entity's ShapeRenderer (falls back to rect if there isn't one, or it's not a circle).",
+      options: [
+        { value: "auto", label: "Auto (from ShapeRenderer)" },
+        { value: "rect", label: "Rectangle" },
+        { value: "circle", label: "Circle" },
+      ],
+    },
+    width: { type: "number", default: 0, description: "Hitbox width (diameter, for circles). 0 = derive from SpriteRenderer/ShapeRenderer/TextRenderer size." },
+    height: { type: "number", default: 0, description: "Hitbox height. Ignored for circles (width is the diameter). 0 = derive from renderer size." },
     offsetX: { type: "number", default: 0, description: "Horizontal offset of the hitbox from the entity's position." },
     offsetY: { type: "number", default: 0, description: "Vertical offset of the hitbox from the entity's position." },
     onCollide: { type: "code", default: null, description: "Runs on every frame two entities overlap. Signature: (entity, other, engine)." },
@@ -49,6 +58,16 @@ export class Collision extends Component {
       .includes(otherGroup);
   }
 
+  _resolvedShape(entity) {
+    if (this.shape !== "auto") return this.shape;
+    return entity.getComponent("ShapeRenderer")?.shape === "circle" ? "circle" : "rect";
+  }
+
+  _resolvedWidth(entity) {
+    if (this.width) return this.width;
+    return entity.getDimensions().width;
+  }
+
   _boxWorld(entity, transform) {
     let width = this.width;
     let height = this.height;
@@ -60,6 +79,14 @@ export class Collision extends Component {
     const cx = transform.x + this.offsetX;
     const cy = transform.y + this.offsetY;
     return { left: cx - width / 2, right: cx + width / 2, top: cy - height / 2, bottom: cy + height / 2 };
+  }
+
+  _circleWorld(entity, transform) {
+    return {
+      cx: transform.x + this.offsetX,
+      cy: transform.y + this.offsetY,
+      radius: this._resolvedWidth(entity) / 2,
+    };
   }
 
   /**
@@ -78,21 +105,101 @@ export class Collision extends Component {
     const tb = entityB.getWorldTransform(engine);
     if (!ta || !tb) return;
 
-    const boxA = a._boxWorld(entityA, ta);
-    const boxB = b._boxWorld(entityB, tb);
+    const shapeA = a._resolvedShape(entityA);
+    const shapeB = b._resolvedShape(entityB);
 
-    const overlapX = Math.min(boxA.right, boxB.right) - Math.max(boxA.left, boxB.left);
-    const overlapY = Math.min(boxA.bottom, boxB.bottom) - Math.max(boxA.top, boxB.top);
-    if (overlapX <= 0 || overlapY <= 0) return; // no overlap
+    // manifold.nx/ny always points in the direction entityA should move to
+    // separate from entityB (entityB moves along the opposite vector).
+    let manifold;
+    if (shapeA === "circle" && shapeB === "circle") {
+      manifold = Collision._circleCircle(a._circleWorld(entityA, ta), b._circleWorld(entityB, tb));
+    } else if (shapeA === "circle") {
+      manifold = Collision._circleRect(a._circleWorld(entityA, ta), b._boxWorld(entityB, tb));
+    } else if (shapeB === "circle") {
+      const m = Collision._circleRect(b._circleWorld(entityB, tb), a._boxWorld(entityA, ta));
+      manifold = m && { nx: -m.nx, ny: -m.ny, depth: m.depth };
+    } else {
+      manifold = Collision._rectRect(a._boxWorld(entityA, ta), b._boxWorld(entityB, tb));
+    }
+
+    if (!manifold) return; // no overlap
 
     a.onCollide?.(entityA, entityB, engine);
     b.onCollide?.(entityB, entityA, engine);
 
     if (!a.resolve && !b.resolve) return;
-    Collision._resolve(entityA, entityB, ta, tb, a, b, overlapX, overlapY);
+    Collision._resolve(entityA, entityB, a, b, manifold);
   }
 
-  static _resolve(entityA, entityB, ta, tb, a, b, overlapX, overlapY) {
+  // Axis-aligned box vs box: overlap on both axes, push apart along whichever
+  // axis has the smaller penetration (standard AABB minimum-translation-vector).
+  static _rectRect(boxA, boxB) {
+    const overlapX = Math.min(boxA.right, boxB.right) - Math.max(boxA.left, boxB.left);
+    const overlapY = Math.min(boxA.bottom, boxB.bottom) - Math.max(boxA.top, boxB.top);
+    if (overlapX <= 0 || overlapY <= 0) return null;
+
+    const acx = (boxA.left + boxA.right) / 2;
+    const acy = (boxA.top + boxA.bottom) / 2;
+    const bcx = (boxB.left + boxB.right) / 2;
+    const bcy = (boxB.top + boxB.bottom) / 2;
+
+    if (overlapX < overlapY) {
+      return { nx: acx < bcx ? -1 : 1, ny: 0, depth: overlapX };
+    }
+    return { nx: 0, ny: acy < bcy ? -1 : 1, depth: overlapY };
+  }
+
+  // Circle vs circle: overlap when center distance < sum of radii. The
+  // separating normal is simply the direction between the two centers —
+  // this is what plain AABB math gets wrong for circles (it separates along
+  // whichever world axis has less box overlap, not along the actual line
+  // between the two centers, so diagonally-touching circles either fail to
+  // separate or get shoved in the wrong direction).
+  static _circleCircle(circleA, circleB) {
+    const dx = circleA.cx - circleB.cx;
+    const dy = circleA.cy - circleB.cy;
+    const dist = Math.hypot(dx, dy);
+    const radiusSum = circleA.radius + circleB.radius;
+    if (dist >= radiusSum) return null;
+
+    if (dist === 0) {
+      // Exactly coincident centers — no meaningful direction, pick one.
+      return { nx: 1, ny: 0, depth: radiusSum };
+    }
+    return { nx: dx / dist, ny: dy / dist, depth: radiusSum - dist };
+  }
+
+  // Circle vs axis-aligned box: find the closest point on the box to the
+  // circle's center, then treat the distance from that point to the center
+  // as the effective gap. If the center is INSIDE the box (closest point
+  // distance is 0, so there's no direction to push along), fall back to
+  // pushing out through whichever box edge is nearest — same idea as
+  // _rectRect's axis-of-minimum-penetration.
+  static _circleRect(circle, box) {
+    const closestX = Math.min(Math.max(circle.cx, box.left), box.right);
+    const closestY = Math.min(Math.max(circle.cy, box.top), box.bottom);
+    const dx = circle.cx - closestX;
+    const dy = circle.cy - closestY;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist > 0) {
+      if (dist >= circle.radius) return null;
+      return { nx: dx / dist, ny: dy / dist, depth: circle.radius - dist };
+    }
+
+    const overlapLeft = circle.cx - box.left;
+    const overlapRight = box.right - circle.cx;
+    const overlapTop = circle.cy - box.top;
+    const overlapBottom = box.bottom - circle.cy;
+    const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+
+    if (minOverlap === overlapLeft) return { nx: -1, ny: 0, depth: overlapLeft + circle.radius };
+    if (minOverlap === overlapRight) return { nx: 1, ny: 0, depth: overlapRight + circle.radius };
+    if (minOverlap === overlapTop) return { nx: 0, ny: -1, depth: overlapTop + circle.radius };
+    return { nx: 0, ny: 1, depth: overlapBottom + circle.radius };
+  }
+
+  static _resolve(entityA, entityB, a, b, manifold) {
     const invMassA = a.isStatic ? 0 : 1 / a.mass;
     const invMassB = b.isStatic ? 0 : 1 / b.mass;
     const totalInvMass = invMassA + invMassB;
@@ -105,31 +212,30 @@ export class Collision extends Component {
     const transformB = entityB.getComponent("Transform");
     if (!transformA || !transformB) return;
 
-    // Push apart along the axis of minimum penetration (standard AABB MTV).
-    if (overlapX < overlapY) {
-      const dir = ta.x < tb.x ? -1 : 1; // A moves this direction relative to B
-      transformA.x += dir * overlapX * shareA;
-      transformB.x -= dir * overlapX * shareB;
-      Collision._applyBounce(entityA, "x", dir);
-      Collision._applyBounce(entityB, "x", -dir);
-    } else {
-      const dir = ta.y < tb.y ? -1 : 1;
-      transformA.y += dir * overlapY * shareA;
-      transformB.y -= dir * overlapY * shareB;
-      Collision._applyBounce(entityA, "y", dir);
-      Collision._applyBounce(entityB, "y", -dir);
-    }
+    const { nx, ny, depth } = manifold;
+    transformA.x += nx * depth * shareA;
+    transformA.y += ny * depth * shareA;
+    transformB.x -= nx * depth * shareB;
+    transformB.y -= ny * depth * shareB;
+
+    Collision._applyBounce(entityA, nx, ny);
+    Collision._applyBounce(entityB, -nx, -ny);
   }
 
-  // After a push in `axis` direction `pushDir` (the direction this entity was
-  // moved to separate), reflect velocity if it was still heading INTO the
-  // other entity (opposite of pushDir), scaled by Movement's existing bounce.
-  static _applyBounce(entity, axis, pushDir) {
+  // After separation along normal (nx, ny) — already pointing away from the
+  // other entity — reflect velocity across that normal if it was still
+  // heading into the other entity, scaled by Movement's existing bounce.
+  // Full vector reflection (not just one axis) since circle-collision
+  // normals aren't generally axis-aligned: v' = v - (1+bounce)*(v·n)*n.
+  static _applyBounce(entity, nx, ny) {
     const movement = entity.getComponent("Movement");
     if (!movement) return;
-    const v = movement.velocity[axis];
-    if (Math.sign(v) !== 0 && Math.sign(v) !== Math.sign(pushDir)) {
-      movement.velocity[axis] = -v * movement.bounce;
-    }
+    const vx = movement.velocity.x;
+    const vy = movement.velocity.y;
+    const vDotN = vx * nx + vy * ny;
+    if (vDotN >= 0) return; // already separating along the normal
+    const scale = (1 + movement.bounce) * vDotN;
+    movement.velocity.x = vx - scale * nx;
+    movement.velocity.y = vy - scale * ny;
   }
 }
