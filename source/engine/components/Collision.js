@@ -200,10 +200,16 @@ export class Collision extends Component {
   }
 
   static _resolve(entityA, entityB, a, b, manifold) {
-    const invMassA = a.isStatic ? 0 : 1 / a.mass;
-    const invMassB = b.isStatic ? 0 : 1 / b.mass;
+    // An entity is only moved by resolution if it opted in (resolve: true)
+    // AND isn't pinned (isStatic: false). Either flag alone is enough to
+    // keep it fully immovable — including its velocity (see _applyBounce
+    // below), not just its position, so it can't drift on a later frame.
+    const movableA = a.resolve && !a.isStatic;
+    const movableB = b.resolve && !b.isStatic;
+    const invMassA = movableA ? 1 / a.mass : 0;
+    const invMassB = movableB ? 1 / b.mass : 0;
     const totalInvMass = invMassA + invMassB;
-    if (totalInvMass === 0) return; // both static — nothing can move
+    if (totalInvMass === 0) return; // neither side can move
 
     const shareA = invMassA / totalInvMass;
     const shareB = invMassB / totalInvMass;
@@ -218,8 +224,8 @@ export class Collision extends Component {
     transformB.x -= nx * depth * shareB;
     transformB.y -= ny * depth * shareB;
 
-    Collision._applyBounce(entityA, nx, ny);
-    Collision._applyBounce(entityB, -nx, -ny);
+    if (movableA) Collision._applyBounce(entityA, nx, ny);
+    if (movableB) Collision._applyBounce(entityB, -nx, -ny);
   }
 
   // After separation along normal (nx, ny) — already pointing away from the

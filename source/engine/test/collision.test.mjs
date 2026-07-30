@@ -140,4 +140,34 @@ const engine = {}; // unused by Collision.checkPair beyond pass-through to onCol
   assert.ok(Math.abs(circleT.x + 20 - 10) < 1e-9, `expected circle pushed clear of rect, got x=${circleT.x}`);
 }
 
+// --- regression: a static entity with a Movement component must not gain
+// velocity from bounce either — only the position push was previously
+// zeroed for isStatic, so a reflected velocity would still move it on the
+// next Movement tick. ---
+{
+  const wall = makeEntity("wall", 0, 0, 20, 20, {
+    group: "wall", collidesWith: "player", resolve: true, isStatic: true,
+  });
+  wall.addComponent(Movement, { velocity: { x: 50, y: 0 }, bounce: 0.5 });
+  const player = makeEntity("player", 10, 0, 20, 20, {
+    group: "player", collidesWith: "wall", resolve: true,
+  });
+  Collision.checkPair(wall, player, engine);
+  assert.equal(wall.getComponent(Movement).velocity.x, 50, "static entity's velocity must not be touched by bounce");
+}
+
+// --- regression: resolve:false on one side means IT never moves, even if
+// the other side has resolve:true — the other side absorbs 100% of the push. ---
+{
+  const trigger = makeEntity("trigger", 0, 0, 20, 20, {
+    group: "a", collidesWith: "b", resolve: false,
+  });
+  const pusher = makeEntity("pusher", 10, 0, 20, 20, {
+    group: "b", collidesWith: "a", resolve: true,
+  });
+  Collision.checkPair(trigger, pusher, engine);
+  assert.equal(trigger.getComponent(Transform).x, 0, "resolve:false entity must never be moved by resolution");
+  assert.notEqual(pusher.getComponent(Transform).x, 10, "other side still absorbs the push");
+}
+
 console.log("collision.test.mjs: all assertions passed");

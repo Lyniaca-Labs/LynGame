@@ -12,7 +12,10 @@
         },
         "Camera": {
           "zoom": 1,
-          "offset": { "x": 0, "y": 0 },
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
           "bounds": null,
           "target": null
         }
@@ -147,24 +150,31 @@
           "maxSpeed": 900,
           "acceleration": 800,
           "friction": 200,
-          "gravity": 980,
-          "gravityDirection": { "x": 0, "y": 1 },
+          "gravity": 100,
+          "gravityDirection": {
+            "x": 0,
+            "y": 1
+          },
           "drag": 0,
           "bounce": 0.6,
           "mass": 1,
-          "velocity": { "x": 0, "y": 0 }
+          "velocity": {
+            "x": 0,
+            "y": 0
+          }
         },
         "Collision": {
           "group": "ball",
           "collidesWith": "wall,ball",
           "resolve": true,
-          "isStatic": false,
+          "isStatic": true,
           "mass": 1,
           "width": 40,
           "height": 40,
           "offsetX": 0,
           "offsetY": 0,
-          "onCollide": null
+          "onCollide": null,
+          "shape": "auto"
         }
       },
       "parentId": "balls"
@@ -189,11 +199,17 @@
           "acceleration": 800,
           "friction": 200,
           "gravity": 980,
-          "gravityDirection": { "x": 0, "y": 1 },
+          "gravityDirection": {
+            "x": 0,
+            "y": 1
+          },
           "drag": 0,
           "bounce": 0.6,
           "mass": 1,
-          "velocity": { "x": 0, "y": 0 }
+          "velocity": {
+            "x": 0,
+            "y": 0
+          }
         },
         "Collision": {
           "group": "ball",
@@ -230,11 +246,17 @@
           "acceleration": 800,
           "friction": 200,
           "gravity": 980,
-          "gravityDirection": { "x": 0, "y": 1 },
+          "gravityDirection": {
+            "x": 0,
+            "y": 1
+          },
           "drag": 0,
           "bounce": 0.6,
           "mass": 1,
-          "velocity": { "x": 0, "y": 0 }
+          "velocity": {
+            "x": 0,
+            "y": 0
+          }
         },
         "Collision": {
           "group": "ball",
@@ -271,11 +293,17 @@
           "acceleration": 800,
           "friction": 200,
           "gravity": 980,
-          "gravityDirection": { "x": 0, "y": 1 },
+          "gravityDirection": {
+            "x": 0,
+            "y": 1
+          },
           "drag": 0,
           "bounce": 0.6,
           "mass": 1,
-          "velocity": { "x": 0, "y": 0 }
+          "velocity": {
+            "x": 0,
+            "y": 0
+          }
         },
         "Collision": {
           "group": "ball",
@@ -312,11 +340,17 @@
           "acceleration": 800,
           "friction": 200,
           "gravity": 980,
-          "gravityDirection": { "x": 0, "y": 1 },
+          "gravityDirection": {
+            "x": 0,
+            "y": 1
+          },
           "drag": 0,
           "bounce": 0.4,
           "mass": 2,
-          "velocity": { "x": 0, "y": 0 }
+          "velocity": {
+            "x": 0,
+            "y": 0
+          }
         },
         "Collision": {
           "group": "ball",
@@ -363,11 +397,17 @@
           "acceleration": 800,
           "friction": 200,
           "gravity": 980,
-          "gravityDirection": { "x": 0, "y": 1 },
+          "gravityDirection": {
+            "x": 0,
+            "y": 1
+          },
           "drag": 0,
           "bounce": 0.3,
           "mass": 2,
-          "velocity": { "x": 0, "y": 0 }
+          "velocity": {
+            "x": 0,
+            "y": 0
+          }
         },
         "Collision": {
           "group": "ball",
@@ -404,11 +444,17 @@
           "acceleration": 800,
           "friction": 200,
           "gravity": 980,
-          "gravityDirection": { "x": 0, "y": 1 },
+          "gravityDirection": {
+            "x": 0,
+            "y": 1
+          },
           "drag": 0,
           "bounce": 0.3,
           "mass": 1,
-          "velocity": { "x": 0, "y": 0 }
+          "velocity": {
+            "x": 0,
+            "y": 0
+          }
         },
         "Collision": {
           "group": "ball",

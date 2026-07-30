@@ -4,19 +4,6 @@ This replaces `docs/TODO.md` (now deprecated/archived — see the note at the
 top of that file). Completed work with implementation detail lives in
 `docs/changelogs/`; this file only tracks what's left.
 
-## Next Session: Feature Expansion
-
-One feature area was scoped out for a dedicated design pass next session
-(brainstorm → spec → plan, not just a quick pass):
-
-- **Pixel art editor features** — pick from the candidate list under
-  [Pixel Art Editor](#pixel-art-editor) below (zoom/pan, color scheme
-  tools, opacity, brush size, etc.) and design the ones worth building.
-
-(The other item that used to be listed here, a TODO/Trello board
-extension, went through its own design pass and shipped — see
-`source/extensions/board/` and Editor Extensions below.)
-
 ---
 
 ## Near-Term
@@ -40,12 +27,15 @@ extension, went through its own design pass and shipped — see
 - [ ] spritesheet partitioner (extension)
   - [ ] load asset -> select which frames are keyed at indexes -> save as a new asset
   - [ ] needs spritesheet support -> should kinda work like animation clips
+  - [ ] can select multiple assets to combine them into a spritesheet or split them up into multiple
+
 
 ## Open Bugs
 
 - [x] switching projects does not fully refresh everything
 - [x] need checkbox component for editor
 - [x] standardize the code editor modal
+- [x] collision system, if resolve or isstatic is turned to where the entity should not move, it should not move at all when hit. However, it still does.
 
 ## Defer Bugs
 
@@ -96,6 +86,7 @@ extension, went through its own design pass and shipped — see
 - [ ] preview render for prefabs
 - [ ] full feature documentation (components, scripts, functionality, scenes, entities, everything, etc.)
 - [ ] events system in visual scripter
+- [ ] show options for sprites / assets in inspecter
 
 ## Editor (general)
 
@@ -104,7 +95,7 @@ extension, went through its own design pass and shipped — see
 - [ ] Loading screen with default engine loader/logo
 - [ ] Debug mode
 - [ ] Error handling
-- [ ] custom styling / border radius changes (separate from theme) -> "Softness"
+- [x] custom styling / border radius changes (separate from theme) -> "Softness"
 
 ## Core Features
 
@@ -113,8 +104,8 @@ extension, went through its own design pass and shipped — see
   - [ ] optimized for large maps (conditional sprites / function that returns a sprite)
 - [ ] Repeating textures
 - [ ] Particles (emitter component) component.emit (or constant emitter)
-- [ ] Pathfinding
-- [ ] Inverse kinematics
+- [ ] Pathfinding 
+- [ ] Inverse kinematics (limbs are children)
 - [x] Following/math utilities (`Follow` component — exponential/spring/maxSpeed modes)
 - [ ] have ai go through and make full documentation of app, components, handlers, etc. (info buttons)
 
