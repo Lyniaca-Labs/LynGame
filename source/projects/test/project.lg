@@ -1,5 +1,5 @@
 {
   "name": "test",
-  "startScene": "spritesheet_demo",
+  "startScene": "particles",
   "assets": []
 }

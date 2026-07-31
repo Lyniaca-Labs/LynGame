@@ -12,6 +12,7 @@ import { Opacity } from "../components/Opacity.js";
 import { Collision } from "../components/Collision.js";
 import { Follow } from "../components/Follow.js";
 import { Layout } from "../components/Layout.js";
+import { Emitter } from "../components/Emitter.js";
 
 export const DEFAULT_COMPONENTS = {
   Interactable,
@@ -28,4 +29,5 @@ export const DEFAULT_COMPONENTS = {
   Collision,
   Follow,
   Layout,
+  Emitter,
 };

@@ -47,7 +47,11 @@ export function buildProject(projectName: string): string {
   const outDir = path.join(sourceRoot, "output", projectName);
   const templatePath = path.join(sourceRoot, "server/compiler/templates/index.html");
 
-  fs.rmSync(outDir, { recursive: true, force: true });
+  // maxRetries/retryDelay: on Windows, a cloud-sync client (OneDrive, Dropbox, ...)
+  // can transiently hold a handle open on a file inside outDir right after it's
+  // written, turning a normal rebuild into an EBUSY. Node's fs.rmSync retries
+  // automatically for exactly this class of error when these are set.
+  fs.rmSync(outDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
   fs.mkdirSync(outDir, { recursive: true });
 
   // test/ and package.json are dev-only (Node smoke tests, module-type

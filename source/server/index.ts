@@ -196,7 +196,7 @@ app.delete("/api/projects/:project", (req, res) => {
   if (!fs.existsSync(dir)) {
     return res.status(404).json({ success: false, error: "Project not found" });
   }
-  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
   res.json({ success: true });
 });
 

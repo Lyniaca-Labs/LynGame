@@ -1,0 +1,50 @@
+{
+  "cellWidth": 32,
+  "cellHeight": 32,
+  "columns": 4,
+  "frames": [
+    {
+      "index": 0,
+      "name": "tree"
+    },
+    {
+      "index": 1,
+      "name": "blob_0"
+    },
+    {
+      "index": 2,
+      "name": "blob_1"
+    },
+    {
+      "index": 3,
+      "name": "blob_2"
+    },
+    {
+      "index": 4,
+      "name": "blob_3"
+    },
+    {
+      "index": 5,
+      "name": "blob_4"
+    },
+    {
+      "index": 6,
+      "name": "blob_5"
+    },
+    {
+      "index": 7,
+      "name": "blob_6"
+    },
+    {
+      "index": 8,
+      "name": "blob_7"
+    }
+  ],
+  "clips": {
+    "clip": {
+      "frames": [],
+      "fps": 8,
+      "loop": true
+    }
+  }
+}

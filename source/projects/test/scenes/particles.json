@@ -1,0 +1,195 @@
+{
+  "name": "particles",
+  "entities": [
+    {
+      "id": "cam",
+      "components": {
+        "Transform": { "x": 220, "y": 160, "rotation": 0, "fixed": false },
+        "Camera": { "zoom": 1, "offset": { "x": 0, "y": 0 }, "bounds": null, "target": null }
+      }
+    },
+    {
+      "id": "title",
+      "components": {
+        "Transform": { "x": 10, "y": 8, "rotation": 0, "zIndex": 5, "fixed": true },
+        "TextRenderer": { "text": "Emitter component showcase", "fontSize": 16, "color": "#ffffff" }
+      }
+    },
+    {
+      "id": "statsText",
+      "components": {
+        "Transform": { "x": 10, "y": 30, "rotation": 0, "zIndex": 5, "fixed": true },
+        "TextRenderer": { "text": "Live particles: 0", "fontSize": 12, "color": "#8a8b93" }
+      },
+      "scripts": ["ParticleStats"]
+    },
+
+    {
+      "id": "fountainLabel",
+      "components": {
+        "Transform": { "x": 10, "y": 160, "rotation": 0, "zIndex": 5 },
+        "TextRenderer": {
+          "text": "Fountain\ncontinuous, gravity,\n3 weighted color types",
+          "fontSize": 11,
+          "color": "#c9c9d1"
+        }
+      }
+    },
+    {
+      "id": "fountainEmitter",
+      "components": {
+        "Transform": { "x": 70, "y": 280, "rotation": 0 },
+        "Emitter": {
+          "enabled": true,
+          "mode": "continuous",
+          "rate": 40,
+          "maxParticles": 150,
+          "angle": -90,
+          "spread": 18,
+          "speedMin": 150,
+          "speedMax": 260,
+          "lifetimeMin": 0.9,
+          "lifetimeMax": 1.4,
+          "spawnRadius": 4,
+          "gravity": 480,
+          "drag": 0,
+          "fadeOut": true,
+          "particleTypes": [
+            { "weight": 3, "shape": "circle", "color": ["#ffd166", "#f4a261", "#ffee88"], "size": [3, 6] },
+            { "weight": 2, "shape": "circle", "color": "#4cc9f0", "size": [2, 4] },
+            { "weight": 1, "shape": "rect", "color": "#ef476f", "size": [3, 5], "spin": [-360, 360] }
+          ]
+        }
+      }
+    },
+
+    {
+      "id": "smokeLabel",
+      "components": {
+        "Transform": { "x": 155, "y": 160, "rotation": 0, "zIndex": 5 },
+        "TextRenderer": {
+          "text": "Smoke\ncontinuous, drag,\nno gravity, shrinks",
+          "fontSize": 11,
+          "color": "#c9c9d1"
+        }
+      }
+    },
+    {
+      "id": "smokeEmitter",
+      "components": {
+        "Transform": { "x": 210, "y": 280, "rotation": 0 },
+        "Emitter": {
+          "enabled": true,
+          "mode": "continuous",
+          "rate": 12,
+          "maxParticles": 60,
+          "angle": -90,
+          "spread": 12,
+          "speedMin": 15,
+          "speedMax": 35,
+          "lifetimeMin": 1.8,
+          "lifetimeMax": 2.6,
+          "gravity": 0,
+          "drag": 0.5,
+          "fadeOut": true,
+          "particleTypes": [
+            { "weight": 1, "shape": "circle", "color": ["#cccccc", "#999999", "#aaaaaa"], "size": [8, 16], "shrink": true }
+          ]
+        }
+      }
+    },
+
+    {
+      "id": "confettiLabel",
+      "components": {
+        "Transform": { "x": 300, "y": 160, "rotation": 0, "zIndex": 5 },
+        "TextRenderer": {
+          "text": "Confetti burst\nclick below to trigger()\nfrom a script",
+          "fontSize": 11,
+          "color": "#c9c9d1"
+        }
+      }
+    },
+    {
+      "id": "confettiButton",
+      "components": {
+        "Transform": { "x": 300, "y": 230, "rotation": 0, "zIndex": 5 },
+        "TextRenderer": { "text": "[ click here ]", "fontSize": 13, "color": "#4cc9f0" },
+        "Interactable": {
+          "width": 110,
+          "height": 24,
+          "offsetX": 45,
+          "offsetY": 8,
+          "cursor": "pointer",
+          "onClick": "engine.query(\"confettiEmitter:Emitter\")?.trigger();"
+        }
+      }
+    },
+    {
+      "id": "confettiEmitter",
+      "components": {
+        "Transform": { "x": 350, "y": 280, "rotation": 0 },
+        "Emitter": {
+          "enabled": true,
+          "mode": "burst",
+          "burstCount": 40,
+          "burstInterval": 0,
+          "maxParticles": 200,
+          "angle": -90,
+          "spread": 60,
+          "speedMin": 120,
+          "speedMax": 260,
+          "lifetimeMin": 0.5,
+          "lifetimeMax": 1.0,
+          "gravity": 380,
+          "fadeOut": true,
+          "particleTypes": [
+            { "weight": 1, "shape": "rect", "color": ["#ffd166", "#ef476f", "#06d6a0", "#4cc9f0", "#f4a261"], "size": [4, 7], "spin": [-540, 540] },
+            { "weight": 1, "shape": "circle", "color": ["#ffd166", "#ef476f", "#06d6a0", "#4cc9f0"], "size": [3, 5] }
+          ]
+        }
+      }
+    },
+
+    {
+      "id": "mixedLabel",
+      "components": {
+        "Transform": { "x": 10, "y": 60, "rotation": 0, "zIndex": 5 },
+        "TextRenderer": {
+          "text": "Mixed burst (auto-repeats every 2.2s): shapes + a real \"Enemy\" prefab as a particle type, plus onParticleSpawn giving shapes a random spin start",
+          "fontSize": 11,
+          "color": "#c9c9d1",
+          "maxWidth": 420,
+          "wrap": true
+        }
+      }
+    },
+    {
+      "id": "mixedEmitter",
+      "components": {
+        "Transform": { "x": 220, "y": 120, "rotation": 0 },
+        "Emitter": {
+          "enabled": true,
+          "mode": "burst",
+          "burstCount": 10,
+          "burstInterval": 2.2,
+          "maxParticles": 60,
+          "angle": -90,
+          "spread": 200,
+          "speedMin": 50,
+          "speedMax": 150,
+          "lifetimeMin": 1.0,
+          "lifetimeMax": 1.6,
+          "gravity": 260,
+          "fadeOut": true,
+          "particleTypes": [
+            { "weight": 3, "shape": "circle", "color": ["#06d6a0", "#118ab2"], "size": [3, 6] },
+            { "weight": 3, "shape": "rect", "color": ["#ffd166", "#ef476f"], "size": [3, 6], "spin": [180, 360] },
+            { "weight": 1, "prefab": "Enemy", "fadeOut": false, "lifetime": [1.2, 1.6] }
+          ],
+          "onParticleSpawn": "const sr = particle.getComponent(\"ShapeRenderer\");\nif (sr) particle.getComponent(\"Transform\").rotation = Math.random() * 360;\n"
+        }
+      }
+    }
+  ]
+}

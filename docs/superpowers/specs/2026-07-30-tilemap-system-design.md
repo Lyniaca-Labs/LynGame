@@ -373,8 +373,7 @@ this is built is still useful:
    a hand-written test `.tilemap.json` — a tilemap visibly renders and
    culls in a scene with zero editor UI.
 2. `Tilemap.checkEntity` collision pass.
-3. Extension: tileset definition + autotile blob authoring + variant/
-   animation group authoring.
+3. Extension: tileset definition + autotile blob authoring.
 4. Extension: map painting UI + save.
 5. Inspector `tilemapRef` field + "Edit" button wiring.
 

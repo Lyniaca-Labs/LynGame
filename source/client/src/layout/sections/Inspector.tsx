@@ -1,6 +1,6 @@
 // Inspector.tsx — full file
 
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Trash2, RefreshCw, X, Pencil, ChevronDown, ChevronRight, Star } from "lucide-react";
 import { Container } from "../../ui/Container";
 import { Select, SelectOption } from "../../ui/Select";
@@ -1322,6 +1322,8 @@ function SchemaField({
     onDrag: ["entity", "engine", "data"],
     onDragEnd: ["entity", "engine", "data"],
     onCollide: ["entity", "other", "engine"],
+    onParticleSpawn: ["entity", "particle", "engine"],
+    onParticleDeath: ["entity", "particle", "engine"],
   };
 
   if (type === "code") {
@@ -1363,6 +1365,41 @@ function SchemaField({
           onSave={(next) => {
             const trimmed = next.trim();
             onChange(trimmed.length > 0 ? next : null);
+          }}
+          onClose={() => setEditing(false)}
+        />
+      </>
+    );
+  }
+
+  if (type === "json") {
+    const [editing, setEditing] = useState(false);
+    const [parseError, setParseError] = useState<string | null>(null);
+    const text = useMemo(() => JSON.stringify(value ?? null, null, 2), [value]);
+
+    return (
+      <>
+        <label className="flex items-center justify-between gap-2 text-xs">
+          <FieldLabel label={label} description={description} />
+          <Button onClick={() => setEditing(true)} className="w-28 justify-center">
+            Edit JSON
+          </Button>
+        </label>
+        {parseError && <div className="text-[11px] text-[var(--color-danger)]">{parseError}</div>}
+
+        <CodeStringEditorModal
+          open={editing}
+          value={text}
+          language="json"
+          title={label}
+          onSave={(next) => {
+            try {
+              onChange(JSON.parse(next));
+              setParseError(null);
+              setEditing(false);
+            } catch (err) {
+              setParseError(`Invalid JSON, not saved: ${(err as Error).message}`);
+            }
           }}
           onClose={() => setEditing(false)}
         />

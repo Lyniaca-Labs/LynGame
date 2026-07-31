@@ -67,6 +67,7 @@ top of that file). Completed work with implementation detail lives in
   - [ ] shape renderer
   - [ ] text renderer (may already be done)
   - [ ] sprite renderer
+- [ ] screen shake function to camera
 
 ## Game Framework
 
@@ -76,7 +77,7 @@ top of that file). Completed work with implementation detail lives in
 ## Editor / Engine GUI
 
 - [ ] hitbox entity eventually
-- [ ] export project to zip (with a node live server — node, python, or ps1)
+- [ ] export project to zip (with a node live server — node, python, or ps1) (can do manually for now)
 - [ ] renaming scripts and components and updating all references to them
 - [ ] get open in vscode working
 - [ ] undo / redo
@@ -105,7 +106,8 @@ top of that file). Completed work with implementation detail lives in
   - [ ] sprite map rules for autofilling > wave function collapse
   - [ ] optimized for large maps (conditional sprites / function that returns a sprite)
 - [ ] Repeating textures
-- [ ] Particles (emitter component) component.emit (or constant emitter)
+- [x] Particles (emitter component) component.emit (or constant emitter)
+- [ ] extension to create particle emitter json
 - [ ] Pathfinding 
 - [ ] Inverse kinematics (limbs are children)
 - [x] Following/math utilities (`Follow` component — exponential/spring/maxSpeed modes)
