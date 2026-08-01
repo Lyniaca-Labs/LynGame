@@ -1,0 +1,127 @@
+{
+  "cellWidth": 96,
+  "cellHeight": 128,
+  "columns": 4,
+  "frames": [
+    {
+      "index": 0,
+      "name": "cardBackgrounds_0"
+    },
+    {
+      "index": 1,
+      "name": "cardBackgrounds_1"
+    },
+    {
+      "index": 2,
+      "name": "cardBackgrounds_2"
+    },
+    {
+      "index": 3,
+      "name": "cardBackgrounds_3"
+    },
+    {
+      "index": 4,
+      "name": "cardBackgrounds_4"
+    },
+    {
+      "index": 5,
+      "name": "cardBackgrounds_5"
+    },
+    {
+      "index": 6,
+      "name": "cardBackgrounds_6"
+    },
+    {
+      "index": 7,
+      "name": "cardBackgrounds_7"
+    },
+    {
+      "index": 8,
+      "name": "cardBackgrounds_8"
+    },
+    {
+      "index": 9,
+      "name": "cardBackgrounds_9"
+    },
+    {
+      "index": 10,
+      "name": "cardBackgrounds_10"
+    },
+    {
+      "index": 11,
+      "name": "cardBackgrounds_11"
+    }
+  ],
+  "clips": {
+    "border1": {
+      "frames": [
+        "cardBackgrounds_0"
+      ],
+      "fps": 1,
+      "loop": false
+    },
+    "border2": {
+      "frames": [
+        "cardBackgrounds_1"
+      ],
+      "fps": 1,
+      "loop": false
+    },
+    "border3": {
+      "frames": [
+        "cardBackgrounds_2"
+      ],
+      "fps": 1,
+      "loop": false
+    },
+    "border4": {
+      "frames": [
+        "cardBackgrounds_3"
+      ],
+      "fps": 1,
+      "loop": false
+    },
+    "border5": {
+      "frames": [
+        "cardBackgrounds_4"
+      ],
+      "fps": 1,
+      "loop": false
+    },
+    "border6": {
+      "frames": [
+        "cardBackgrounds_5"
+      ],
+      "fps": 1,
+      "loop": false
+    },
+    "border7": {
+      "frames": [
+        "cardBackgrounds_6"
+      ],
+      "fps": 1,
+      "loop": false
+    },
+    "border8": {
+      "frames": [
+        "cardBackgrounds_7"
+      ],
+      "fps": 1,
+      "loop": false
+    },
+    "border9": {
+      "frames": [
+        "cardBackgrounds_8"
+      ],
+      "fps": 1,
+      "loop": false
+    },
+    "cardbg": {
+      "frames": [
+        "cardBackgrounds_9"
+      ],
+      "fps": 1,
+      "loop": false
+    }
+  }
+}

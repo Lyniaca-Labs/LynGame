@@ -9,8 +9,8 @@
     { "id": "hud", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },
     { "id": "pathChoiceTitle", "parentId": "hud", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
-      "Anchor": { "anchor": "top-center", "offsetY": 24 },
-      "TextRenderer": { "text": "Round Won — Choose Your Path", "fontFamily": "VT323", "googleFont": true, "fontSize": 30, "color": "#ffffff", "align": "center" }
+      "Anchor": { "anchor": "top-center", "offsetY": 18 },
+      "TextRenderer": { "text": "Round Won — Choose a Perk", "fontFamily": "VT323", "googleFont": true, "fontSize": 28, "color": "#ffffff", "align": "center" }
     } },
     { "id": "pathChoiceDeckCount", "parentId": "hud", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
@@ -18,53 +18,12 @@
       "TextRenderer": { "text": "Deck: 0 cards", "fontFamily": "VT323", "googleFont": true, "fontSize": 22, "color": "#ffffff" }
     } },
 
-    { "id": "pathShopOption", "components": {
-      "Transform": { "x": 0, "y": 0, "fixed": true },
-      "Anchor": { "anchor": "center", "offsetX": -240 },
-      "ShapeRenderer": { "shape": "rect", "width": 220, "height": 280, "color": "#2a2540" },
-      "TextRenderer": {
-        "text": "SHOP\n\nBuy, upgrade, or remove\ncards from your deck.\n\n+ Guaranteed value\n(no combat risk)",
-        "fontFamily": "VT323", "googleFont": true, "fontSize": 17, "color": "#e5e7eb", "align": "center", "verticalAlign": "middle", "wrap": true, "maxWidth": 190
-      },
-      "Interactable": {
-        "width": 220, "height": 280, "cursor": "pointer",
-        "onClick": "engine.callScript('PathChoiceShop', entity, engine);",
-        "onHoverEnter": "var a = entity.getComponent('Anchor'); var anim = entity.getComponent('Animator'); if (a && anim) anim.animate(a, 'offsetY', -12, { duration: 0.16, easing: 'easeOut' });",
-        "onHoverExit": "var a = entity.getComponent('Anchor'); var anim = entity.getComponent('Animator'); if (a && anim) anim.animate(a, 'offsetY', 0, { duration: 0.18, easing: 'easeOut' });"
-      },
-      "Animator": { "clips": [] }
-    } },
-    { "id": "pathEliteOption", "components": {
-      "Transform": { "x": 0, "y": 0, "fixed": true },
+    { "id": "fadeOverlay", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true, "zIndex": 9999 },
       "Anchor": { "anchor": "center" },
-      "ShapeRenderer": { "shape": "rect", "width": 220, "height": 280, "color": "#5a1e1e" },
-      "TextRenderer": {
-        "text": "ELITE FIGHT\n\nSkip the shop. Fight a\ntougher opponent now.\n\n+ 1.5x coin reward\n- Harder fight, no shop",
-        "fontFamily": "VT323", "googleFont": true, "fontSize": 17, "color": "#fde5e5", "align": "center", "verticalAlign": "middle", "wrap": true, "maxWidth": 190
-      },
-      "Interactable": {
-        "width": 220, "height": 280, "cursor": "pointer",
-        "onClick": "engine.callScript('PathChoiceElite', entity, engine);",
-        "onHoverEnter": "var a = entity.getComponent('Anchor'); var anim = entity.getComponent('Animator'); if (a && anim) anim.animate(a, 'offsetY', -12, { duration: 0.16, easing: 'easeOut' });",
-        "onHoverExit": "var a = entity.getComponent('Anchor'); var anim = entity.getComponent('Animator'); if (a && anim) anim.animate(a, 'offsetY', 0, { duration: 0.18, easing: 'easeOut' });"
-      },
-      "Animator": { "clips": [] }
-    } },
-    { "id": "pathRestOption", "components": {
-      "Transform": { "x": 0, "y": 0, "fixed": true },
-      "Anchor": { "anchor": "center", "offsetX": 240 },
-      "ShapeRenderer": { "shape": "rect", "width": 220, "height": 280, "color": "#1e3a5f" },
-      "TextRenderer": {
-        "text": "REST SITE\n\nSkip the shop. Freely\nupgrade one random card.\n\n+ Guaranteed upgrade\n- No shop, no new cards",
-        "fontFamily": "VT323", "googleFont": true, "fontSize": 17, "color": "#e0edff", "align": "center", "verticalAlign": "middle", "wrap": true, "maxWidth": 190
-      },
-      "Interactable": {
-        "width": 220, "height": 280, "cursor": "pointer",
-        "onClick": "engine.callScript('PathChoiceRest', entity, engine);",
-        "onHoverEnter": "var a = entity.getComponent('Anchor'); var anim = entity.getComponent('Animator'); if (a && anim) anim.animate(a, 'offsetY', -12, { duration: 0.16, easing: 'easeOut' });",
-        "onHoverExit": "var a = entity.getComponent('Anchor'); var anim = entity.getComponent('Animator'); if (a && anim) anim.animate(a, 'offsetY', 0, { duration: 0.18, easing: 'easeOut' });"
-      },
-      "Animator": { "clips": [] }
+      "ShapeRenderer": { "shape": "rect", "width": 3000, "height": 3000, "color": "#000000" },
+      "Opacity": { "value": 1 },
+      "Animator": {}
     } }
   ]
 }

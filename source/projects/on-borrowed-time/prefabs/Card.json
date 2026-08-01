@@ -1,14 +1,21 @@
 {
   "components": {
     "Transform": { "x": 0, "y": 0, "rotation": 0, "fixed": true, "zIndex": 20 },
-    "ShapeRenderer": { "shape": "rect", "width": 112, "height": 152, "color": "#2b2f3a" },
-    "SpriteRenderer": { "sprite": "", "width": 112, "height": 152 },
+    "ShapeRenderer": { "shape": "rect", "width": 112, "height": 152, "color": "#2b2f3a", "cornerRadius": 14 },
+    "SpriteRenderer": { "sprite": "cards", "frame": "cardBackgrounds_0", "width": 112, "height": 152 },
     "Interactable": { "autoDimensions": true, "cursor": "pointer", "holdThreshold": 0.5, "dragThreshold": 20 },
     "Animator": { "clips": [] },
     "Opacity": { "value": 1 }
   },
   "scripts": [],
   "children": {
+    "cardArt": {
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "fixed": false, "zIndex": 499 },
+        "SpriteRenderer": { "sprite": "cards", "frame": "cardBackgrounds_9", "width": 112, "height": 152 },
+        "Opacity": { "value": 1 }
+      }
+    },
     "icon": {
       "components": {
         "Transform": { "x": 0, "y": -44, "rotation": 0, "fixed": false, "zIndex": 501 },
@@ -37,7 +44,7 @@
     "descBg": {
       "components": {
         "Transform": { "x": 0, "y": 40, "rotation": 0, "fixed": false, "zIndex": 500 },
-        "ShapeRenderer": { "shape": "rect", "width": 100, "height": 60, "color": "#161925" },
+        "ShapeRenderer": { "shape": "rect", "width": 100, "height": 60, "color": "#161925", "cornerRadius": 8 },
         "SpriteRenderer": { "sprite": "", "width": 100, "height": 60 },
         "Opacity": { "value": 1 }
       }
@@ -81,6 +88,13 @@
           "align": "center",
           "verticalAlign": "middle"
         },
+        "Opacity": { "value": 1 }
+      }
+    },
+    "levelIcon": {
+      "components": {
+        "Transform": { "x": 44, "y": -62, "rotation": 0, "fixed": false, "zIndex": 504 },
+        "SpriteRenderer": { "sprite": "levels", "frame": "levels_0", "width": 0, "height": 0 },
         "Opacity": { "value": 1 }
       }
     }

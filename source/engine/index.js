@@ -162,6 +162,7 @@ export class GameEngine {
     // got). We're replacing the whole array anyway, so just flag everything
     // destroyed and fire onDestroy once each.
     this.audio.stopAll();
+    this.audio.preloadAll(); // kick off decoding for any audio assets not already buffered, ahead of whatever this scene's first play() call needs
 
     const oldEntities = this.entities;
     this.entities = [];

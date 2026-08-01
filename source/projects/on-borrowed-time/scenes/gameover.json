@@ -26,7 +26,7 @@
         "width": 220,
         "height": 52,
         "cursor": "pointer",
-        "onClick": "engine.state.run = null; engine.state.battle = null; engine.loadScene('main');"
+        "onClick": "engine.callScript('GameoverRetry', entity, engine);"
       }
     } }
   ]

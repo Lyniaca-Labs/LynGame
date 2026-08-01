@@ -7,6 +7,8 @@
 // header comment for why engine.callScript needs a dedicated file per
 // action rather than just naming the function on the click handler).
 
+import { playSound, clickThenLoadScene } from "./SoundEffects.js";
+
 const STEPS = [
   {
     title: "Your Time Is Your Health",
@@ -68,10 +70,11 @@ export function nextStep(entity, engine) {
   if (!s) return;
   if (s.step >= STEPS.length - 1) {
     engine.state.tutorial = null;
-    engine.loadScene("main");
+    clickThenLoadScene(engine, "main");
     return;
   }
   s.step += 1;
+  playSound(engine, "click");
   layout(engine);
 }
 
@@ -79,10 +82,11 @@ export function prevStep(entity, engine) {
   const s = engine.state.tutorial;
   if (!s || s.step <= 0) return;
   s.step -= 1;
+  playSound(engine, "click");
   layout(engine);
 }
 
 export function skip(entity, engine) {
   engine.state.tutorial = null;
-  engine.loadScene("main");
+  clickThenLoadScene(engine, "main");
 }

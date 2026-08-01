@@ -4,9 +4,22 @@
 // (aside from mutating the plain stat objects passed in) so it's easy to
 // reason about/reuse from both places.
 
-// stats shape: { maxTime, currentTime, regen, shield, drainMult, nextHandBonus, shieldRetain }
+import { levelScale } from "./CardDatabase.js";
+
+// Reflect (Borrowed Time's namesake mechanic) — fraction of realized damage
+// bounced back per stack held by whoever got hit. Capped so heavy stacking
+// can't approach reflecting the entire hit back.
+const REFLECT_PERCENT_PER_STACK = 0.05;
+const REFLECT_MAX_FRACTION = 0.6;
+
+// Poison (Borrowed Time) — capped so replaying it doesn't let per-turn
+// damage climb without bound; it stays a small, purely per-turn drain
+// rather than a stackable burst source.
+const POISON_MAX_PER_TURN = 2;
+
+// stats shape: { maxTime, currentTime, regen, shield, drainMult, nextHandBonus, shieldRetain, reflect }
 export function resolveEffects(effects, level, casterStats, opponentStats) {
-  const scale = 1 + 0.5 * (level - 1);
+  const scale = levelScale(level);
   const results = [];
   for (const eff of effects) {
     const amount = eff.amount * scale;
@@ -25,6 +38,20 @@ export function resolveEffects(effects, level, casterStats, opponentStats) {
         // marker (a distinct particle burst + floating text) alongside/
         // instead of the normal damage feedback.
         results.push({ type: "currentTime", target: eff.target, amount: amt, absorbed });
+
+        // Reflect only triggers on a real attack (eff.target === "opponent",
+        // i.e. the caster hitting their opponent) — not on self-damage cards
+        // like Blood Pact, where "target" would be the caster's own stats
+        // and bouncing it back onto themselves makes no sense.
+        if (eff.target === "opponent" && amt < 0 && target.reflect > 0) {
+          const dealt = -amt;
+          const frac = Math.min(REFLECT_MAX_FRACTION, target.reflect * REFLECT_PERCENT_PER_STACK);
+          const reflected = dealt * frac;
+          if (reflected > 0) {
+            casterStats.currentTime = Math.max(0, Math.min(casterStats.maxTime, casterStats.currentTime - reflected));
+            results.push({ type: "reflectDamage", target: "self", amount: -reflected });
+          }
+        }
         break;
       }
       // Like currentTime, but skips the shield-absorption branch entirely —
@@ -68,8 +95,16 @@ export function resolveEffects(effects, level, casterStats, opponentStats) {
       // (both sides, see resolveTurnEnd) regardless of whose turn it was —
       // stacks if applied more than once. Amount is positive; it's damage.
       case "poison":
-        target.poison = (target.poison || 0) + amount;
+        target.poison = Math.min(POISON_MAX_PER_TURN, (target.poison || 0) + amount);
         results.push({ type: "poison", target: eff.target, amount });
+        break;
+      // Grants decaying Reflect stacks — read by the "currentTime" case
+      // above (bounces a slice of incoming damage back at the attacker) and
+      // decayed once per turn-end in BattleController.js's resolveTurnEnd,
+      // same cadence as shield/poison.
+      case "reflect":
+        target.reflect = (target.reflect || 0) + amount;
+        results.push({ type: "reflect", target: eff.target, amount });
         break;
       // One-shot flag: this side's drain ignores pace/intensity entirely
       // for the rest of the fight (see the phase-drain code in

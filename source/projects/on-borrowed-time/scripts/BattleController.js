@@ -5,21 +5,24 @@
 // Also exports playCard/drawHand/etc for PlayHandCard.js (the per-card
 // click handler) to call into.
 
-import { CARD_DEFS, AI_POOL, formatDescription } from "./CardDatabase.js";
+import { CARD_DEFS, AI_POOL, formatDescription, levelScale, borderFrameForTier, levelIconFrame, MAX_CARD_LEVEL } from "./CardDatabase.js";
 import { ensureRun } from "./RunState.js";
 import { resolveEffects } from "./CardEffects.js";
+import { playSound, playCoinBurst } from "./SoundEffects.js";
 
 const BASE_MAX_TIME = 10;
-const BASE_REGEN = 2; // passive time regained after your own turn — cards (Second Wind / Exhaust) are the real lever
+const BASE_REGEN = 1; // passive time regained after your own turn — cards (Second Wind / Exhaust) are the real lever
 const DRAIN_RATE = 1; // seconds of your own time burned per real second deciding, before the intensity ramp
 const INTENSITY_RAMP = 0.035; // +3.5% drain speed per second the round has been going — the fight gets faster the longer it drags on
-const MIN_ROUND_REWARD = 7; // coins guaranteed on a win, even with little leftover time
+const MIN_ROUND_REWARD = 10; // coins guaranteed on a win, even with little leftover time — was 15, which (plus ROUND_REWARD_PER_ROUND) pushed early rewards well past the intended ~10-18 range
+const ROUND_REWARD_PER_ROUND = 0.5; // extra coins per round on top of the base/leftover-time reward — gentler than before (was 2) so it stays in the ~10-18 range for a long stretch instead of blowing past 18 by round 2
 const BAR_HEIGHT = 260;
 const BAR_WIDTH = 24;
 const HUD_MARGIN = 130; // px in from each screen edge for the bars/labels
 const HAND_DISCARD_DURATION = 0.42; // fall-away animation length for unplayed cards
 const BG_BASE_X = 2000; // must match the "bg" entity's Transform in scenes/main.json
 const BG_BASE_Y = 2000;
+const TABLE_Y_EXTRA_OFFSET = 30; // nudges the table background down a bit further than the pile center it's otherwise aligned to
 const TENSION_RAMP_FOR_MAX = 0.5; // pace reaching +50% is "fully" tense — zoom maxed out
 const TENSION_MAX_ZOOM = 0.12; // bars grow up to 12% larger at max tension (no real camera zoom — see updateShake's note)
 const REGEN_PREVIEW_COLOR = "rgba(74, 222, 128, 0.35)";
@@ -40,6 +43,8 @@ function shuffle(arr) {
   return a;
 }
 
+const REFLECT_DECAY_PER_TURN = 1; // stacks lost per turn-end tick, both sides (Reflect — CardEffects.js)
+
 function freshStats(maxTime, regen) {
   // shieldRetain: fraction of current shield KEPT at each turn-end decay
   // tick (resolveTurnEnd) — defaults to losing half each turn; Anchor/
@@ -47,14 +52,41 @@ function freshStats(maxTime, regen) {
   // poison: flat seconds burned at every turn-end (Borrowed Time).
   // timeless: when true, this side's drain skips intensityMultiplier(b)
   // entirely (Timeless) — see the phase-drain code in BattleController.
+  // reflect: decaying stacks (Reflect) — each bounces a slice of incoming
+  // damage back at the attacker (CardEffects.js's "currentTime" case).
   return {
     maxTime, currentTime: maxTime, regen, shield: 0, drainMult: 1, nextHandBonus: 0,
-    shieldRetain: 0.5, poison: 0, timeless: false,
+    shieldRetain: 0.5, poison: 0, timeless: false, reflect: 0,
   };
 }
 
 function intensityMultiplier(b) {
   return 1 + b.roundElapsed * INTENSITY_RAMP;
+}
+
+const BASE_TICK_INTERVAL = 1; // seconds between clock ticks at baseline pace
+const TICK_RAMP_FACTOR = 0.35; // ticking speeds up more gently than the rest of the pace ramp (intensityMultiplier) does
+const TICK_VOLUME = 0.04; // was 0.45, then 0.12 — still too loud both times
+const TICK_FADE_DURATION = 1; // seconds to fade ticking out once the round ends (roundOver phase)
+
+function tickIntensity(b) {
+  return 1 + (intensityMultiplier(b) - 1) * TICK_RAMP_FACTOR;
+}
+
+// A background clock-tick, ticking faster as pace climbs — dampened version
+// of intensityMultiplier(b) so it doesn't ramp as aggressively as the
+// drain rate/screen tension do. `fadeT` (1 = full volume, 0 = silent) lets
+// the roundOver phase taper it out instead of cutting it off abruptly —
+// b.roundElapsed is frozen once roundOver starts, so the tick rate itself
+// naturally holds steady during the fade rather than continuing to speed up.
+function updateClockTick(engine, b, dt, fadeT = 1) {
+  if (fadeT <= 0) return;
+  b.tickTimer = (b.tickTimer || 0) + dt;
+  const interval = BASE_TICK_INTERVAL / tickIntensity(b);
+  if (b.tickTimer >= interval) {
+    b.tickTimer -= interval;
+    playSound(engine, "tick", { volume: TICK_VOLUME * fadeT });
+  }
 }
 
 function barColor(ratio) {
@@ -144,6 +176,13 @@ function layoutShieldPreview(engine, id, stats, x, bottomY, barW, barH, rotation
 function layoutHud(engine, b) {
   const run = engine.state.run;
   const vp = engine.getViewportSize();
+
+  // The table background sits under the play pile (same center point
+  // nextPileSlot uses below, plus a small extra downward nudge of its own)
+  // — setShape doubles as a plain Transform setter here since "table" has
+  // no ShapeRenderer, just a SpriteRenderer.
+  setShape(engine, "table", vp.width / 2, vp.height / 2 + PILE_CENTER_Y_OFFSET + TABLE_Y_EXTRA_OFFSET, 0, 0, null);
+
   // Bars never move now — no shake offset, no wobble/rotation. Screen shake
   // instead perturbs the top HUD text labels below (setAnchorShake) since
   // those are the only fixed-space elements with enough visible contrast
@@ -202,6 +241,28 @@ function layoutHud(engine, b) {
   setAnchorShake(engine, "currencyLabelValue", -16, 14, shakeX, shakeY);
   setAnchorShake(engine, "intensityLabelValue", -16, 14, shakeX, shakeY);
   setAnchorShake(engine, "turnBanner", 0, 46, shakeX, shakeY);
+}
+
+// 3-2-1-GO! intro countdown — each step gets its own punchy pop-and-fade on
+// the dedicated "introCountdown" HUD entity (scenes/main.json), separate
+// from turnBanner (which showBanner already uses for "Round N — Fight!" up
+// top at the same time) so the two don't fight over one entity's tween.
+const INTRO_STEP_DURATION = 0.6;
+const INTRO_STEPS = ["3", "2", "1", "GO!"];
+const INTRO_DURATION = INTRO_STEPS.length * INTRO_STEP_DURATION;
+const INTRO_BASE_FONT_SIZE = 72;
+
+function showIntroStep(engine, text) {
+  const e = engine.getEntity("introCountdown");
+  const tr = e && e.getComponent("TextRenderer");
+  const anim = e && e.getComponent("Animator");
+  const op = e && e.getComponent("Opacity");
+  if (!tr || !anim || !op) return;
+  tr.text = text;
+  tr.fontSize = INTRO_BASE_FONT_SIZE * 1.5;
+  op.value = 1;
+  anim.animate(tr, "fontSize", INTRO_BASE_FONT_SIZE, { duration: 0.18, easing: "easeOut" });
+  anim.animate(op, "value", 0, { duration: INTRO_STEP_DURATION - 0.05, easing: "easeIn" });
 }
 
 function showBanner(engine, text) {
@@ -307,6 +368,20 @@ function flashVignette(engine, colorHex, peakAlpha, inDuration, outDuration) {
   });
 }
 
+// Same overlay as flashVignette, but fades to fully opaque black and holds
+// there (no auto fade-back-out) — used to fade the battle scene to black
+// right before the transition into pathchoice, which fades back in from
+// black on its own side (PathChoiceController.js's fadeIn).
+function fadeToBlack(engine, duration) {
+  const e = engine.getEntity("vignetteOverlay");
+  const shape = e && e.getComponent("ShapeRenderer");
+  const op = e && e.getComponent("Opacity");
+  const anim = e && e.getComponent("Animator");
+  if (!shape || !op || !anim) return;
+  shape.color = "#000000";
+  anim.animate(op, "value", 1, { duration, easing: "easeIn" });
+}
+
 // Attack cards shake the screen, scaled by the damage actually realized
 // (post-shield, since `results` already reflects absorption) — a fully
 // blocked hit barely shakes at all. Every other category gets a quick
@@ -375,6 +450,13 @@ function applyResultVisuals(engine, b, results, actorSide) {
       text = "Poisoned"; color = "#c026d3";
     } else if (r.type === "timeless") {
       text = "Timeless"; color = "#e2e8f0";
+    } else if (r.type === "reflect") {
+      text = `+${r.amount} Reflect`; color = "#38bdf8";
+    } else if (r.type === "reflectDamage") {
+      const amt = Math.round(r.amount * 10) / 10;
+      if (amt === 0) continue;
+      text = `${amt}s Reflected`; color = "#38bdf8";
+      impact(engine, side);
     }
     if (text) spawnFloatText(engine, x, midY, text, color);
   }
@@ -385,7 +467,7 @@ function applyResultVisuals(engine, b, results, actorSide) {
 // like the others — read straight off def.effects here instead. Affects
 // both sides equally since pace is shared (Time Out).
 function applyPaceEffects(engine, b, def, level, side) {
-  const scale = 1 + 0.5 * (level - 1);
+  const scale = levelScale(level);
   for (const eff of def.effects) {
     if (eff.type !== "pace") continue;
     const amt = eff.amount * scale;
@@ -410,6 +492,14 @@ function tickPoison(engine, b, side) {
   impact(engine, side);
 }
 
+// Reflect stacks (Reflect — CardDatabase.js) fall off over time, same
+// cadence as poison/shield decay — no visual per tick, the stack count is
+// only surfaced when it's gained/spent.
+function tickReflectDecay(b, side) {
+  const stats = side === "player" ? b.player : b.ai;
+  if (stats.reflect > 0) stats.reflect = Math.max(0, stats.reflect - REFLECT_DECAY_PER_TURN);
+}
+
 const PILE_SCALE = 0.5; // played cards shrink to this fraction of hand size when they land in the pile
 const PILE_MAX_CARDS = 10; // oldest piled card is removed once the pile would exceed this
 const PILE_CENTER_Y_OFFSET = -50; // moves the pile up from dead-center, away from the hand
@@ -421,7 +511,7 @@ const PILE_CENTER_Y_OFFSET = -50; // moves the pile up from dead-center, away fr
 // instead of each card layering as one coherent unit. setCardZIndex rebases
 // every instance's children onto that instance's own root zIndex so a whole
 // card — root and children together — moves as a unit in draw order.
-const PILE_CHILD_Z_OFFSETS = { descBg: 0, icon: 1, name: 2, desc: 3, badge: 4, badgeText: 5 };
+const PILE_CHILD_Z_OFFSETS = { cardArt: -1, descBg: 0, icon: 1, name: 2, desc: 3, badge: 4, badgeText: 5, levelIcon: 4 };
 
 function setCardZIndex(ent, baseZIndex) {
   const t = ent.getComponent("Transform");
@@ -521,12 +611,12 @@ function spawnAiPlayedCardVisual(engine, b, def, level) {
   const ent = engine.prefabs.instantiate("Card", {
     Transform: { x: startX, y: startY, zIndex: 90, rotation: (Math.random() - 0.5) * 16 },
     ShapeRenderer: { color: def.color },
+    SpriteRenderer: { frame: borderFrameForTier(def.tier) },
     children: {
       icon: { ShapeRenderer: { color: def.icon } },
       name: { TextRenderer: { text: level > 1 ? `${def.name} +${level - 1}` : def.name } },
       desc: { TextRenderer: { text: formatDescription(def, level) } },
-      badge: { ShapeRenderer: { width: level > 1 ? 22 : 0, height: level > 1 ? 22 : 0 } },
-      badgeText: { TextRenderer: { text: level > 1 ? `Lv${level}` : "" } },
+      levelIcon: { SpriteRenderer: { frame: levelIconFrame(level), width: level > 1 ? 22 : 0, height: level > 1 ? 22 : 0 } },
     },
   }, id);
   if (ent) animateCardPlay(engine, b, id);
@@ -570,13 +660,13 @@ function spawnHandEntities(engine, b) {
     const ent = engine.prefabs.instantiate("Card", {
       Transform: { x: vp.width / 2, y: vp.height + 160, zIndex: 20 + i },
       ShapeRenderer: { color: def.color },
+      SpriteRenderer: { frame: borderFrameForTier(def.tier) },
       Interactable: { onClick: "engine.callScript('PlayHandCard', entity, engine);" },
       children: {
         icon: { ShapeRenderer: { color: def.icon } },
         name: { TextRenderer: { text: card.level > 1 ? `${def.name} +${card.level - 1}` : def.name } },
         desc: { TextRenderer: { text: formatDescription(def, card.level) } },
-        badge: { ShapeRenderer: { width: card.level > 1 ? 22 : 0, height: card.level > 1 ? 22 : 0 } },
-        badgeText: { TextRenderer: { text: card.level > 1 ? `Lv${card.level}` : "" } },
+        levelIcon: { SpriteRenderer: { frame: levelIconFrame(card.level), width: card.level > 1 ? 22 : 0, height: card.level > 1 ? 22 : 0 } },
       },
     }, id);
     if (!ent) return;
@@ -657,7 +747,12 @@ function drawAiHand(aiLevel) {
   // below, instead of maxing out by round 5-7 while accuracy is still rising.
   const maxTier = 1 + Math.floor(aiLevel / 3);
   const pool = AI_POOL.filter((id) => CARD_DEFS[id].tier <= maxTier);
-  const level = Math.min(3, 1 + Math.floor(aiLevel / 4));
+  // Was hard-capped at level 3 (a leftover from when MAX_CARD_LEVEL was 3
+  // for players too) — now climbs all the way to MAX_CARD_LEVEL, reaching it
+  // around aiLevel 18 (~round 19), similar completion window to the other
+  // AI difficulty ramps above, so long runs don't leave the AI stuck at a
+  // fraction of the power the player's own upgrades can reach.
+  const level = Math.min(MAX_CARD_LEVEL, 1 + Math.floor(aiLevel / 2));
   const hand = [];
   for (let i = 0; i < 3; i++) {
     const defId = pool[Math.floor(Math.random() * pool.length)];
@@ -684,7 +779,7 @@ function chooseAiCard(b, aiLevel) {
   let bestIdx = 0, bestScore = -Infinity;
   b.aiHand.forEach((card, i) => {
     const def = CARD_DEFS[card.defId];
-    const scale = 1 + 0.5 * (card.level - 1);
+    const scale = levelScale(card.level);
     let score = 0;
     for (const eff of def.effects) {
       const amt = eff.amount * scale;
@@ -733,6 +828,8 @@ function chooseAiCard(b, aiLevel) {
       } else if (eff.type === "pace") {
         // Reducing pace matters most when the AI itself is under pressure.
         score += Math.abs(amt) * (b.ai.currentTime < b.ai.maxTime * 0.4 ? 1.0 : 0.3);
+      } else if (eff.type === "reflect") {
+        score += amt * 2; // punishes the player's attack cards for the rest of the fight, similar weight to shieldRetain/poison
       }
     }
     if (score > bestScore) { bestScore = score; bestIdx = i; }
@@ -755,6 +852,7 @@ export function playCard(engine, b, side, idx) {
 
   b.locked = true;
   handArr.splice(idx, 1);
+  playSound(engine, "place");
   const results = resolveEffects(def.effects, card.level, actorStats, opponentStats);
   applyPaceEffects(engine, b, def, card.level, side);
 
@@ -800,6 +898,8 @@ function resolveTurnEnd(engine, run, b) {
   // decay — independent of whose turn it was.
   tickPoison(engine, b, "player");
   tickPoison(engine, b, "ai");
+  tickReflectDecay(b, "player");
+  tickReflectDecay(b, "ai");
 
   b.turn = acted === "player" ? "ai" : "player";
   if (b.turn === "player") {
@@ -828,14 +928,16 @@ function endRound(engine, run, b, winner) {
   if (winner === "player") {
     // Elite Fight (PathChoiceController) trades a harder fight for a bigger
     // payout — 1.5x here is the "bigger" half of that trade.
-    const base = Math.max(MIN_ROUND_REWARD, Math.floor(b.player.currentTime));
+    const base = Math.round(Math.max(MIN_ROUND_REWARD, Math.floor(b.player.currentTime)) + run.round * ROUND_REWARD_PER_ROUND);
     const earned = b.isElite ? Math.round(base * 1.5) : base;
     run.currency += earned;
     run.round += 1;
     run.aiLevel += 1;
     engine.state.shop = null; // force ShopController to regenerate fresh offers next visit
+    playCoinBurst(engine, earned);
     showBanner(engine, `Round Won! +${earned} coins`);
     b.transitionTarget = "pathchoice";
+    fadeToBlack(engine, 1.2); // 1.8s roundOver window — leaves ~0.6s fully black before the cut
   } else {
     showBanner(engine, "Time's Up...");
     b.transitionTarget = "gameover";
@@ -861,7 +963,9 @@ function initBattle(engine, run) {
   return {
     phase: "intro",
     introTimer: 0,
+    introStep: -1,
     roundElapsed: 0,
+    tickTimer: 0,
     playPileCount: 0,
     turn: null,
     locked: false,
@@ -890,6 +994,7 @@ export function BattleController(entity, engine, dt) {
     b = engine.state.battle = initBattle(engine, run);
     layoutHud(engine, b);
     showBanner(engine, `Round ${run.round} — Fight!`);
+    playSound(engine, "shuffle");
     return;
   }
 
@@ -906,13 +1011,19 @@ export function BattleController(entity, engine, dt) {
 
   if (b.phase === "roundOver") {
     b.transitionTimer += dt;
+    updateClockTick(engine, b, dt, clamp01(1 - b.transitionTimer / TICK_FADE_DURATION));
     if (b.transitionTimer > 1.8) engine.loadScene(b.transitionTarget);
     return;
   }
 
   if (b.phase === "intro") {
     b.introTimer += dt;
-    if (b.introTimer > 1.2) {
+    const step = Math.min(INTRO_STEPS.length - 1, Math.floor(b.introTimer / INTRO_STEP_DURATION));
+    if (step !== b.introStep) {
+      b.introStep = step;
+      showIntroStep(engine, INTRO_STEPS[step]);
+    }
+    if (b.introTimer > INTRO_DURATION) {
       b.turn = "player";
       b.phase = "playerTurn";
       drawHand(engine, b, 3);
@@ -923,6 +1034,7 @@ export function BattleController(entity, engine, dt) {
 
   b.roundElapsed += dt;
   updateShake(engine, b, dt);
+  updateClockTick(engine, b, dt);
 
   if (b.pendingAfterPlay) {
     b.pendingAfterPlay.delay -= dt;

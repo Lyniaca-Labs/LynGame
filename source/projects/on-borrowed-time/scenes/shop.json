@@ -25,7 +25,6 @@
 
     { "id": "shopBurst", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
-      "Anchor": { "anchor": "center", "offsetY": 10 },
       "Emitter": {
         "enabled": false, "mode": "burst", "burstCount": 26, "burstInterval": 0,
         "angle": -90, "spread": 180, "speedMin": 60, "speedMax": 260,
@@ -43,7 +42,7 @@
         "width": 220,
         "height": 52,
         "cursor": "pointer",
-        "onClick": "engine.state.battle = null; engine.loadScene('main');"
+        "onClick": "engine.callScript('ShopContinue', entity, engine);"
       }
     } }
   ]

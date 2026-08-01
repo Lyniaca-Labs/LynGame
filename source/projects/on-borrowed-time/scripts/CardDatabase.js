@@ -48,7 +48,7 @@ export const CARD_DEFS = {
     id: "fortify", name: "Fortify", tier: 2, price: 18, category: "defense",
     color: "#1e3a5f", icon: "#60a5fa",
     descTemplate: "Increase your max time by {amt}s.",
-    effects: [{ type: "maxTime", target: "self", amount: 2 }],
+    effects: [{ type: "maxTime", target: "self", amount: 1 }],
   },
   mend: {
     id: "mend", name: "Mend", tier: 1, price: 11, category: "heal",
@@ -60,7 +60,7 @@ export const CARD_DEFS = {
     id: "secondWind", name: "Second Wind", tier: 2, price: 19, category: "heal",
     color: "#14532d", icon: "#4ade80",
     descTemplate: "Increase your regen by {amt}s.",
-    effects: [{ type: "regen", target: "self", amount: 2 }],
+    effects: [{ type: "regen", target: "self", amount: 1 }],
   },
   exhaust: {
     id: "exhaust", name: "Exhaust", tier: 2, price: 18, category: "utility",
@@ -128,13 +128,14 @@ export const CARD_DEFS = {
     effects: [{ type: "shieldRetain", target: "opponent", amount: -20 }],
   },
   // Ticking damage — see the "poison" case in CardEffects.js. Stacks if
-  // played more than once; ticks for both sides every turn-end regardless
-  // of whose turn it was, same cadence as shield decay.
+  // played more than once (capped at POISON_MAX_PER_TURN); ticks for both
+  // sides every turn-end regardless of whose turn it was, same cadence as
+  // shield decay.
   borrowedTime: {
     id: "borrowedTime", name: "Borrowed Time", tier: 2, price: 20, category: "utility",
     color: "#4a1942", icon: "#c026d3",
     descTemplate: "Opponent's time bleeds {amt}s every turn for the rest of the fight.",
-    effects: [{ type: "poison", target: "opponent", amount: 1.5 }],
+    effects: [{ type: "poison", target: "opponent", amount: 0.5 }],
   },
   // The one "timeless" flag-effect card — see BattleController.js's phase
   // drain code, which skips intensityMultiplier(b) entirely for a side with
@@ -196,6 +197,29 @@ export const CARD_DEFS = {
       { type: "drainRate", target: "self", amount: 0.2 },
     ],
   },
+  // Fortify's risk/reward sibling — hits Fortify's original pre-nerf power
+  // (+2 max time, before Fortify itself got knocked down to +1) in exchange
+  // for the regen downside, same trade shape as All-In does for Guard.
+  overreach: {
+    id: "overreach", name: "Overreach", tier: 3, price: 24, category: "defense",
+    color: "#7c2d12", icon: "#fbbf24",
+    descTemplate: "Increase your max time by {amt}s, but reduce your regen by {amt2}s for the rest of the fight.",
+    effects: [
+      { type: "maxTime", target: "self", amount: 2 },
+      { type: "regen", target: "self", amount: -1 },
+    ],
+  },
+  // Decaying stacks — see the "reflect" case in CardEffects.js for the gain,
+  // and its "currentTime" case for the bounce-back-at-attacker math (5% of
+  // realized damage per stack, capped at 60%). Stacks fall off over time
+  // (resolveTurnEnd in BattleController.js), so it rewards playing it
+  // shortly before you expect to get hit rather than banking it early.
+  reflect: {
+    id: "reflect", name: "Reflect", tier: 2, price: 19, category: "defense",
+    color: "#1e3a5f", icon: "#38bdf8",
+    descTemplate: "Gain {amt} decaying Reflect stacks — while active, each stack bounces some incoming damage back at your attacker.",
+    effects: [{ type: "reflect", target: "self", amount: 3 }],
+  },
 };
 
 export const STARTER_DECK = [
@@ -207,10 +231,49 @@ export const STARTER_DECK = [
 
 export const SHOP_POOL = Object.keys(CARD_DEFS);
 
-export const AI_POOL = ["strike", "guard", "mend", "heavyStrike", "drainStrike", "timeSteal", "exhaust", "reinforce", "overclock", "pierceStrike", "anchor", "corrode", "borrowedTime", "timeless", "timeOut"];
+export const AI_POOL = ["strike", "guard", "mend", "heavyStrike", "drainStrike", "timeSteal", "exhaust", "reinforce", "overclock", "pierceStrike", "anchor", "corrode", "borrowedTime", "timeless", "timeOut", "reflect"];
+
+// Single knob for how much stronger each card level makes its effects — was
+// duplicated as a hardcoded `1 + 0.5 * (level - 1)` in CardDatabase.js,
+// CardEffects.js, and twice in BattleController.js. Everything now goes
+// through levelScale() so this is the only place to tune it.
+export const LEVEL_POWER_SCALE = 0.25;
+
+export function levelScale(level) {
+  return 1 + LEVEL_POWER_SCALE * (level - 1);
+}
+
+// Highest level an upgrade (shop "Upgrade" offer, Rest & Recover, Quick
+// Study, Second Chance) can push a card's `level` field to — was hardcoded
+// as `level < 3` in both PathChoiceController.js and ShopController.js.
+export const MAX_CARD_LEVEL = 10;
+
+// Level icon (assets/levels.png + levels.spritesheet.json) — a numbered
+// badge sprite per level, shown by Card.json's "levelIcon" child in place of
+// the plain "Lv{level}" text badge. Sheet has frames levels_0..levels_9 for
+// levels 1..10 (MAX_CARD_LEVEL), via the "lvl1".."lvl10" clips.
+export function levelIconFrame(level) {
+  return `levels_${Math.min(Math.max(level, 1), MAX_CARD_LEVEL) - 1}`;
+}
+
+// Card art (assets/cards.png + cards.spritesheet.json) — see Card.json's
+// cardArt/cardBorder children. cardArt is the shared background frame every
+// card uses (the sheet's "cardbg" clip); cardBorder varies by tier so
+// higher-tier cards read as visibly fancier at a glance without touching
+// each card's own `color` (still the primary category cue underneath).
+export const CARD_ART_FRAME = "cardBackgrounds_9"; // "cardbg" clip
+const BORDER_FRAME_BY_TIER = {
+  1: "cardBackgrounds_0", // "border1" — plain
+  2: "cardBackgrounds_5", // "border6" — solid accent
+  3: "cardBackgrounds_3", // "border4" — ornate
+};
+
+export function borderFrameForTier(tier) {
+  return BORDER_FRAME_BY_TIER[tier] || BORDER_FRAME_BY_TIER[1];
+}
 
 export function formatDescription(def, level) {
-  const scale = 1 + 0.5 * (level - 1);
+  const scale = levelScale(level);
   const nums = def.effects.map((e) => Math.round(Math.abs(e.amount) * scale * 10) / 10);
   return def.descTemplate.replace("{amt}", nums[0]).replace("{amt2}", nums[1]);
 }

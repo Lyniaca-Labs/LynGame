@@ -7,37 +7,38 @@
     { "id": "content", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },
     { "id": "menuTitle", "parentId": "content", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
-      "Anchor": { "anchor": "center", "offsetY": -110 },
-      "TextRenderer": { "text": "On Borrowed Time", "fontFamily": "VT323", "googleFont": true, "fontSize": 52, "color": "#ffffff", "align": "center" }
+      "Anchor": { "anchor": "center", "offsetY": -98 },
+      "SpriteRenderer": { "sprite": "title", "frame": "TitleAnimation_0", "width": 480, "height": 120 },
+      "SpriteAnimation": { "clip": "Play", "playing": true }
     } },
     { "id": "menuSubtitle", "parentId": "content", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
-      "Anchor": { "anchor": "center", "offsetY": -58 },
+      "Anchor": { "anchor": "center", "offsetY": -16 },
       "TextRenderer": { "text": "Your time is your health.", "fontFamily": "VT323", "googleFont": true, "fontSize": 20, "color": "#8ea0ff", "align": "center" }
     } },
 
     { "id": "playBtn", "parentId": "content", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
-      "Anchor": { "anchor": "center", "offsetY": 20 },
+      "Anchor": { "anchor": "center", "offsetY": 62 },
       "ShapeRenderer": { "shape": "rect", "width": 220, "height": 52, "color": "#2f6f4e" },
       "TextRenderer": { "text": "Play", "fontFamily": "VT323", "googleFont": true, "fontSize": 24, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
       "Interactable": {
         "width": 220,
         "height": 52,
         "cursor": "pointer",
-        "onClick": "engine.loadScene('main');"
+        "onClick": "engine.callScript('MenuPlay', entity, engine);"
       }
     } },
     { "id": "tutorialBtn", "parentId": "content", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
-      "Anchor": { "anchor": "center", "offsetY": 90 },
+      "Anchor": { "anchor": "center", "offsetY": 132 },
       "ShapeRenderer": { "shape": "rect", "width": 220, "height": 52, "color": "#3a4a6b" },
       "TextRenderer": { "text": "Tutorial", "fontFamily": "VT323", "googleFont": true, "fontSize": 24, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
       "Interactable": {
         "width": 220,
         "height": 52,
         "cursor": "pointer",
-        "onClick": "engine.loadScene('tutorial');"
+        "onClick": "engine.callScript('MenuTutorial', entity, engine);"
       }
     } }
   ]

@@ -1,15 +1,71 @@
-// Thin playback layer on top of AssetLoader's cached <audio> elements
+// Low-latency playback layer on top of AssetLoader's cached <audio> elements
 // (AssetLoader._loadAudio caches one HTMLAudioElement per asset key).
-// Playing that cached element directly doesn't support overlap — a second
-// .play() call on the same element restarts it from 0 instead of layering a
-// second voice, which breaks anything that fires the same SFX rapidly (e.g.
-// playing several cards in quick succession). play() here clones the cached
-// element per call instead, so overlapping calls layer independently.
+//
+// play() used to clone that cached element per call (cloneNode + .play())
+// to support overlap — a second .play() on the same element restarts it
+// from 0 instead of layering a second voice. That worked, but every clone
+// has to re-initialize its own decode/buffering pipeline, which reliably
+// added an audible startup delay per play() — bad for anything meant to
+// feel immediate (UI clicks, a card landing). Instead, the first play() for
+// a given key decodes it once into an AudioBuffer via the Web Audio API
+// (fetching the already-downloaded element's `src`, so this normally hits
+// cache and takes a few ms); every play() after that — including the very
+// next one — schedules a fresh AudioBufferSourceNode from that decoded
+// buffer, which starts with effectively zero latency and layers freely.
 export class AudioModule {
   constructor(engine) {
     this.engine = engine;
     this.masterVolume = 1;
     this._playing = new Set();
+    this._ctx = null;
+    this._buffers = new Map(); // key -> decoded AudioBuffer
+    this._decoding = new Map(); // key -> in-flight decode Promise (shared across concurrent plays of the same key)
+  }
+
+  _context() {
+    if (!this._ctx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      this._ctx = new Ctx();
+    }
+    // Browsers start contexts suspended until a user gesture — play() is
+    // normally reached from a click handler or shortly after one, so this
+    // resolves almost immediately in practice.
+    if (this._ctx.state === "suspended") this._ctx.resume().catch(() => {});
+    return this._ctx;
+  }
+
+  // Called once by engine.loadScene() (right after assets finish loading,
+  // well before the player's first click) so decoding starts as early as
+  // possible instead of lazily on the very first play() call for a key —
+  // that first call would otherwise go through the slower clone-and-play
+  // fallback below, which (same as loadScene()'s audio.stopAll()) could
+  // still get cut short before it's ever audible on a scene-transitioning
+  // click. Safe to call repeatedly — already-decoded/in-flight keys no-op.
+  preloadAll() {
+    for (const [key, value] of Object.entries(this.engine.assets.cache)) {
+      if (value instanceof HTMLAudioElement) this._decode(key);
+    }
+  }
+
+  _decode(key) {
+    if (this._buffers.has(key)) return Promise.resolve(this._buffers.get(key));
+    if (this._decoding.has(key)) return this._decoding.get(key);
+
+    const element = this.engine.assets.get(key);
+    const promise = !element || !element.src
+      ? Promise.resolve(null)
+      : fetch(element.src)
+          .then((res) => res.arrayBuffer())
+          .then((data) => this._context().decodeAudioData(data))
+          .then((buffer) => {
+            this._buffers.set(key, buffer);
+            return buffer;
+          })
+          .catch(() => null)
+          .finally(() => this._decoding.delete(key));
+
+    this._decoding.set(key, promise);
+    return promise;
   }
 
   /**
@@ -18,11 +74,44 @@ export class AudioModule {
    * @param {number} [options.volume=1] - 0..1, multiplied by masterVolume
    * @param {boolean} [options.loop=false]
    * @param {number} [options.playbackRate=1]
-   * @returns {HTMLAudioElement|null} the playing instance — hang onto it to
-   *   stop a looping sound early (`instance.pause()`); one-shot SFX can
-   *   discard the return value.
+   * @returns {{pause: Function}|HTMLAudioElement|null} the playing instance —
+   *   hang onto it to stop a looping sound early (`instance.pause()`);
+   *   one-shot SFX can discard the return value.
    */
-  play(key, { volume = 1, loop = false, playbackRate = 1 } = {}) {
+  play(key, options = {}) {
+    const buffer = this._buffers.get(key);
+    if (buffer) return this._playBuffer(buffer, options);
+
+    // Not decoded yet — kick off decoding (cached for every future call to
+    // this key) and fall back to the old clone-and-play path just this once
+    // so the very first call to a given key still makes a sound.
+    this._decode(key);
+    return this._playElementFallback(key, options);
+  }
+
+  _playBuffer(buffer, { volume = 1, loop = false, playbackRate = 1 } = {}) {
+    const ctx = this._context();
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = loop;
+    source.playbackRate.value = playbackRate;
+
+    const gain = ctx.createGain();
+    gain.gain.value = Math.min(1, Math.max(0, volume * this.masterVolume));
+    source.connect(gain).connect(ctx.destination);
+
+    const instance = {
+      pause: () => {
+        try { source.stop(); } catch { /* already stopped/ended */ }
+      },
+    };
+    source.onended = () => this._playing.delete(instance);
+    this._playing.add(instance);
+    source.start();
+    return instance;
+  }
+
+  _playElementFallback(key, { volume = 1, loop = false, playbackRate = 1 } = {}) {
     const base = this.engine.assets.get(key);
     if (!base) return null;
 
@@ -33,8 +122,6 @@ export class AudioModule {
     instance.addEventListener("ended", () => this._playing.delete(instance));
 
     this._playing.add(instance);
-    // Autoplay-policy rejections (e.g. no user gesture yet) shouldn't throw
-    // into caller code — the sound just silently doesn't play.
     instance.play().catch(() => {});
     return instance;
   }
@@ -43,7 +130,7 @@ export class AudioModule {
   stopAll() {
     for (const instance of this._playing) {
       instance.pause();
-      instance.currentTime = 0;
+      if ("currentTime" in instance) instance.currentTime = 0;
     }
     this._playing.clear();
   }

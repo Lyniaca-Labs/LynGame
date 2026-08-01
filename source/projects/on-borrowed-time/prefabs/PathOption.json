@@ -1,0 +1,58 @@
+{
+  "components": {
+    "Transform": { "x": 0, "y": 0, "rotation": 0, "fixed": true, "zIndex": 20 },
+    "ShapeRenderer": { "shape": "rect", "width": 160, "height": 190, "color": "#2a2540", "cornerRadius": 14 },
+    "SpriteRenderer": { "sprite": "cards", "frame": "cardBackgrounds_5", "width": 160, "height": 190 },
+    "Interactable": { "width": 160, "height": 190, "cursor": "pointer" },
+    "Animator": { "clips": [] },
+    "Opacity": { "value": 1 }
+  },
+  "scripts": [],
+  "children": {
+    "cardArt": {
+      "components": {
+        "Transform": { "x": 0, "y": 0, "rotation": 0, "fixed": false, "zIndex": 499 },
+        "SpriteRenderer": { "sprite": "cards", "frame": "cardBackgrounds_9", "width": 160, "height": 190 },
+        "Opacity": { "value": 1 }
+      }
+    },
+    "title": {
+      "components": {
+        "Transform": { "x": 0, "y": -68, "rotation": 0, "fixed": false, "zIndex": 501 },
+        "TextRenderer": {
+          "text": "Perk",
+          "fontFamily": "VT323",
+          "googleFont": true,
+          "fontSize": 19,
+          "color": "#ffffff",
+          "align": "center",
+          "verticalAlign": "middle",
+          "maxWidth": 140,
+          "maxHeight": 44,
+          "wrap": true,
+          "autoShrink": true,
+          "minFontSize": 12
+        }
+      }
+    },
+    "desc": {
+      "components": {
+        "Transform": { "x": 0, "y": 20, "rotation": 0, "fixed": false, "zIndex": 501 },
+        "TextRenderer": {
+          "text": "Description",
+          "fontFamily": "VT323",
+          "googleFont": true,
+          "fontSize": 14,
+          "color": "#c8cad6",
+          "align": "center",
+          "verticalAlign": "middle",
+          "maxWidth": 138,
+          "maxHeight": 128,
+          "wrap": true,
+          "autoShrink": true,
+          "minFontSize": 9
+        }
+      }
+    }
+  }
+}
