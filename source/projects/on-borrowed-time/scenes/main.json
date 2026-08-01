@@ -1,0 +1,65 @@
+{
+  "name": "main",
+  "entities": [
+    { "id": "cam", "components": { "Transform": { "x": 0, "y": 0, "fixed": false }, "Camera": { "zoom": 1, "offset": { "x": 0, "y": 0 } } } },
+    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#0e0f16" } } },
+
+    { "id": "controller", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } }, "scripts": ["BattleController"] },
+
+    { "id": "playerPanel", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },
+    { "id": "playerBarFrame", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "fixed": true, "zIndex": 4 }, "ShapeRenderer": { "shape": "rect", "width": 34, "height": 270, "color": "#3b5bdb" } } },
+    { "id": "playerBarTrack", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "fixed": true, "zIndex": 5 }, "ShapeRenderer": { "shape": "rect", "width": 24, "height": 260, "color": "#12141c" } } },
+    { "id": "playerBarFill", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "fixed": true, "zIndex": 6 }, "ShapeRenderer": { "shape": "rect", "width": 18, "height": 260, "color": "#33d17a" } } },
+    { "id": "playerTimeLabel", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 136, "fixed": true, "zIndex": 7 }, "TextRenderer": { "text": "10.0s/10s", "fontFamily": "VT323", "googleFont": true, "fontSize": 19, "color": "#ffffff", "align": "center", "verticalAlign": "bottom", "maxWidth": 150, "wrap": true } } },
+    { "id": "playerNameLabel", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 100, "fixed": true, "zIndex": 7 }, "TextRenderer": { "text": "YOU", "fontFamily": "VT323", "googleFont": true, "fontSize": 24, "color": "#8ea0ff", "align": "center" } } },
+    { "id": "playerImpactEmitter", "parentId": "playerPanel", "components": {
+      "Transform": { "x": 130, "y": 300, "fixed": true },
+      "Emitter": {
+        "enabled": false, "mode": "burst", "burstCount": 18, "burstInterval": 0,
+        "angle": -90, "spread": 70, "speedMin": 80, "speedMax": 220,
+        "lifetimeMin": 0.25, "lifetimeMax": 0.5,
+        "particleTypes": [{ "shape": "circle", "color": ["#ffffff", "#ff8e8e", "#ffd76a"], "size": [3, 6], "gravity": 260, "fadeOut": true }]
+      }
+    } },
+
+    { "id": "aiPanel", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },
+    { "id": "aiBarFrame", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "fixed": true, "zIndex": 4 }, "ShapeRenderer": { "shape": "rect", "width": 34, "height": 270, "color": "#dc3b3b" } } },
+    { "id": "aiBarTrack", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "fixed": true, "zIndex": 5 }, "ShapeRenderer": { "shape": "rect", "width": 24, "height": 260, "color": "#12141c" } } },
+    { "id": "aiBarFill", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "fixed": true, "zIndex": 6 }, "ShapeRenderer": { "shape": "rect", "width": 18, "height": 260, "color": "#33d17a" } } },
+    { "id": "aiTimeLabel", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 136, "fixed": true, "zIndex": 7 }, "TextRenderer": { "text": "10.0s/10s", "fontFamily": "VT323", "googleFont": true, "fontSize": 19, "color": "#ffffff", "align": "center", "verticalAlign": "bottom", "maxWidth": 150, "wrap": true } } },
+    { "id": "aiNameLabel", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 100, "fixed": true, "zIndex": 7 }, "TextRenderer": { "text": "ENEMY", "fontFamily": "VT323", "googleFont": true, "fontSize": 24, "color": "#ff8e8e", "align": "center" } } },
+    { "id": "aiImpactEmitter", "parentId": "aiPanel", "components": {
+      "Transform": { "x": 830, "y": 300, "fixed": true },
+      "Emitter": {
+        "enabled": false, "mode": "burst", "burstCount": 18, "burstInterval": 0,
+        "angle": -90, "spread": 70, "speedMin": 80, "speedMax": 220,
+        "lifetimeMin": 0.25, "lifetimeMax": 0.5,
+        "particleTypes": [{ "shape": "circle", "color": ["#ffffff", "#ff8e8e", "#ffd76a"], "size": [3, 6], "gravity": 260, "fadeOut": true }]
+      }
+    } },
+
+    { "id": "hud", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },
+    { "id": "roundLabelValue", "parentId": "hud", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "top-left", "offsetX": 16, "offsetY": 14 },
+      "TextRenderer": { "text": "Round 1", "fontFamily": "VT323", "googleFont": true, "fontSize": 22, "color": "#ffffff" }
+    } },
+    { "id": "currencyLabelValue", "parentId": "hud", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "top-center", "offsetX": -16, "offsetY": 14 },
+      "TextRenderer": { "text": "Coins: 0", "fontFamily": "VT323", "googleFont": true, "fontSize": 22, "color": "#ffd76a", "align": "center" }
+    } },
+    { "id": "hotkeyHint", "parentId": "hud", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "bottom-center", "offsetY": -8 },
+      "TextRenderer": { "text": "Click a card, or press 1 / 2 / 3", "fontFamily": "VT323", "googleFont": true, "fontSize": 16, "color": "#7d8399", "align": "center" }
+    } },
+    { "id": "turnBanner", "parentId": "hud", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "top-center", "offsetY": 46 },
+      "TextRenderer": { "text": "", "fontFamily": "VT323", "googleFont": true, "fontSize": 28, "color": "#ffffff", "align": "center" },
+      "Animator": { "clips": [] },
+      "Opacity": { "value": 0 }
+    } }
+  ]
+}

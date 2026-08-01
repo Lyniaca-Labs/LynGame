@@ -1,0 +1,33 @@
+{
+  "name": "gameover",
+  "entities": [
+    { "id": "cam", "components": { "Transform": { "x": 0, "y": 0, "fixed": false }, "Camera": { "zoom": 1, "offset": { "x": 0, "y": 0 } } } },
+    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#1c0e0e" } } },
+
+    { "id": "controller", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } }, "scripts": ["GameOverController"] },
+
+    { "id": "content", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },
+    { "id": "gameOverTitle", "parentId": "content", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "center", "offsetY": -70 },
+      "TextRenderer": { "text": "Time's Up", "fontFamily": "VT323", "googleFont": true, "fontSize": 52, "color": "#ff8e8e", "align": "center" }
+    } },
+    { "id": "gameOverStats", "parentId": "content", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "center", "offsetY": 4 },
+      "TextRenderer": { "text": "", "fontFamily": "VT323", "googleFont": true, "fontSize": 22, "color": "#e5e7eb", "align": "center", "lineHeight": 1.5 }
+    } },
+    { "id": "restartBtn", "parentId": "content", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "center", "offsetY": 110 },
+      "ShapeRenderer": { "shape": "rect", "width": 220, "height": 52, "color": "#7f2d2d" },
+      "TextRenderer": { "text": "Try Again", "fontFamily": "VT323", "googleFont": true, "fontSize": 24, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
+      "Interactable": {
+        "width": 220,
+        "height": 52,
+        "cursor": "pointer",
+        "onClick": "engine.state.run = null; engine.state.battle = null; engine.loadScene('main');"
+      }
+    } }
+  ]
+}

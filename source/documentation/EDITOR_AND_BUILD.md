@@ -40,11 +40,30 @@ editor/compiler itself, not while building a game against the engine.
 6. Resolves `@types/`/`@components/` aliases in project-local component
    files (`aliasResolver.ts`) to real relative import paths.
 7. Writes `output/<name>/index.html` from a template.
+8. Bundles + minifies (`bundle.ts`, esbuild) the two files `index.html`
+   actually loads — `engine/index.js` and `game/main.js` — comments
+   stripped, in place. This is a single esbuild call over both entry
+   points with code splitting on: `engine/index.js` and `game/main.js`
+   both statically import several of the same engine component files
+   directly (e.g. `Transform`), and the engine identifies a component by
+   its class reference, so bundling them independently would give each
+   its own copy of that class and silently break
+   `getComponent()`/`addComponent()` across the two bundles. Splitting
+   extracts shared modules into one chunk (`chunks/`) imported by both
+   instead. Everything now fully inlined into those two bundles
+   (`engine/{components,modules,types,extensions}`,
+   `game/{components,scripts,scenes,prefabs,animations,project.lg}`) is
+   deleted afterward — `engine/index.js` itself is kept (not inlined into
+   `game/main.js`) because a compiled texture asset
+   (`textureCompiler.ts`) statically imports `LGTexture` from it, and
+   that import is only resolved at runtime (loaded dynamically by
+   `AssetLoader`), outside esbuild's static graph.
 
 Result: `source/output/<name>/` is a fully standalone, static, servable
-game — `index.html` + `engine/` + `game/` — no server/build step needed to
-run it (see `templates/index.html`: it just does
-`new GameEngine(container)` then `import("./game/main.js")` then `init(engine)`).
+game — `index.html` + `engine/index.js` + `game/main.js` (+ `game/assets/`
++ a shared `chunks/` file) — no server/build step needed to run it (see
+`templates/index.html`: it just does `new GameEngine(container)` then
+`import("./game/main.js")` then `init(engine)`).
 
 ## Editor ↔ game preview communication
 
