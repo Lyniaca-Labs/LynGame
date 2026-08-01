@@ -1,0 +1,100 @@
+{
+  "cellWidth": 128,
+  "cellHeight": 32,
+  "columns": 4,
+  "frames": [
+    {
+      "index": 0,
+      "name": "TitleAnimation_0"
+    },
+    {
+      "index": 1,
+      "name": "TitleAnimation_1"
+    },
+    {
+      "index": 2,
+      "name": "TitleAnimation_2"
+    },
+    {
+      "index": 3,
+      "name": "TitleAnimation_3"
+    },
+    {
+      "index": 4,
+      "name": "TitleAnimation_4"
+    },
+    {
+      "index": 5,
+      "name": "TitleAnimation_5"
+    },
+    {
+      "index": 6,
+      "name": "TitleAnimation_6"
+    },
+    {
+      "index": 7,
+      "name": "TitleAnimation_7"
+    },
+    {
+      "index": 8,
+      "name": "TitleAnimation_8"
+    },
+    {
+      "index": 9,
+      "name": "TitleAnimation_9"
+    },
+    {
+      "index": 10,
+      "name": "TitleAnimation_10"
+    },
+    {
+      "index": 11,
+      "name": "TitleAnimation_11"
+    },
+    {
+      "index": 12,
+      "name": "TitleAnimation_12"
+    },
+    {
+      "index": 13,
+      "name": "TitleAnimation_13"
+    },
+    {
+      "index": 14,
+      "name": "TitleAnimation_14"
+    },
+    {
+      "index": 15,
+      "name": "TitleAnimation_15"
+    },
+    {
+      "index": 16,
+      "name": "TitleAnimation_16"
+    },
+    {
+      "index": 17,
+      "name": "TitleAnimation_17"
+    },
+    {
+      "index": 18,
+      "name": "TitleAnimation_18"
+    },
+    {
+      "index": 19,
+      "name": "TitleAnimation_19"
+    }
+  ],
+  "clips": {
+    "Play": {
+      "frames": [
+        "TitleAnimation_0", "TitleAnimation_1", "TitleAnimation_2", "TitleAnimation_3",
+        "TitleAnimation_4", "TitleAnimation_5", "TitleAnimation_6", "TitleAnimation_7",
+        "TitleAnimation_8", "TitleAnimation_9", "TitleAnimation_10", "TitleAnimation_11",
+        "TitleAnimation_12", "TitleAnimation_13", "TitleAnimation_14", "TitleAnimation_15",
+        "TitleAnimation_16", "TitleAnimation_17", "TitleAnimation_18", "TitleAnimation_19"
+      ],
+      "fps": 3,
+      "loop": true
+    }
+  }
+}

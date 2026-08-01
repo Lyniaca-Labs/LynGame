@@ -1,0 +1,48 @@
+{
+  "name": "tutorial",
+  "entities": [
+    { "id": "cam", "components": { "Transform": { "x": 0, "y": 0, "fixed": false }, "Camera": { "zoom": 1, "offset": { "x": 0, "y": 0 } } } },
+    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#0e0f16" } } },
+
+    { "id": "controller", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } }, "scripts": ["TutorialController"] },
+
+    { "id": "content", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },
+    { "id": "tutorialStepLabel", "parentId": "content", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "center", "offsetY": -170 },
+      "TextRenderer": { "text": "Step 1 / 5", "fontFamily": "VT323", "googleFont": true, "fontSize": 18, "color": "#6b7080", "align": "center" }
+    } },
+    { "id": "tutorialTitle", "parentId": "content", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "center", "offsetY": -128 },
+      "TextRenderer": { "text": "", "fontFamily": "VT323", "googleFont": true, "fontSize": 34, "color": "#ffffff", "align": "center" }
+    } },
+    { "id": "tutorialBody", "parentId": "content", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "center", "offsetY": -20 },
+      "TextRenderer": { "text": "", "fontFamily": "VT323", "googleFont": true, "fontSize": 20, "color": "#c7cad6", "align": "center", "wrap": true, "maxWidth": 620 }
+    } },
+
+    { "id": "tutorialBackBtn", "parentId": "content", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "center", "offsetX": -160, "offsetY": 150 },
+      "ShapeRenderer": { "shape": "rect", "width": 140, "height": 48, "color": "#2a2d38" },
+      "TextRenderer": { "text": "< Back", "fontFamily": "VT323", "googleFont": true, "fontSize": 20, "color": "#c7cad6", "align": "center", "verticalAlign": "middle" },
+      "Opacity": { "value": 0.35 },
+      "Interactable": { "width": 140, "height": 48, "cursor": "default", "onClick": "" }
+    } },
+    { "id": "tutorialNextBtn", "parentId": "content", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "center", "offsetX": 160, "offsetY": 150 },
+      "ShapeRenderer": { "shape": "rect", "width": 180, "height": 48, "color": "#2f6f4e" },
+      "TextRenderer": { "text": "Next", "fontFamily": "VT323", "googleFont": true, "fontSize": 20, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
+      "Interactable": { "width": 180, "height": 48, "cursor": "pointer", "onClick": "engine.callScript('TutorialNext', entity, engine);" }
+    } },
+    { "id": "tutorialSkipBtn", "parentId": "content", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "top-right", "offsetX": -20, "offsetY": 18 },
+      "TextRenderer": { "text": "Skip Tutorial", "fontFamily": "VT323", "googleFont": true, "fontSize": 18, "color": "#7d8399", "align": "right" },
+      "Interactable": { "width": 120, "height": 26, "cursor": "pointer", "onClick": "engine.callScript('TutorialSkip', entity, engine);" }
+    } }
+  ]
+}

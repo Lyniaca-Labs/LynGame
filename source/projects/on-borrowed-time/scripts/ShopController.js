@@ -75,6 +75,12 @@ function spawnOffers(engine, shop) {
     const anim = ent.getComponent("Animator");
     const op = ent.getComponent("Opacity");
     const targetY = t.y;
+    // Set explicitly now rather than relying on onHoverEnter's lazy `??`
+    // cache: if the shop opens while the cursor already sits over where a
+    // card lands, hover can fire on the very first frame — before this
+    // entrance tween even starts — catching t.y at the +60 "start below"
+    // offset below and locking that in as the permanent resting position.
+    ent.state.baseY = targetY;
     t.y = targetY + 60;
     if (op) op.value = 0;
     if (anim) {

@@ -12,6 +12,10 @@ export function initRun(engine) {
     currency: 0,
     round: 1,
     aiLevel: 0,
+    // Set by PathChoiceController's "Elite Fight" option, consumed once by
+    // BattleController.js's initBattle (boosted aiLevel for that one fight)
+    // and cleared immediately after so it never lingers past its round.
+    eliteNext: false,
   };
   engine.state.battle = null;
   return engine.state.run;
