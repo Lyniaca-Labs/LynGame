@@ -54,7 +54,10 @@
           "align": "center",
           "verticalAlign": "middle",
           "maxWidth": 90,
-          "wrap": true
+          "maxHeight": 52,
+          "wrap": true,
+          "autoShrink": true,
+          "minFontSize": 9
         },
         "Opacity": { "value": 1 }
       }

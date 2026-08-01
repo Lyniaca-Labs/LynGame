@@ -66,6 +66,8 @@ export class TextRenderer extends Component {
     maxHeight: { type: "number", default: 0, description: "Max height in pixels before lines are dropped/ellipsized. 0 = unlimited." },
     wrap: { type: "boolean", default: true, description: "Wrap text onto multiple lines within maxWidth." },
     ellipsis: { type: "boolean", default: false, description: "Truncate with \"…\" if the text overflows maxWidth/maxHeight." },
+    autoShrink: { type: "boolean", default: false, description: "If true and maxHeight is set, progressively shrinks fontSize (down to minFontSize) until the wrapped text fits within maxWidth/maxHeight, instead of dropping/ellipsizing lines." },
+    minFontSize: { type: "number", default: 8, description: "Floor fontSize autoShrink won't go below." },
 
     // Text transform (CSS-style)
     textTransform: { type: "string", default: "none", description: "\"none\" | \"uppercase\" | \"lowercase\" | \"capitalize\"." },
@@ -76,6 +78,7 @@ export class TextRenderer extends Component {
     this._fontLoaded = !this.googleFont; // non-google fonts are "ready" immediately
     this._lines = null; // cached wrapped lines
     this._cacheKey = null; // invalidation key for re-wrapping
+    this._effectiveFontSize = this.fontSize; // set by autoShrink; falls back to fontSize
 
     if (this.googleFont) {
       loadGoogleFont(this.fontFamily, this.fontWeight).then(() => {
@@ -105,7 +108,8 @@ export class TextRenderer extends Component {
   }
 
   _font() {
-    return `${this.fontStyle} ${this.fontWeight} ${this.fontSize}px "${this.fontFamily}"`;
+    const size = this._effectiveFontSize ?? this.fontSize;
+    return `${this.fontStyle} ${this.fontWeight} ${size}px "${this.fontFamily}"`;
   }
 
   _measure(ctx, str) {
@@ -132,6 +136,35 @@ export class TextRenderer extends Component {
     return lo <= 0 ? "…" : str.slice(0, lo) + "…";
   }
 
+  // Word-wraps `paragraphs` at a specific font size (independent of
+  // `this._effectiveFontSize`) — the building block autoShrink's search loop
+  // below re-runs at each candidate size to see if it fits.
+  _wrapAtSize(ctx, size, paragraphs) {
+    if (!this.maxWidth || !this.wrap) return paragraphs;
+    ctx.font = `${this.fontStyle} ${this.fontWeight} ${size}px "${this.fontFamily}"`;
+    const measure = (str) => {
+      const width = ctx.measureText(str).width;
+      const extra = this.letterSpacing * Math.max(str.length - 1, 0);
+      return width + extra;
+    };
+    const lines = [];
+    for (const para of paragraphs) {
+      const words = para.split(" ");
+      let current = "";
+      for (const word of words) {
+        const test = current ? `${current} ${word}` : word;
+        if (measure(test) <= this.maxWidth || !current) {
+          current = test;
+        } else {
+          lines.push(current);
+          current = word;
+        }
+      }
+      lines.push(current);
+    }
+    return lines;
+  }
+
   _wrapLines(ctx) {
     const cacheKey = JSON.stringify([
       this.text,
@@ -146,35 +179,32 @@ export class TextRenderer extends Component {
       this.lineHeight,
       this.letterSpacing,
       this.textTransform,
+      this.autoShrink,
+      this.minFontSize,
     ]);
     if (this._lines && this._cacheKey === cacheKey) return this._lines;
 
     const transformed = this._applyTransform(this.text);
     const paragraphs = transformed.split("\n");
-    let lines = [];
 
-    if (!this.maxWidth || !this.wrap) {
-      lines = paragraphs;
-    } else {
-      for (const para of paragraphs) {
-        const words = para.split(" ");
-        let current = "";
-        for (const word of words) {
-          const test = current ? `${current} ${word}` : word;
-          if (this._measure(ctx, test) <= this.maxWidth || !current) {
-            current = test;
-          } else {
-            lines.push(current);
-            current = word;
-          }
-        }
-        lines.push(current);
+    let effectiveSize = this.fontSize;
+    let lines = this._wrapAtSize(ctx, effectiveSize, paragraphs);
+
+    // Shrink fontSize a pixel at a time until the wrapped block fits inside
+    // maxHeight (or we hit the floor) — re-wrapping at each size since a
+    // smaller font also fits more words per line.
+    if (this.autoShrink && this.maxHeight) {
+      const min = Math.max(1, Math.min(this.minFontSize || 8, this.fontSize));
+      while (effectiveSize > min && lines.length * (effectiveSize * this.lineHeight) > this.maxHeight) {
+        effectiveSize -= 1;
+        lines = this._wrapAtSize(ctx, effectiveSize, paragraphs);
       }
     }
+    this._effectiveFontSize = effectiveSize;
 
     // Height clamp: drop/ellipsis lines that exceed maxHeight
     if (this.maxHeight) {
-      const lineHeightPx = this.fontSize * this.lineHeight;
+      const lineHeightPx = effectiveSize * this.lineHeight;
       const maxLines = Math.max(1, Math.floor(this.maxHeight / lineHeightPx));
       if (lines.length > maxLines) {
         lines = lines.slice(0, maxLines);
@@ -208,7 +238,7 @@ export class TextRenderer extends Component {
   }
 
   getLineHeight() {
-    return this.fontSize * this.lineHeight;
+    return (this._effectiveFontSize ?? this.fontSize) * this.lineHeight;
   }
 
   getHeight(ctx) {
@@ -241,15 +271,17 @@ export class TextRenderer extends Component {
     else ctx.textAlign = "left";
 
     const lines = this._wrapLines(ctx);
+    ctx.font = this._font(); // _wrapLines may have shrunk _effectiveFontSize (autoShrink)
     const lineHeightPx = this.getLineHeight();
     const totalHeight = lines.length * lineHeightPx;
+    const effectiveFontSize = this._effectiveFontSize ?? this.fontSize;
 
     // vertical alignment: block starts at (0,0) by convention, like the
     // shape/sprite renderers center on the transform origin via width/height,
     // so we offset the whole block based on verticalAlign.
     let startY;
-    if (this.verticalAlign === "middle") startY = -totalHeight / 2 + this.fontSize;
-    else if (this.verticalAlign === "bottom") startY = -totalHeight + this.fontSize;
+    if (this.verticalAlign === "middle") startY = -totalHeight / 2 + effectiveFontSize;
+    else if (this.verticalAlign === "bottom") startY = -totalHeight + effectiveFontSize;
     else startY = 0; // "top"
 
     // horizontal anchor offset (align affects ctx.textAlign, but we still need

@@ -454,6 +454,7 @@ function scaleCardVisual(ent, scale) {
     if (tr) {
       tr.fontSize = Math.max(6, tr.fontSize * scale);
       if (tr.maxWidth) tr.maxWidth *= scale;
+      if (tr.maxHeight) tr.maxHeight *= scale;
     }
   }
 }
@@ -785,13 +786,15 @@ function resolveTurnEnd(engine, run, b) {
     stats.currentTime = Math.min(stats.maxTime, stats.currentTime + stats.regen);
   }
 
-  // Shield decays every turn-end (both sides, not just whoever acted) so it
-  // acts as a short-term buffer rather than a permanent stat — each side's
-  // own shieldRetain (Anchor/Corrode) controls how much survives the tick.
-  b.player.shield *= b.player.shieldRetain;
-  if (b.player.shield < 0.05) b.player.shield = 0;
-  b.ai.shield *= b.ai.shieldRetain;
-  if (b.ai.shield < 0.05) b.ai.shield = 0;
+  // Shield decays once per round, right after the OPPONENT's turn ends —
+  // i.e. only once it's actually had a chance to absorb a hit — not after
+  // the turn it was gained on. `acted` is whoever's turn just ended, so the
+  // side whose shield decays here is the *other* one (their opponent, who
+  // just had a turn to attack it). Each side's own shieldRetain (Anchor/
+  // Corrode) still controls how much survives the tick.
+  const decaying = acted === "player" ? b.ai : b.player;
+  decaying.shield *= decaying.shieldRetain;
+  if (decaying.shield < 0.05) decaying.shield = 0;
 
   // Poison (Borrowed Time) ticks every turn-end too, same cadence as shield
   // decay — independent of whose turn it was.

@@ -26,7 +26,13 @@
         "text": "SHOP\n\nBuy, upgrade, or remove\ncards from your deck.\n\n+ Guaranteed value\n(no combat risk)",
         "fontFamily": "VT323", "googleFont": true, "fontSize": 17, "color": "#e5e7eb", "align": "center", "verticalAlign": "middle", "wrap": true, "maxWidth": 190
       },
-      "Interactable": { "width": 220, "height": 280, "cursor": "pointer", "onClick": "engine.callScript('PathChoiceShop', entity, engine);" }
+      "Interactable": {
+        "width": 220, "height": 280, "cursor": "pointer",
+        "onClick": "engine.callScript('PathChoiceShop', entity, engine);",
+        "onHoverEnter": "var a = entity.getComponent('Anchor'); var anim = entity.getComponent('Animator'); if (a && anim) anim.animate(a, 'offsetY', -12, { duration: 0.16, easing: 'easeOut' });",
+        "onHoverExit": "var a = entity.getComponent('Anchor'); var anim = entity.getComponent('Animator'); if (a && anim) anim.animate(a, 'offsetY', 0, { duration: 0.18, easing: 'easeOut' });"
+      },
+      "Animator": { "clips": [] }
     } },
     { "id": "pathEliteOption", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
@@ -36,7 +42,13 @@
         "text": "ELITE FIGHT\n\nSkip the shop. Fight a\ntougher opponent now.\n\n+ 1.5x coin reward\n- Harder fight, no shop",
         "fontFamily": "VT323", "googleFont": true, "fontSize": 17, "color": "#fde5e5", "align": "center", "verticalAlign": "middle", "wrap": true, "maxWidth": 190
       },
-      "Interactable": { "width": 220, "height": 280, "cursor": "pointer", "onClick": "engine.callScript('PathChoiceElite', entity, engine);" }
+      "Interactable": {
+        "width": 220, "height": 280, "cursor": "pointer",
+        "onClick": "engine.callScript('PathChoiceElite', entity, engine);",
+        "onHoverEnter": "var a = entity.getComponent('Anchor'); var anim = entity.getComponent('Animator'); if (a && anim) anim.animate(a, 'offsetY', -12, { duration: 0.16, easing: 'easeOut' });",
+        "onHoverExit": "var a = entity.getComponent('Anchor'); var anim = entity.getComponent('Animator'); if (a && anim) anim.animate(a, 'offsetY', 0, { duration: 0.18, easing: 'easeOut' });"
+      },
+      "Animator": { "clips": [] }
     } },
     { "id": "pathRestOption", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
@@ -46,7 +58,13 @@
         "text": "REST SITE\n\nSkip the shop. Freely\nupgrade one random card.\n\n+ Guaranteed upgrade\n- No shop, no new cards",
         "fontFamily": "VT323", "googleFont": true, "fontSize": 17, "color": "#e0edff", "align": "center", "verticalAlign": "middle", "wrap": true, "maxWidth": 190
       },
-      "Interactable": { "width": 220, "height": 280, "cursor": "pointer", "onClick": "engine.callScript('PathChoiceRest', entity, engine);" }
+      "Interactable": {
+        "width": 220, "height": 280, "cursor": "pointer",
+        "onClick": "engine.callScript('PathChoiceRest', entity, engine);",
+        "onHoverEnter": "var a = entity.getComponent('Anchor'); var anim = entity.getComponent('Animator'); if (a && anim) anim.animate(a, 'offsetY', -12, { duration: 0.16, easing: 'easeOut' });",
+        "onHoverExit": "var a = entity.getComponent('Anchor'); var anim = entity.getComponent('Animator'); if (a && anim) anim.animate(a, 'offsetY', 0, { duration: 0.18, easing: 'easeOut' });"
+      },
+      "Animator": { "clips": [] }
     } }
   ]
 }
