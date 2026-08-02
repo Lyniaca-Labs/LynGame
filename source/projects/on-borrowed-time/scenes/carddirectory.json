@@ -1,0 +1,45 @@
+{
+  "name": "carddirectory",
+  "entities": [
+    { "id": "cam", "components": { "Transform": { "x": 0, "y": 0, "fixed": false }, "Camera": { "zoom": 1, "offset": { "x": 0, "y": 0 } } } },
+    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#221c35" } } },
+
+    { "id": "controller", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } }, "scripts": ["CardDirectoryController"] },
+
+    { "id": "hud", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },
+    { "id": "directoryTitle", "parentId": "hud", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "top-center", "offsetY": 16 },
+      "TextRenderer": { "text": "Card Directory", "fontFamily": "VT323", "googleFont": true, "fontSize": 28, "color": "#ffffff", "align": "center" }
+    } },
+    { "id": "directoryBackBtn", "parentId": "hud", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "top-left", "offsetX": 90, "offsetY": 40 },
+      "ShapeRenderer": { "shape": "rect", "width": 140, "height": 44, "color": "#2a2d38" },
+      "TextRenderer": { "text": "< Back", "fontFamily": "VT323", "googleFont": true, "fontSize": 20, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
+      "Interactable": { "width": 140, "height": 44, "cursor": "pointer", "onClick": "engine.callScript('DirectoryBack', entity, engine);" }
+    } },
+
+    { "id": "directoryPrevBtn", "parentId": "hud", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "bottom-center", "offsetX": -140, "offsetY": -30 },
+      "ShapeRenderer": { "shape": "rect", "width": 120, "height": 44, "color": "#2a2d38" },
+      "TextRenderer": { "text": "< Prev", "fontFamily": "VT323", "googleFont": true, "fontSize": 20, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
+      "Interactable": { "width": 120, "height": 44, "cursor": "pointer", "onClick": "engine.callScript('DirectoryPrevPage', entity, engine);" },
+      "Opacity": { "value": 1 }
+    } },
+    { "id": "directoryPageLabel", "parentId": "hud", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "bottom-center", "offsetY": -42 },
+      "TextRenderer": { "text": "Page 1 / 1", "fontFamily": "VT323", "googleFont": true, "fontSize": 20, "color": "#c7cad6", "align": "center" }
+    } },
+    { "id": "directoryNextBtn", "parentId": "hud", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "bottom-center", "offsetX": 140, "offsetY": -30 },
+      "ShapeRenderer": { "shape": "rect", "width": 120, "height": 44, "color": "#2a2d38" },
+      "TextRenderer": { "text": "Next >", "fontFamily": "VT323", "googleFont": true, "fontSize": 20, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
+      "Interactable": { "width": 120, "height": 44, "cursor": "pointer", "onClick": "engine.callScript('DirectoryNextPage', entity, engine);" },
+      "Opacity": { "value": 1 }
+    } }
+  ]
+}

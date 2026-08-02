@@ -2,17 +2,24 @@
   "name": "main",
   "entities": [
     { "id": "cam", "components": { "Transform": { "x": 0, "y": 0, "fixed": false }, "Camera": { "zoom": 1, "offset": { "x": 0, "y": 0 } } } },
-    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#0e0f16" } } },
+    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#1a1b22" } } },
     { "id": "table", "components": { "Transform": { "x": 0, "y": 0, "fixed": true, "zIndex": 0 }, "SpriteRenderer": { "sprite": "table", "width": 520, "height": 520 } } },
 
     { "id": "controller", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } }, "scripts": ["BattleController"] },
 
     { "id": "playerPanel", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },
-    { "id": "playerBarFrame", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "fixed": true, "zIndex": 4 }, "ShapeRenderer": { "shape": "rect", "width": 34, "height": 270, "color": "#3b5bdb" } } },
     { "id": "playerBarTrack", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "fixed": true, "zIndex": 5 }, "ShapeRenderer": { "shape": "rect", "width": 24, "height": 260, "color": "#12141c" } } },
     { "id": "playerBarFill", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "fixed": true, "zIndex": 6 }, "ShapeRenderer": { "shape": "rect", "width": 18, "height": 260, "color": "#33d17a" } } },
     { "id": "playerShieldPreview", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "fixed": true, "zIndex": 6.2 }, "ShapeRenderer": { "shape": "rect", "width": 22, "height": 0, "color": "rgba(96, 165, 250, 0.3)" } } },
     { "id": "playerBarPreview", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "fixed": true, "zIndex": 6.5 }, "ShapeRenderer": { "shape": "rect", "width": 18, "height": 0, "color": "rgba(74, 222, 128, 0.35)" } } },
+    { "id": "playerBarCapTop", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barleft", "width": 1, "height": 1 } } },
+    { "id": "playerBarCapBottom", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barright", "width": 1, "height": 1 } } },
+    { "id": "playerBarMid0", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barmiddle", "width": 1, "height": 1 } } },
+    { "id": "playerBarMid1", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barmiddle", "width": 1, "height": 1 } } },
+    { "id": "playerBarMid2", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barmiddle", "width": 1, "height": 1 } } },
+    { "id": "playerBarMid3", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barmiddle", "width": 1, "height": 1 } } },
+    { "id": "playerBarMid4", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barmiddle", "width": 1, "height": 1 } } },
+    { "id": "playerBarMid5", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barmiddle", "width": 1, "height": 1 } } },
     { "id": "playerTimeLabel", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 136, "fixed": true, "zIndex": 7 }, "TextRenderer": { "text": "10.0s/10s", "fontFamily": "VT323", "googleFont": true, "fontSize": 19, "color": "#ffffff", "align": "center", "verticalAlign": "bottom", "maxWidth": 150, "wrap": true } } },
     { "id": "playerNameLabel", "parentId": "playerPanel", "components": { "Transform": { "x": 130, "y": 100, "fixed": true, "zIndex": 7 }, "TextRenderer": { "text": "YOU", "fontFamily": "VT323", "googleFont": true, "fontSize": 24, "color": "#8ea0ff", "align": "center" } } },
     { "id": "playerImpactEmitter", "parentId": "playerPanel", "components": {
@@ -35,11 +42,18 @@
     } },
 
     { "id": "aiPanel", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },
-    { "id": "aiBarFrame", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "fixed": true, "zIndex": 4 }, "ShapeRenderer": { "shape": "rect", "width": 34, "height": 270, "color": "#dc3b3b" } } },
     { "id": "aiBarTrack", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "fixed": true, "zIndex": 5 }, "ShapeRenderer": { "shape": "rect", "width": 24, "height": 260, "color": "#12141c" } } },
     { "id": "aiBarFill", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "fixed": true, "zIndex": 6 }, "ShapeRenderer": { "shape": "rect", "width": 18, "height": 260, "color": "#33d17a" } } },
     { "id": "aiShieldPreview", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "fixed": true, "zIndex": 6.2 }, "ShapeRenderer": { "shape": "rect", "width": 22, "height": 0, "color": "rgba(96, 165, 250, 0.3)" } } },
     { "id": "aiBarPreview", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "fixed": true, "zIndex": 6.5 }, "ShapeRenderer": { "shape": "rect", "width": 18, "height": 0, "color": "rgba(74, 222, 128, 0.35)" } } },
+    { "id": "aiBarCapTop", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barleft", "width": 1, "height": 1 } } },
+    { "id": "aiBarCapBottom", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barright", "width": 1, "height": 1 } } },
+    { "id": "aiBarMid0", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barmiddle", "width": 1, "height": 1 } } },
+    { "id": "aiBarMid1", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barmiddle", "width": 1, "height": 1 } } },
+    { "id": "aiBarMid2", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barmiddle", "width": 1, "height": 1 } } },
+    { "id": "aiBarMid3", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barmiddle", "width": 1, "height": 1 } } },
+    { "id": "aiBarMid4", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barmiddle", "width": 1, "height": 1 } } },
+    { "id": "aiBarMid5", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 300, "rotation": 90, "fixed": true, "zIndex": 6.8 }, "SpriteRenderer": { "sprite": "bar", "frame": "barmiddle", "width": 1, "height": 1 } } },
     { "id": "aiTimeLabel", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 136, "fixed": true, "zIndex": 7 }, "TextRenderer": { "text": "10.0s/10s", "fontFamily": "VT323", "googleFont": true, "fontSize": 19, "color": "#ffffff", "align": "center", "verticalAlign": "bottom", "maxWidth": 150, "wrap": true } } },
     { "id": "aiNameLabel", "parentId": "aiPanel", "components": { "Transform": { "x": 830, "y": 100, "fixed": true, "zIndex": 7 }, "TextRenderer": { "text": "ENEMY", "fontFamily": "VT323", "googleFont": true, "fontSize": 24, "color": "#ff8e8e", "align": "center" } } },
     { "id": "aiImpactEmitter", "parentId": "aiPanel", "components": {
@@ -69,13 +83,13 @@
     } },
     { "id": "currencyLabelValue", "parentId": "hud", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
-      "Anchor": { "anchor": "top-center", "offsetX": -16, "offsetY": 14 },
+      "Anchor": { "anchor": "top-center", "offsetX": -70, "offsetY": 14 },
       "TextRenderer": { "text": "Coins: 0", "fontFamily": "VT323", "googleFont": true, "fontSize": 22, "color": "#ffd76a", "align": "center" }
     } },
     { "id": "intensityLabelValue", "parentId": "hud", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
-      "Anchor": { "anchor": "top-right", "offsetX": -16, "offsetY": 14 },
-      "TextRenderer": { "text": "Pace: +0%", "fontFamily": "VT323", "googleFont": true, "fontSize": 22, "color": "#ff9d9d", "align": "right" }
+      "Anchor": { "anchor": "top-center", "offsetX": 70, "offsetY": 14 },
+      "TextRenderer": { "text": "Pace: +0%", "fontFamily": "VT323", "googleFont": true, "fontSize": 22, "color": "#ff9d9d", "align": "center" }
     } },
     { "id": "hotkeyHint", "parentId": "hud", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
@@ -113,6 +127,14 @@
       "Transform": { "x": 0, "y": 0, "fixed": true, "zIndex": 10001 },
       "Anchor": { "anchor": "center" },
       "TextRenderer": { "text": "PAUSED\nPress Esc to resume", "fontFamily": "VT323", "googleFont": true, "fontSize": 40, "color": "#ffffff", "align": "center" },
+      "Opacity": { "value": 0 }
+    } },
+    { "id": "pauseDirectoryBtn", "parentId": "hud", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true, "zIndex": 10001 },
+      "Anchor": { "anchor": "top-right", "offsetX": -110, "offsetY": 40 },
+      "ShapeRenderer": { "shape": "rect", "width": 180, "height": 44, "color": "#2a2d38" },
+      "TextRenderer": { "text": "Card Directory", "fontFamily": "VT323", "googleFont": true, "fontSize": 18, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
+      "Interactable": { "width": 180, "height": 44, "cursor": "default", "onClick": "" },
       "Opacity": { "value": 0 }
     } }
   ]

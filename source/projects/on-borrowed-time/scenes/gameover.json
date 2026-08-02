@@ -2,11 +2,18 @@
   "name": "gameover",
   "entities": [
     { "id": "cam", "components": { "Transform": { "x": 0, "y": 0, "fixed": false }, "Camera": { "zoom": 1, "offset": { "x": 0, "y": 0 } } } },
-    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#1c0e0e" } } },
+    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#281a1a" } } },
 
     { "id": "controller", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } }, "scripts": ["GameOverController"] },
 
     { "id": "content", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },
+    { "id": "newBestBanner", "parentId": "content", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "center", "offsetY": -118 },
+      "TextRenderer": { "text": "NEW BEST!", "fontFamily": "VT323", "googleFont": true, "fontSize": 30, "color": "#ffd76a", "align": "center" },
+      "Animator": { "clips": [] },
+      "Opacity": { "value": 0 }
+    } },
     { "id": "gameOverTitle", "parentId": "content", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
       "Anchor": { "anchor": "center", "offsetY": -70 },
@@ -14,14 +21,19 @@
     } },
     { "id": "gameOverStats", "parentId": "content", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
-      "Anchor": { "anchor": "center", "offsetY": 4 },
+      "Anchor": { "anchor": "center", "offsetY": -6 },
       "TextRenderer": { "text": "", "fontFamily": "VT323", "googleFont": true, "fontSize": 22, "color": "#e5e7eb", "align": "center", "lineHeight": 1.5 }
+    } },
+    { "id": "gameOverMeta", "parentId": "content", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "top-left", "offsetX": 16, "offsetY": 14 },
+      "TextRenderer": { "text": "", "fontFamily": "VT323", "googleFont": true, "fontSize": 16, "color": "#8b93a7", "align": "left", "lineHeight": 1.4, "maxWidth": 200, "wrap": true }
     } },
     { "id": "restartBtn", "parentId": "content", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
-      "Anchor": { "anchor": "center", "offsetY": 110 },
+      "Anchor": { "anchor": "center", "offsetY": 140 },
       "ShapeRenderer": { "shape": "rect", "width": 220, "height": 52, "color": "#7f2d2d" },
-      "TextRenderer": { "text": "Try Again", "fontFamily": "VT323", "googleFont": true, "fontSize": 24, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
+      "TextRenderer": { "text": "Main Menu", "fontFamily": "VT323", "googleFont": true, "fontSize": 24, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
       "Interactable": {
         "width": 220,
         "height": 52,

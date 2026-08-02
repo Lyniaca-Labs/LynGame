@@ -17,12 +17,27 @@ const REFLECT_MAX_FRACTION = 0.6;
 // rather than a stackable burst source.
 const POISON_MAX_PER_TURN = 2;
 
+// Time Steal is the one card that shaves max time instead of dealing direct
+// damage — repeated casts (especially at higher card levels, where the
+// per-cast amount scales up with levelScale) could otherwise crush a
+// side's maxTime toward the old flat 1s floor, and currentTime clamps down
+// with it, making it a near-instant kill once stacked. Floored at a
+// fraction of the side's STARTING max time (baseMaxTime) instead, so it
+// stays real, escalating pressure without being able to one-shot a fight.
+// Exported so BattleController.js's AI scoring can value a Time Steal play
+// by the same real floor instead of assuming the old flat-1 one.
+export const MAX_TIME_REDUCTION_FLOOR_FRACTION = 0.4;
+
 // stats shape: { maxTime, currentTime, regen, shield, drainMult, nextHandBonus, shieldRetain, reflect }
 export function resolveEffects(effects, level, casterStats, opponentStats) {
   const scale = levelScale(level);
   const results = [];
   for (const eff of effects) {
-    const amount = eff.amount * scale;
+    // Opt-out for effects with no natural magnitude to scale (Purge's
+    // hand-size cost, CardDatabase.js) — upgrading a card should never make
+    // its downside worse when there's no corresponding upside growing to
+    // offset it.
+    const amount = eff.amount * (eff.noLevelScale ? 1 : scale);
     const target = eff.target === "opponent" ? opponentStats : casterStats;
     switch (eff.type) {
       case "currentTime": {
@@ -62,7 +77,10 @@ export function resolveEffects(effects, level, casterStats, opponentStats) {
         break;
       }
       case "maxTime": {
-        target.maxTime = Math.max(1, target.maxTime + amount);
+        const floor = amount < 0 && target.baseMaxTime != null
+          ? Math.max(1, target.baseMaxTime * MAX_TIME_REDUCTION_FLOOR_FRACTION)
+          : 1;
+        target.maxTime = Math.max(floor, target.maxTime + amount);
         if (amount > 0) target.currentTime = Math.min(target.maxTime, target.currentTime + amount);
         else target.currentTime = Math.min(target.currentTime, target.maxTime);
         results.push({ type: "maxTime", target: eff.target, amount });
@@ -106,11 +124,18 @@ export function resolveEffects(effects, level, casterStats, opponentStats) {
         target.reflect = (target.reflect || 0) + amount;
         results.push({ type: "reflect", target: eff.target, amount });
         break;
-      // One-shot flag: this side's drain ignores pace/intensity entirely
-      // for the rest of the fight (see the phase-drain code in
-      // BattleController.js's tick). Not stackable — just a switch.
+      // Purge — fully clears poison stacks regardless of card level (see
+      // the noLevelScale note above; there's no magnitude here to scale).
+      case "cleanse":
+        target.poison = 0;
+        results.push({ type: "cleanse", target: eff.target, amount });
+        break;
+      // Dampens (doesn't fully negate) how much of pace's speed-up applies
+      // to this side's drain, for the rest of the fight (see the phase-drain
+      // code in BattleController.js's tick). Amount is percentage-points
+      // (50 = 50%) — stacks additively, capped at 100% (full immunity).
       case "timeless":
-        target.timeless = true;
+        target.timelessReduction = Math.max(0, Math.min(1, (target.timelessReduction || 0) + amount / 100));
         results.push({ type: "timeless", target: eff.target, amount });
         break;
       // Battle-level (not per-side) — handled specially in playCard

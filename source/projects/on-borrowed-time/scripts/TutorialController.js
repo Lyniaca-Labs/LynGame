@@ -51,7 +51,12 @@ function layout(engine) {
   const atStart = s.step === 0;
   if (backOp) backOp.value = atStart ? 0.35 : 1;
   if (backInteract) {
-    backInteract.onClick = atStart ? "" : "engine.callScript('TutorialBack', entity, engine);";
+    // A raw string here (the old value) is never compiled into a callable —
+    // that only happens for onClick set via the Interactable constructor
+    // (see Interactable.js's compileCode). Assigning prevStep directly
+    // works because its (entity, engine) signature already matches what
+    // onClick is invoked with.
+    backInteract.onClick = atStart ? null : prevStep;
     backInteract.cursor = atStart ? "default" : "pointer";
   }
 

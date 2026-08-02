@@ -29,8 +29,18 @@ export class AudioModule {
     }
     // Browsers start contexts suspended until a user gesture — play() is
     // normally reached from a click handler or shortly after one, so this
-    // resolves almost immediately in practice.
-    if (this._ctx.state === "suspended") this._ctx.resume().catch(() => {});
+    // resolves almost immediately in practice. resume() is async though, and
+    // used to be fire-and-forget here: _playBuffer would call source.start()
+    // right away regardless of whether the context had actually finished
+    // resuming, which is a real source of silently-dropped audio in some
+    // browsers (a source scheduled against a context that isn't running yet
+    // never catches up once it does). Stashing the in-flight promise lets
+    // _playBuffer wait for it instead of racing it — see there.
+    if (this._ctx.state === "suspended" && !this._resuming) {
+      this._resuming = this._ctx.resume()
+        .catch(() => {})
+        .finally(() => { this._resuming = null; });
+    }
     return this._ctx;
   }
 
@@ -107,7 +117,15 @@ export class AudioModule {
     };
     source.onended = () => this._playing.delete(instance);
     this._playing.add(instance);
-    source.start();
+    // See _context() — if a resume() is still in flight, wait for it before
+    // actually starting playback instead of racing ahead; once the session's
+    // first resume has gone through (the overwhelming majority of calls),
+    // this._resuming is null and start() fires immediately, same as before.
+    if (this._resuming) {
+      this._resuming.then(() => { try { source.start(); } catch { /* stopped/paused before it got the chance */ } });
+    } else {
+      source.start();
+    }
     return instance;
   }
 

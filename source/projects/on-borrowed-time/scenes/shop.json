@@ -2,7 +2,7 @@
   "name": "shop",
   "entities": [
     { "id": "cam", "components": { "Transform": { "x": 0, "y": 0, "fixed": false }, "Camera": { "zoom": 1, "offset": { "x": 0, "y": 0 } } } },
-    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#161029" } } },
+    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#221c35" } } },
 
     { "id": "controller", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } }, "scripts": ["ShopController"] },
 
@@ -10,17 +10,34 @@
     { "id": "shopTitle", "parentId": "hud", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
       "Anchor": { "anchor": "top-center", "offsetY": 20 },
-      "TextRenderer": { "text": "Round Complete — Shop", "fontFamily": "VT323", "googleFont": true, "fontSize": 30, "color": "#ffffff", "align": "center" }
+      "TextRenderer": { "text": "Round Complete — Shop", "fontFamily": "VT323", "googleFont": true, "fontSize": 30, "color": "#ffffff", "align": "center" },
+      "Opacity": { "value": 1 }
     } },
     { "id": "shopCurrency", "parentId": "hud", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
       "Anchor": { "anchor": "top-right", "offsetX": -16, "offsetY": 14 },
-      "TextRenderer": { "text": "Coins: 0", "fontFamily": "VT323", "googleFont": true, "fontSize": 22, "color": "#ffd76a", "align": "right" }
+      "TextRenderer": { "text": "Coins: 0", "fontFamily": "VT323", "googleFont": true, "fontSize": 22, "color": "#ffd76a", "align": "right" },
+      "Opacity": { "value": 1 }
     } },
     { "id": "shopDeckCount", "parentId": "hud", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
       "Anchor": { "anchor": "top-left", "offsetX": 16, "offsetY": 14 },
-      "TextRenderer": { "text": "Deck: 0 cards", "fontFamily": "VT323", "googleFont": true, "fontSize": 22, "color": "#ffffff" }
+      "TextRenderer": { "text": "Deck: 0 cards", "fontFamily": "VT323", "googleFont": true, "fontSize": 22, "color": "#ffffff" },
+      "Opacity": { "value": 1 }
+    } },
+    { "id": "shopBuildTags", "parentId": "hud", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "top-left", "offsetX": 16, "offsetY": 42 },
+      "TextRenderer": { "text": "", "fontFamily": "VT323", "googleFont": true, "fontSize": 15, "color": "#8ea0ff" },
+      "Opacity": { "value": 1 }
+    } },
+
+    { "id": "pickerOverlay", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true, "zIndex": 10 },
+      "Anchor": { "anchor": "center" },
+      "ShapeRenderer": { "shape": "rect", "width": 3000, "height": 3000, "color": "#05040a" },
+      "Opacity": { "value": 0 },
+      "Animator": {}
     } },
 
     { "id": "shopBurst", "components": {
@@ -43,7 +60,8 @@
         "height": 52,
         "cursor": "pointer",
         "onClick": "engine.callScript('ShopContinue', entity, engine);"
-      }
+      },
+      "Opacity": { "value": 1 }
     } }
   ]
 }

@@ -9,13 +9,6 @@
   },
   "scripts": [],
   "children": {
-    "cardArt": {
-      "components": {
-        "Transform": { "x": 0, "y": 0, "rotation": 0, "fixed": false, "zIndex": 499 },
-        "SpriteRenderer": { "sprite": "cards", "frame": "cardBackgrounds_9", "width": 112, "height": 152 },
-        "Opacity": { "value": 1 }
-      }
-    },
     "icon": {
       "components": {
         "Transform": { "x": 0, "y": -44, "rotation": 0, "fixed": false, "zIndex": 501 },
@@ -32,11 +25,14 @@
           "fontFamily": "VT323",
           "googleFont": true,
           "fontSize": 18,
-          "color": "#ffffff",
+          "color": "#000000",
           "align": "center",
           "verticalAlign": "middle",
           "maxWidth": 100,
-          "wrap": true
+          "maxHeight": 34,
+          "wrap": true,
+          "autoShrink": true,
+          "minFontSize": 11
         },
         "Opacity": { "value": 1 }
       }

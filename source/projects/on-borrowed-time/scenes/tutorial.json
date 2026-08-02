@@ -2,7 +2,7 @@
   "name": "tutorial",
   "entities": [
     { "id": "cam", "components": { "Transform": { "x": 0, "y": 0, "fixed": false }, "Camera": { "zoom": 1, "offset": { "x": 0, "y": 0 } } } },
-    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#0e0f16" } } },
+    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#1a1b22" } } },
 
     { "id": "controller", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } }, "scripts": ["TutorialController"] },
 

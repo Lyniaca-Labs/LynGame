@@ -3,10 +3,21 @@
 // and a "Remove" offer, all purchasable with the coins earned from last
 // round's leftover time (engine.state.run.currency). Also exports buyOffer
 // for BuyOffer.js (the per-offer click handler) to call into.
+//
+// Upgrade/Remove no longer resolve on a random deck card — clicking either
+// opens a "picker" (shop.picker) that shows the player's own deck so they
+// choose exactly which card gets upgraded/removed (see enterPicker/
+// pickDeckCard/cancelPicker below).
 
-import { CARD_DEFS, SHOP_POOL, formatDescription, LEVEL_POWER_SCALE, MAX_CARD_LEVEL, borderFrameForTier } from "./CardDatabase.js";
+import { CARD_DEFS, SHOP_POOL, formatDescription, formatBuildSummary, LEVEL_POWER_SCALE, MAX_CARD_LEVEL, borderFrameForTier, levelIconFrame, iconFrameForCard, cardIconOverride, cardIconOverrideByFrame } from "./CardDatabase.js";
 import { ensureRun } from "./RunState.js";
 import { playSound } from "./SoundEffects.js";
+import { animateCardScale, setCardScaleInstant, setCardZIndex } from "./CardVisuals.js";
+import { computeCardGridLayout, layoutCardGridPage, setPagerButton } from "./CardGrid.js";
+import { ShopContinue } from "./ShopContinue.js";
+
+const OFFER_HOVER_SCALE = 1.2; // was 1.1 — too subtle to read as "bigger" against the neighbor cards
+const OFFER_HOVER_Z_INDEX = 900; // matches BattleController.js's HAND_HOVER_Z_INDEX
 
 function shuffle(arr) {
   const a = arr.slice();
@@ -29,8 +40,12 @@ function generateOffers(run) {
     offers.push({ kind: "card", defId, price: CARD_DEFS[defId].price, bought: false });
   }
   const discount = run.shopDiscount || 0;
-  offers.push({ kind: "upgrade", price: Math.round((16 + run.round * 3) * (1 - discount)), bought: false });
-  offers.push({ kind: "remove", price: Math.round((10 + run.round * 2) * (1 - discount)), bought: false });
+  // Upgrade was 16+3/round (31c by round 5) — way past what a round's
+  // reward can comfortably cover. Remove is now a flat, cheap 8c regardless
+  // of round (was 10+2/round, 20c by round 5) — it's a deck-thinning tool,
+  // not something that should get more expensive as the run goes on.
+  offers.push({ kind: "upgrade", price: Math.round((8 + run.round * 1.5) * (1 - discount)), bought: false });
+  offers.push({ kind: "remove", price: Math.round(8 * (1 - discount)), bought: false });
   run.extraShopOffer = false;
   run.shopDiscount = 0;
   return offers;
@@ -39,12 +54,39 @@ function generateOffers(run) {
 function offerVisual(offer) {
   if (offer.kind === "card") {
     const def = CARD_DEFS[offer.defId];
-    return { color: def.color, icon: def.icon, name: def.name, desc: formatDescription(def, 1), tier: def.tier };
+    return { color: def.color, icon: def.icon, iconFrame: iconFrameForCard(offer.defId), name: def.name, desc: formatDescription(def, 1), tier: def.tier };
   }
   if (offer.kind === "upgrade") {
-    return { color: "#5b4a1e", icon: "#ffb020", name: "Upgrade", desc: `Upgrade a random owned card (+${Math.round(LEVEL_POWER_SCALE * 100)}% power).`, tier: 1 };
+    return { color: "#5b4a1e", icon: "#ffb020", iconFrame: "upgrade", name: "Upgrade", desc: `Choose a card to upgrade (+${Math.round(LEVEL_POWER_SCALE * 100)}% power).`, tier: 1 };
   }
-  return { color: "#5b1e1e", icon: "#ef4444", name: "Remove", desc: "Remove a random basic card from your deck.", tier: 1 };
+  return { color: "#5b1e1e", icon: "#ef4444", iconFrame: "remove", name: "Remove", desc: "Choose a card to remove from your deck.", tier: 1 };
+}
+
+// Hover handlers shared by shop offers AND deck-picker cards — grows the
+// card (+ its text, via animateCardScale) alongside the existing lift.
+// Also bumps zIndex to the front (same treatment as BattleController.js's
+// hand-card hover, via the shared setCardZIndex) — at 1.1x this rarely
+// mattered since the grow was subtle enough not to overlap a neighbor, but
+// at 1.2x an unbumped card would visually clip UNDER whichever neighbor
+// happens to have a higher zIndex, making the "bigger" hover read as broken.
+export function offerHoverEnter(entity, engine) {
+  const anim = entity.getComponent("Animator");
+  const t = entity.getComponent("Transform");
+  if (!anim || !t) return;
+  entity.state.baseY = entity.state.baseY ?? t.y;
+  entity.state.baseZIndex = entity.state.baseZIndex ?? t.zIndex;
+  anim.animate(t, "y", entity.state.baseY - 16, { duration: 0.12, easing: "easeOut" });
+  animateCardScale(entity, OFFER_HOVER_SCALE);
+  setCardZIndex(entity, OFFER_HOVER_Z_INDEX);
+}
+
+export function offerHoverExit(entity, engine) {
+  const anim = entity.getComponent("Animator");
+  const t = entity.getComponent("Transform");
+  if (!anim || !t) return;
+  anim.animate(t, "y", entity.state.baseY, { duration: 0.12, easing: "easeOut" });
+  animateCardScale(entity, 1);
+  if (entity.state.baseZIndex != null) setCardZIndex(entity, entity.state.baseZIndex);
 }
 
 function spawnOffers(engine, shop) {
@@ -60,11 +102,11 @@ function spawnOffers(engine, shop) {
       SpriteRenderer: { frame: borderFrameForTier(v.tier) },
       Interactable: {
         onClick: "engine.callScript('BuyOffer', entity, engine);",
-        onHoverEnter: "const a=entity.getComponent('Animator'); const t=entity.getComponent('Transform'); entity.state.baseY = entity.state.baseY ?? t.y; a.animate(t,'y', entity.state.baseY - 16, {duration:0.12, easing:'easeOut'});",
-        onHoverExit: "const a=entity.getComponent('Animator'); const t=entity.getComponent('Transform'); a.animate(t,'y', entity.state.baseY, {duration:0.12, easing:'easeOut'});",
+        onHoverEnter: "engine.callScript('ShopOfferHoverEnter', entity, engine);",
+        onHoverExit: "engine.callScript('ShopOfferHoverExit', entity, engine);",
       },
       children: {
-        icon: { ShapeRenderer: { color: v.icon } },
+        icon: cardIconOverrideByFrame(v.iconFrame, v.icon),
         name: { TextRenderer: { text: v.name } },
         desc: { TextRenderer: { text: v.desc } },
         badge: { ShapeRenderer: { width: 28, height: 28 } },
@@ -100,6 +142,46 @@ function spawnOffers(engine, shop) {
   return entities;
 }
 
+// Moves the offer row off-screen (rather than destroying it) while the
+// deck picker is open, and back on-screen once it closes — keeps every
+// offer's bought/SOLD/onClick state intact without needing to snapshot and
+// re-apply it (spawnOffers is otherwise only ever called once per visit).
+function setOffersHidden(engine, shop, hidden) {
+  shop.offers.forEach((offer, i) => {
+    const ent = engine.getEntity(`offer_${i}`);
+    const t = ent && ent.getComponent("Transform");
+    const anim = ent && ent.getComponent("Animator");
+    const it = ent && ent.getComponent("Interactable");
+    if (!t) return;
+    // You have to be HOVERING an offer to click it, so opening the picker
+    // almost always lands here with that offer's hover-lift tween
+    // (offerHoverEnter's Transform.y animate, still mid-flight) — Animator
+    // re-asserts its own absolute interpolated y every tick until that
+    // tween finishes, silently undoing the +3000 offset below a few frames
+    // later and leaving the "hidden" offer fully visible. Cancel it first.
+    if (anim) anim.stop(t, "y");
+    if (hidden) {
+      ent.state.preOffscreenY = t.y;
+      t.y += 3000;
+      // Reset the hover grow now so it doesn't pop back in at 1.1x scale
+      // when the offer returns.
+      setCardScaleInstant(ent, 1);
+      // The offer's Interactable is still LIVE and still ticking every
+      // frame even once it's off-screen — the very next tick notices the
+      // cursor is no longer over its (now 3000px-away) box and fires
+      // onHoverExit for real, which animates Transform.y right back to
+      // entity.state.baseY, undoing the hide a frame later and sliding the
+      // "hidden" card back into view. Null both handlers out while hidden
+      // so that per-frame recheck can't call back into either one; restored
+      // below once the offer is back on-screen.
+      if (it) { it.onHoverEnter = null; it.onHoverExit = null; }
+    } else {
+      if (ent.state.preOffscreenY != null) t.y = ent.state.preOffscreenY;
+      if (it) { it.onHoverEnter = offerHoverEnter; it.onHoverExit = offerHoverExit; }
+    }
+  });
+}
+
 function updateShopHud(engine) {
   const run = engine.state.run;
   const cur = engine.getEntity("shopCurrency");
@@ -108,6 +190,9 @@ function updateShopHud(engine) {
   const deck = engine.getEntity("shopDeckCount");
   const deckTr = deck && deck.getComponent("TextRenderer");
   if (deckTr) deckTr.text = `Deck: ${run.deck.length} cards`;
+  const tags = engine.getEntity("shopBuildTags");
+  const tagsTr = tags && tags.getComponent("TextRenderer");
+  if (tagsTr) tagsTr.text = formatBuildSummary(run.deck);
 }
 
 function markPurchased(engine, idx, label = "SOLD") {
@@ -116,7 +201,10 @@ function markPurchased(engine, idx, label = "SOLD") {
   const anim = ent.getComponent("Animator");
   const op = ent.getComponent("Opacity");
   const it = ent.getComponent("Interactable");
-  if (it) it.onClick = "";
+  // null, not "" — a raw string assigned directly (bypassing the
+  // constructor's compileCode) is never compiled into a callable, and
+  // throws "onClick is not a function" the moment it's clicked.
+  if (it) it.onClick = null;
   const badgeTextEnt = ent.getChild("badgeText");
   if (badgeTextEnt) {
     const tr = badgeTextEnt.getComponent("TextRenderer");
@@ -168,7 +256,12 @@ function spawnFloatText(engine, x, y, text, color) {
   });
 }
 
-function flashDenied(engine, idx) {
+// `reason` is optional — every denial (can't afford, deck too small to
+// remove from, no upgradable cards left) used to just shake the offer with
+// no explanation, which reads identically to "you can't afford this" even
+// when money has nothing to do with it (e.g. Remove is blocked below 6
+// cards regardless of price) — pass a reason so it's clear why.
+function flashDenied(engine, idx, reason) {
   const ent = engine.getEntity(`offer_${idx}`);
   if (!ent) return;
   const t = ent.getComponent("Transform");
@@ -180,65 +273,19 @@ function flashDenied(engine, idx) {
       anim.animate(t, "x", ox, { duration: 0.07 });
     } });
   } });
+  if (reason) spawnFloatText(engine, t.x, t.y - 96, reason, "#f87171");
 }
 
-export function buyOffer(entity, engine) {
-  const shop = engine.state.shop;
-  const run = engine.state.run;
-  if (!shop || !run) return;
-  const idx = entity.state.offerIndex;
-  const offer = shop.offers[idx];
-  if (!offer || offer.bought) return;
-  playSound(engine, "click");
-  if (run.currency < offer.price) { flashDenied(engine, idx); return; }
-
-  run.currency -= offer.price;
-  offer.bought = true;
-
-  let badgeLabel = "SOLD";
-  let popupText = "Bought!";
-  let popupColor = "#ffd76a";
-
-  if (offer.kind === "card") {
-    run.deck.push({ defId: offer.defId, level: 1 });
-    popupText = `+${CARD_DEFS[offer.defId].name}`;
-  } else if (offer.kind === "upgrade") {
-    const candidates = run.deck.filter((c) => c.level < MAX_CARD_LEVEL);
-    if (candidates.length) {
-      const target = candidates[Math.floor(Math.random() * candidates.length)];
-      target.level += 1;
-      badgeLabel = "UPGRADED!";
-      popupColor = "#ffb020";
-      popupText = `${CARD_DEFS[target.defId].name} → Lv${target.level}`;
-    } else {
-      popupText = "No card to upgrade";
-    }
-  } else if (offer.kind === "remove") {
-    badgeLabel = "REMOVED";
-    popupColor = "#f87171";
-    popupText = "Deck too small";
-    if (run.deck.length > 5) {
-      const basics = run.deck.filter((c) => CARD_DEFS[c.defId].tier === 1);
-      const pool = basics.length ? basics : run.deck;
-      const target = pool[Math.floor(Math.random() * pool.length)];
-      const i2 = run.deck.indexOf(target);
-      if (i2 !== -1) {
-        run.deck.splice(i2, 1);
-        popupText = `-${CARD_DEFS[target.defId].name}`;
-      }
-    }
-  }
-
+// Finalizes a purchase's visuals — shared by the instant "card" purchase
+// path and pickDeckCard (upgrade/remove) below. `anchorEnt` is whichever
+// entity the floating text/particle burst should appear at — the offer
+// itself for a plain card buy, or the specific deck card just picked for
+// an upgrade/remove (the offer entity is off-screen during picker mode).
+function finishPurchase(engine, idx, badgeLabel, popupText, popupColor, anchorEnt) {
   markPurchased(engine, idx, badgeLabel);
   updateShopHud(engine);
   punchBadge(engine, idx);
-
-  // Reposition the shared burst emitter onto the purchased card (it has no
-  // Anchor of its own — see shop.json — so this sticks until next trigger)
-  // so the particles/upgrade badge read as coming from that specific card
-  // instead of always firing from screen-center.
-  const offerEnt = engine.getEntity(`offer_${idx}`);
-  const t = offerEnt && offerEnt.getComponent("Transform");
+  const t = anchorEnt && anchorEnt.getComponent("Transform");
   if (t) {
     spawnFloatText(engine, t.x, t.y - 96, popupText, popupColor);
     const burstEnt = engine.getEntity("shopBurst");
@@ -248,12 +295,328 @@ export function buyOffer(entity, engine) {
   engine.query("shopBurst:Emitter")?.trigger();
 }
 
+// ---------- deck picker (Upgrade/Remove target selection) ----------
+// Same paginated-grid approach as the card directory (CardGrid.js) — "the
+// directory, but your deck." The old fixed-rows-of-6 layout had no
+// pagination, so it could overflow off-screen with no way to reach the
+// rest once a deck grew past what fit — the exact bug the directory itself
+// had before it got real pagination.
+
+const PICKER_CARD_SCALE = 0.85; // match the directory's shrink
+const PICKER_TOP_MARGIN = 130; // room for the hint text above
+const PICKER_BOTTOM_MARGIN = 190; // room for the prev/page-label/next row plus Cancel below it
+const PICKER_SIDE_MARGIN = 60;
+const PICKER_MAX_COLUMNS = 5;
+const PICKER_MAX_ROWS = 3;
+
+function computePickerLayout(engine) {
+  return computeCardGridLayout(engine, {
+    scale: PICKER_CARD_SCALE, maxColumns: PICKER_MAX_COLUMNS, maxRows: PICKER_MAX_ROWS,
+    topMargin: PICKER_TOP_MARGIN, bottomMargin: PICKER_BOTTOM_MARGIN, sideMargin: PICKER_SIDE_MARGIN,
+  });
+}
+
+function clearPickerCardEntities(engine) {
+  let i = 0;
+  while (engine.getEntity(`picker_${i}`)) {
+    engine.removeEntity(`picker_${i}`);
+    i++;
+  }
+}
+
+// Everything here is created without an onClick — spawnPickerPage (the only
+// thing that ever runs after this, on the very same call) wires the real
+// Prev/Next handlers via setPagerButton immediately, before the player
+// could plausibly click either button.
+function spawnPickerChrome(engine, kind) {
+  const vp = engine.getViewportSize();
+
+  if (engine.getEntity("pickerHint")) engine.removeEntity("pickerHint");
+  const hint = engine.createEntity("pickerHint");
+  if (hint) {
+    hint.addComponent(engine.components.Transform, { x: vp.width / 2, y: 86, fixed: true, zIndex: 30 });
+    hint.addComponent(engine.components.TextRenderer, {
+      text: kind === "upgrade" ? "Choose a card to upgrade" : "Choose a card to remove",
+      fontFamily: "VT323", googleFont: true, fontSize: 24, color: "#ffffff", align: "center",
+    });
+  }
+
+  if (engine.getEntity("pickerCancelBtn")) engine.removeEntity("pickerCancelBtn");
+  const cancel = engine.createEntity("pickerCancelBtn");
+  if (cancel) {
+    cancel.addComponent(engine.components.Transform, { x: vp.width / 2, y: vp.height - 54, fixed: true, zIndex: 30 });
+    cancel.addComponent(engine.components.ShapeRenderer, { shape: "rect", width: 160, height: 44, color: "#3a2a2a" });
+    cancel.addComponent(engine.components.TextRenderer, {
+      text: "Cancel", fontFamily: "VT323", googleFont: true, fontSize: 20, color: "#ffffff", align: "center", verticalAlign: "middle",
+    });
+    cancel.addComponent(engine.components.Interactable, {
+      width: 160, height: 44, cursor: "pointer", onClick: "engine.callScript('CancelPicker', entity, engine);",
+    });
+  }
+
+  if (engine.getEntity("pickerPrevBtn")) engine.removeEntity("pickerPrevBtn");
+  const prev = engine.createEntity("pickerPrevBtn");
+  if (prev) {
+    prev.addComponent(engine.components.Transform, { x: vp.width / 2 - 140, y: vp.height - 124, fixed: true, zIndex: 30 });
+    prev.addComponent(engine.components.ShapeRenderer, { shape: "rect", width: 120, height: 44, color: "#2a2d38" });
+    prev.addComponent(engine.components.TextRenderer, {
+      text: "< Prev", fontFamily: "VT323", googleFont: true, fontSize: 20, color: "#ffffff", align: "center", verticalAlign: "middle",
+    });
+    prev.addComponent(engine.components.Interactable, { width: 120, height: 44 });
+    prev.addComponent(engine.components.Opacity, { value: 1 });
+  }
+
+  if (engine.getEntity("pickerPageLabel")) engine.removeEntity("pickerPageLabel");
+  const label = engine.createEntity("pickerPageLabel");
+  if (label) {
+    label.addComponent(engine.components.Transform, { x: vp.width / 2, y: vp.height - 136, fixed: true, zIndex: 30 });
+    label.addComponent(engine.components.TextRenderer, {
+      text: "Page 1 / 1", fontFamily: "VT323", googleFont: true, fontSize: 20, color: "#c7cad6", align: "center",
+    });
+  }
+
+  if (engine.getEntity("pickerNextBtn")) engine.removeEntity("pickerNextBtn");
+  const next = engine.createEntity("pickerNextBtn");
+  if (next) {
+    next.addComponent(engine.components.Transform, { x: vp.width / 2 + 140, y: vp.height - 124, fixed: true, zIndex: 30 });
+    next.addComponent(engine.components.ShapeRenderer, { shape: "rect", width: 120, height: 44, color: "#2a2d38" });
+    next.addComponent(engine.components.TextRenderer, {
+      text: "Next >", fontFamily: "VT323", googleFont: true, fontSize: 20, color: "#ffffff", align: "center", verticalAlign: "middle",
+    });
+    next.addComponent(engine.components.Interactable, { width: 120, height: 44 });
+    next.addComponent(engine.components.Opacity, { value: 1 });
+  }
+}
+
+function spawnPickerPage(engine, run, kind, page) {
+  clearPickerCardEntities(engine);
+  const layout = computePickerLayout(engine);
+  const pageCount = Math.max(1, Math.ceil(run.deck.length / layout.pageSize));
+  const clampedPage = Math.max(0, Math.min(page, pageCount - 1));
+  engine.state.shop.picker.page = clampedPage;
+
+  const vp = engine.getViewportSize();
+  const start = clampedPage * layout.pageSize;
+  const pageCards = run.deck.slice(start, start + layout.pageSize);
+  const entities = [];
+
+  pageCards.forEach((card, i) => {
+    const def = CARD_DEFS[card.defId];
+    const id = `picker_${i}`;
+    const eligible = kind !== "upgrade" || card.level < MAX_CARD_LEVEL;
+    const ent = engine.prefabs.instantiate("Card", {
+      Transform: { x: vp.width / 2, y: vp.height / 2, zIndex: 20 + i },
+      ShapeRenderer: { color: def.color },
+      SpriteRenderer: { frame: borderFrameForTier(def.tier) },
+      Opacity: { value: eligible ? 1 : 0.35 },
+      Interactable: {
+        cursor: eligible ? "pointer" : "not-allowed",
+        onClick: eligible ? "engine.callScript('PickDeckCard', entity, engine);" : "",
+        onHoverEnter: eligible ? "engine.callScript('ShopOfferHoverEnter', entity, engine);" : "",
+        onHoverExit: eligible ? "engine.callScript('ShopOfferHoverExit', entity, engine);" : "",
+      },
+      children: {
+        icon: cardIconOverride(def.id, def.icon),
+        name: { TextRenderer: { text: card.level > 1 ? `${def.name} +${card.level - 1}` : def.name } },
+        desc: { TextRenderer: { text: formatDescription(def, card.level) } },
+        levelIcon: { SpriteRenderer: { frame: levelIconFrame(card.level), width: card.level > 1 ? 22 : 0, height: card.level > 1 ? 22 : 0 } },
+        badgeText: { TextRenderer: { text: eligible ? "" : "MAX" } },
+      },
+    }, id);
+    if (!ent) return;
+    // Real index into run.deck, not the page-local `i` — pagination only
+    // changes what's SHOWN, pickDeckCard still needs to resolve against the
+    // full deck regardless of which page the picked card was on.
+    ent.state.deckIndex = start + i;
+    entities.push(ent);
+  });
+
+  layoutCardGridPage(engine, entities, layout, { topMargin: PICKER_TOP_MARGIN, bottomMargin: PICKER_BOTTOM_MARGIN, scale: PICKER_CARD_SCALE });
+
+  const labelEnt = engine.getEntity("pickerPageLabel");
+  const labelTr = labelEnt && labelEnt.getComponent("TextRenderer");
+  if (labelTr) labelTr.text = `Page ${clampedPage + 1} / ${pageCount}`;
+
+  setPagerButton(engine, "pickerPrevBtn", clampedPage > 0, prevPickerPage);
+  setPagerButton(engine, "pickerNextBtn", clampedPage < pageCount - 1, nextPickerPage);
+}
+
+function nextPickerPage(entity, engine) {
+  const shop = engine.state.shop;
+  const run = engine.state.run;
+  if (!shop || !run || !shop.picker) return;
+  playSound(engine, "click");
+  spawnPickerPage(engine, run, shop.picker.kind, shop.picker.page + 1);
+}
+
+function prevPickerPage(entity, engine) {
+  const shop = engine.state.shop;
+  const run = engine.state.run;
+  if (!shop || !run || !shop.picker) return;
+  playSound(engine, "click");
+  spawnPickerPage(engine, run, shop.picker.kind, shop.picker.page - 1);
+}
+
+// Dims the shop behind the picker (a translucent overlay, same recipe as
+// BattleController.js's vignetteOverlay) and turns off the HUD labels +
+// Continue button while it's open — before this, the title/coins/deck-count
+// text and the Continue button just sat there fully visible/clickable
+// behind the picker, competing with it for attention (and Continue could
+// still be clicked through to leave the shop mid-pick).
+const PICKER_OVERLAY_ALPHA = 0.82;
+const PICKER_HIDDEN_HUD_IDS = ["shopTitle", "shopCurrency", "shopDeckCount", "shopBuildTags"];
+
+function setShopChromeHidden(engine, hidden) {
+  const overlay = engine.getEntity("pickerOverlay");
+  const overlayOp = overlay && overlay.getComponent("Opacity");
+  const overlayAnim = overlay && overlay.getComponent("Animator");
+  if (overlayOp && overlayAnim) {
+    overlayAnim.animate(overlayOp, "value", hidden ? PICKER_OVERLAY_ALPHA : 0, { duration: 0.2, easing: "easeOut" });
+  }
+
+  for (const id of PICKER_HIDDEN_HUD_IDS) {
+    const ent = engine.getEntity(id);
+    const op = ent && ent.getComponent("Opacity");
+    if (op) op.value = hidden ? 0 : 1;
+  }
+
+  const btn = engine.getEntity("continueBtn");
+  const btnOp = btn && btn.getComponent("Opacity");
+  const btnInteract = btn && btn.getComponent("Interactable");
+  if (btnOp) btnOp.value = hidden ? 0 : 1;
+  if (btnInteract) {
+    // Interactable hit-testing isn't gated by Opacity (see Interactable.js)
+    // — clear onClick while hidden too, or Continue would stay clickable
+    // through the invisible button. A raw string here is never compiled
+    // into a callable (that only happens for onClick passed through the
+    // Interactable constructor, see compileCode) — restore the real
+    // imported ShopContinue function directly instead.
+    btnInteract.onClick = hidden ? null : ShopContinue;
+    btnInteract.cursor = hidden ? "default" : "pointer";
+  }
+}
+
+function enterPicker(engine, shop, run, idx, kind) {
+  if (kind === "remove" && run.deck.length <= 5) { flashDenied(engine, idx, "Deck too small"); return; }
+  if (kind === "upgrade" && !run.deck.some((c) => c.level < MAX_CARD_LEVEL)) { flashDenied(engine, idx, "All cards maxed"); return; }
+
+  shop.picker = { kind, offerIdx: idx, page: 0 };
+  setOffersHidden(engine, shop, true);
+  setShopChromeHidden(engine, true);
+  spawnPickerChrome(engine, kind);
+  spawnPickerPage(engine, run, kind, 0);
+}
+
+function exitPicker(engine, shop) {
+  clearPickerCardEntities(engine);
+  if (engine.getEntity("pickerHint")) engine.removeEntity("pickerHint");
+  if (engine.getEntity("pickerCancelBtn")) engine.removeEntity("pickerCancelBtn");
+  if (engine.getEntity("pickerPrevBtn")) engine.removeEntity("pickerPrevBtn");
+  if (engine.getEntity("pickerPageLabel")) engine.removeEntity("pickerPageLabel");
+  if (engine.getEntity("pickerNextBtn")) engine.removeEntity("pickerNextBtn");
+  setOffersHidden(engine, shop, false);
+  setShopChromeHidden(engine, false);
+  shop.picker = null;
+}
+
+export function cancelPicker(entity, engine) {
+  const shop = engine.state.shop;
+  if (!shop || !shop.picker) return;
+  playSound(engine, "click");
+  exitPicker(engine, shop);
+}
+
+export function pickDeckCard(entity, engine) {
+  const shop = engine.state.shop;
+  const run = engine.state.run;
+  if (!shop || !run || !shop.picker) return;
+  const { kind, offerIdx } = shop.picker;
+  const offer = shop.offers[offerIdx];
+  const card = run.deck[entity.state.deckIndex];
+  if (!offer || !card) return;
+
+  playSound(engine, "click");
+
+  const def = CARD_DEFS[card.defId];
+  let badgeLabel, popupText, popupColor;
+  if (kind === "upgrade") {
+    if (card.level >= MAX_CARD_LEVEL) return; // ineligible cards have no onClick, but guard anyway
+    card.level += 1;
+    badgeLabel = "UPGRADED!";
+    popupColor = "#ffb020";
+    popupText = `${def.name} → Lv${card.level}`;
+  } else {
+    run.deck.splice(entity.state.deckIndex, 1);
+    badgeLabel = "REMOVED";
+    popupColor = "#f87171";
+    popupText = `-${def.name}`;
+  }
+
+  run.currency -= offer.price;
+  offer.bought = true;
+  finishPurchase(engine, offerIdx, badgeLabel, popupText, popupColor, entity);
+  exitPicker(engine, shop);
+}
+
+export function buyOffer(entity, engine) {
+  const shop = engine.state.shop;
+  const run = engine.state.run;
+  if (!shop || !run || shop.picker) return; // ignore offer clicks while a picker is open
+  const idx = entity.state.offerIndex;
+  const offer = shop.offers[idx];
+  if (!offer || offer.bought) return;
+  playSound(engine, "click");
+  if (run.currency < offer.price) { flashDenied(engine, idx, "Not enough coins"); return; }
+
+  if (offer.kind === "card") {
+    run.currency -= offer.price;
+    offer.bought = true;
+    run.deck.push({ defId: offer.defId, level: 1 });
+    finishPurchase(engine, idx, "SOLD", `+${CARD_DEFS[offer.defId].name}`, "#ffd76a", entity);
+    return;
+  }
+
+  enterPicker(engine, shop, run, idx, offer.kind);
+}
+
+// Counts the currency label up from `from` to run.currency over `duration`
+// instead of it just snapping straight to the final number on arrival —
+// ticked from ShopController's own per-frame tick below since there's no
+// need to route a plain number through the Animator component for this.
+function startCurrencyCountUp(entity, engine, run, from, duration = 0.7) {
+  entity.state.currencyCountUp = { from, to: run.currency, elapsed: 0, duration };
+  // updateShopHud (called just before this) already set the label to the
+  // final value — reset it to `from` right away so the very first frame
+  // doesn't flash the end number before the count-up even starts.
+  const cur = engine.getEntity("shopCurrency");
+  const curTr = cur && cur.getComponent("TextRenderer");
+  if (curTr) curTr.text = `Coins: ${from}`;
+}
+
+function tickCurrencyCountUp(entity, engine, run, dt) {
+  const c = entity.state.currencyCountUp;
+  if (!c) return;
+  c.to = run.currency; // re-synced every tick so a purchase mid-count-up (spending) isn't overwritten once this finishes
+  c.elapsed += dt;
+  const t = Math.min(1, c.elapsed / c.duration);
+  const shown = Math.round(c.from + (c.to - c.from) * t);
+  const cur = engine.getEntity("shopCurrency");
+  const curTr = cur && cur.getComponent("TextRenderer");
+  if (curTr) curTr.text = `Coins: ${shown}`;
+  if (t >= 1) entity.state.currencyCountUp = null;
+}
+
 export function ShopController(entity, engine, dt) {
   const run = ensureRun(engine);
   let shop = engine.state.shop;
   if (!shop) {
-    shop = engine.state.shop = { offers: generateOffers(run) };
+    shop = engine.state.shop = { offers: generateOffers(run), picker: null };
     spawnOffers(engine, shop);
     updateShopHud(engine);
+    if (run.lastEarned) {
+      startCurrencyCountUp(entity, engine, run, run.currency - run.lastEarned);
+      run.lastEarned = 0;
+    }
   }
+  tickCurrencyCountUp(entity, engine, run, dt);
 }

@@ -2,7 +2,7 @@
   "name": "pathchoice",
   "entities": [
     { "id": "cam", "components": { "Transform": { "x": 0, "y": 0, "fixed": false }, "Camera": { "zoom": 1, "offset": { "x": 0, "y": 0 } } } },
-    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#161029" } } },
+    { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#221c35" } } },
 
     { "id": "controller", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } }, "scripts": ["PathChoiceController"] },
 
@@ -16,6 +16,11 @@
       "Transform": { "x": 0, "y": 0, "fixed": true },
       "Anchor": { "anchor": "top-left", "offsetX": 16, "offsetY": 14 },
       "TextRenderer": { "text": "Deck: 0 cards", "fontFamily": "VT323", "googleFont": true, "fontSize": 22, "color": "#ffffff" }
+    } },
+    { "id": "pathChoiceBuildTags", "parentId": "hud", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true },
+      "Anchor": { "anchor": "top-left", "offsetX": 16, "offsetY": 42 },
+      "TextRenderer": { "text": "", "fontFamily": "VT323", "googleFont": true, "fontSize": 15, "color": "#8ea0ff" }
     } },
 
     { "id": "fadeOverlay", "components": {

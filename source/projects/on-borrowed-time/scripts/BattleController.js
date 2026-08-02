@@ -5,12 +5,16 @@
 // Also exports playCard/drawHand/etc for PlayHandCard.js (the per-card
 // click handler) to call into.
 
-import { CARD_DEFS, AI_POOL, formatDescription, levelScale, borderFrameForTier, levelIconFrame, MAX_CARD_LEVEL } from "./CardDatabase.js";
-import { ensureRun } from "./RunState.js";
-import { resolveEffects } from "./CardEffects.js";
-import { playSound, playCoinBurst } from "./SoundEffects.js";
+import { CARD_DEFS, AI_POOL, formatDescription, levelScale, borderFrameForTier, levelIconFrame, cardIconOverride, MAX_CARD_LEVEL } from "./CardDatabase.js";
+import { ensureRun, addCurrency } from "./RunState.js";
+import { recordRunEnd } from "./MetaState.js";
+import { resolveEffects, MAX_TIME_REDUCTION_FLOOR_FRACTION } from "./CardEffects.js";
+import { playSound, playCoinBurst, clickThenLoadScene } from "./SoundEffects.js";
+import { animateCardScale, setCardScaleInstant, setCardZIndex } from "./CardVisuals.js";
 
 const BASE_MAX_TIME = 10;
+const BASE_HAND_SIZE = 3;
+const MAX_HAND_SIZE = 4; // Haste/Purge (handSize effects) can push the next hand's size up or down, clamped to this range
 const BASE_REGEN = 1; // passive time regained after your own turn — cards (Second Wind / Exhaust) are the real lever
 const DRAIN_RATE = 1; // seconds of your own time burned per real second deciding, before the intensity ramp
 const INTENSITY_RAMP = 0.035; // +3.5% drain speed per second the round has been going — the fight gets faster the longer it drags on
@@ -50,18 +54,32 @@ function freshStats(maxTime, regen) {
   // tick (resolveTurnEnd) — defaults to losing half each turn; Anchor/
   // Corrode (CardDatabase.js) are the only levers on it.
   // poison: flat seconds burned at every turn-end (Borrowed Time).
-  // timeless: when true, this side's drain skips intensityMultiplier(b)
-  // entirely (Timeless) — see the phase-drain code in BattleController.
+  // timelessReduction: 0-1 fraction of pace's speed-up this side's drain
+  // ignores (Timeless) — see the phase-drain code in BattleController.
   // reflect: decaying stacks (Reflect) — each bounces a slice of incoming
   // damage back at the attacker (CardEffects.js's "currentTime" case).
+  // baseMaxTime: this side's STARTING max time, kept immutable — CardEffects.js's
+  // "maxTime" case floors Time Steal-style reductions at a fraction of this
+  // instead of an absolute 1s, so repeated casts can't crush maxTime (and by
+  // extension currentTime, which clamps down with it) to near-zero.
   return {
     maxTime, currentTime: maxTime, regen, shield: 0, drainMult: 1, nextHandBonus: 0,
-    shieldRetain: 0.5, poison: 0, timeless: false, reflect: 0,
+    shieldRetain: 0.5, poison: 0, timelessReduction: 0, reflect: 0, baseMaxTime: maxTime,
   };
 }
 
 function intensityMultiplier(b) {
   return 1 + b.roundElapsed * INTENSITY_RAMP;
+}
+
+// Pace multiplier as `stats`' own drain actually feels it — Timeless
+// (timelessReduction, 0-1) shrinks how much of the ramp ABOVE baseline (1x)
+// applies, same shape as tickIntensity's TICK_RAMP_FACTOR dampening below,
+// rather than snapping the whole multiplier back to a flat 1 the instant
+// any reduction is present.
+function pacedMultiplier(b, stats) {
+  const intensity = intensityMultiplier(b);
+  return 1 + (intensity - 1) * (1 - (stats.timelessReduction || 0));
 }
 
 const BASE_TICK_INTERVAL = 1; // seconds between clock ticks at baseline pace
@@ -95,6 +113,28 @@ function barColor(ratio) {
   return "#e0473f";
 }
 
+function lerpColor(hexA, hexB, t) {
+  const a = parseInt(hexA.slice(1), 16), b = parseInt(hexB.slice(1), 16);
+  const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+  const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+  const r = Math.round(ar + (br - ar) * t), g = Math.round(ag + (bg - ag) * t), bl = Math.round(ab + (bb - ab) * t);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1)}`;
+}
+
+// Low-time urgency cue — once a side's fill ratio drops into the critical
+// zone, the fill pulses toward white on a sine wave driven by
+// b.roundElapsed (already ticked every frame, so no extra per-bar timer
+// state is needed) instead of just sitting at a flat "about to lose" red.
+const CRITICAL_TIME_RATIO = 0.15;
+const CRITICAL_PULSE_SPEED = 6; // radians/sec
+
+function pulsingBarColor(ratio, roundElapsed) {
+  const base = barColor(ratio);
+  if (ratio > CRITICAL_TIME_RATIO || ratio <= 0) return base;
+  const pulse = (Math.sin(roundElapsed * CRITICAL_PULSE_SPEED) + 1) / 2; // 0..1
+  return lerpColor(base, "#ffffff", pulse * 0.55);
+}
+
 function setShape(engine, id, x, y, w, h, color, rotation = 0) {
   const e = engine.getEntity(id);
   if (!e) return;
@@ -102,6 +142,41 @@ function setShape(engine, id, x, y, w, h, color, rotation = 0) {
   const s = e.getComponent("ShapeRenderer");
   if (t) { t.x = x; t.y = y; t.rotation = rotation; }
   if (s) { s.width = w; s.height = h; if (color) s.color = color; }
+}
+
+// bar.png's barleft/barmiddle/barright pieces are drawn horizontal
+// natively (width = length along the bar, height = thickness) — each
+// border-piece entity has a fixed 90deg rotation baked into its Transform
+// (main.json) so setting SpriteRenderer.width/height in that same
+// pre-rotation sense (width = length, height = thickness) reorients them
+// to run vertically: barleft's rounded cap ends up on top, barright's on
+// the bottom (a 90deg clockwise rotation turns "left-facing" into
+// "up-facing" and "right-facing" into "down-facing" in a y-down canvas).
+const BAR_BORDER_MID_COUNT = 6;
+
+function setBarPiece(engine, id, x, y, length, thickness) {
+  const e = engine.getEntity(id);
+  if (!e) return;
+  const t = e.getComponent("Transform");
+  const s = e.getComponent("SpriteRenderer");
+  if (t) { t.x = x; t.y = y; }
+  if (s) { s.width = length; s.height = thickness; }
+}
+
+function layoutBarBorder(engine, prefix, x, midY, barW, barH) {
+  const thickness = barW + 8;
+  const totalLength = barH + 10;
+  const capLen = thickness; // square caps so the rounded art isn't stretched/squished
+  const midSpan = Math.max(0, totalLength - capLen * 2);
+  const midLen = midSpan / BAR_BORDER_MID_COUNT;
+
+  setBarPiece(engine, `${prefix}CapTop`, x, midY - totalLength / 2 + capLen / 2, capLen, thickness);
+  setBarPiece(engine, `${prefix}CapBottom`, x, midY + totalLength / 2 - capLen / 2, capLen, thickness);
+
+  const midStartY = midY - totalLength / 2 + capLen;
+  for (let i = 0; i < BAR_BORDER_MID_COUNT; i++) {
+    setBarPiece(engine, `${prefix}Mid${i}`, x, midStartY + midLen * (i + 0.5), midLen, thickness);
+  }
 }
 
 function setTextPos(engine, id, x, y, text) {
@@ -130,8 +205,18 @@ function setAnchorShake(engine, id, baseX, baseY, shakeX, shakeY) {
   if (a) { a.offsetX = baseX + shakeX; a.offsetY = baseY + shakeY; }
 }
 
+// Effect amounts are level-scaled by quarters (LEVEL_POWER_SCALE,
+// CardDatabase.js), so a base-0.25 amount (e.g. Second Wind/Exhaust's regen)
+// at an off-multiple level can land on a sixteenth (e.g. 0.25 * 1.75 =
+// 0.4375) — display-only numbers that skip the existing round-to-1-decimal
+// treatment (shield/regen/handSize/reflect/poison below) go through this
+// instead so nothing ever shows more than 3 decimal digits.
+function round3(n) {
+  return Math.round(n * 1000) / 1000;
+}
+
 function formatTimeLabel(stats) {
-  let t = `${stats.currentTime.toFixed(1)}s/${stats.maxTime.toFixed(0)}s`;
+  let t = `${stats.currentTime.toFixed(1)}s/${stats.maxTime.toFixed(1)}s`;
   if (stats.shield > 0) t += `\nShield ${stats.shield.toFixed(0)}`;
   return t;
 }
@@ -204,11 +289,11 @@ function layoutHud(engine, b) {
   const topY = midY - barH / 2;
   const bottomY = midY + barH / 2;
 
-  // colored frames behind each bar are the always-visible "this side is
-  // mine / this side is the enemy's" cue — independent of the fill color,
-  // which is reserved for health status (green/yellow/red).
-  setShape(engine, "playerBarFrame", leftX, midY, barW + 10, barH + 10, "#3b5bdb");
-  setShape(engine, "aiBarFrame", rightX, midY, barW + 10, barH + 10, "#dc3b3b");
+  // Sprite border (assets/bar.png — barleft/barmiddle/barright, rotated
+  // 90deg so the naturally-horizontal caps become top/bottom) framing each
+  // bar in place of the old flat colored rect.
+  layoutBarBorder(engine, "playerBar", leftX, midY, barW, barH);
+  layoutBarBorder(engine, "aiBar", rightX, midY, barW, barH);
   setShape(engine, "playerBarTrack", leftX, midY, barW, barH, "#12141c");
   setShape(engine, "aiBarTrack", rightX, midY, barW, barH, "#12141c");
 
@@ -216,8 +301,8 @@ function layoutHud(engine, b) {
   const ar = clamp01(b.ai.currentTime / b.ai.maxTime);
   const pFillH = barH * pr;
   const aFillH = barH * ar;
-  setShape(engine, "playerBarFill", leftX, bottomY - pFillH / 2, barW - 6, pFillH, barColor(pr));
-  setShape(engine, "aiBarFill", rightX, bottomY - aFillH / 2, barW - 6, aFillH, barColor(ar));
+  setShape(engine, "playerBarFill", leftX, bottomY - pFillH / 2, barW - 6, pFillH, pulsingBarColor(pr, b.roundElapsed));
+  setShape(engine, "aiBarFill", rightX, bottomY - aFillH / 2, barW - 6, aFillH, pulsingBarColor(ar, b.roundElapsed));
 
   layoutShieldPreview(engine, "playerShieldPreview", b.player, leftX, bottomY, barW, barH, 0);
   layoutShieldPreview(engine, "aiShieldPreview", b.ai, rightX, bottomY, barW, barH, 0);
@@ -238,8 +323,8 @@ function layoutHud(engine, b) {
 
   const shakeX = b.shake ? b.shake.x : 0, shakeY = b.shake ? b.shake.y : 0;
   setAnchorShake(engine, "roundLabelValue", 16, 14, shakeX, shakeY);
-  setAnchorShake(engine, "currencyLabelValue", -16, 14, shakeX, shakeY);
-  setAnchorShake(engine, "intensityLabelValue", -16, 14, shakeX, shakeY);
+  setAnchorShake(engine, "currencyLabelValue", -70, 14, shakeX, shakeY);
+  setAnchorShake(engine, "intensityLabelValue", 70, 14, shakeX, shakeY);
   setAnchorShake(engine, "turnBanner", 0, 46, shakeX, shakeY);
 }
 
@@ -283,6 +368,32 @@ function setPauseOverlay(engine, visible) {
   const text = engine.getEntity("pauseText");
   const textOp = text && text.getComponent("Opacity");
   if (textOp) textOp.value = visible ? 1 : 0;
+
+  const btn = engine.getEntity("pauseDirectoryBtn");
+  const btnOp = btn && btn.getComponent("Opacity");
+  if (btnOp) btnOp.value = visible ? 1 : 0;
+  const btnInteract = btn && btn.getComponent("Interactable");
+  if (btnInteract) {
+    // Interactable hit-testing isn't gated by Opacity (see Interactable.js)
+    // — clear onClick while hidden too, or it'd stay clickable through the
+    // invisible button whenever the cursor happens to sit over that spot.
+    // A raw string here (the old value) is never compiled into a callable —
+    // that only happens for onClick set via the Interactable constructor
+    // (see Interactable.js's compileCode) — so this assigns openFromPause
+    // directly instead; its (entity, engine) signature already matches.
+    btnInteract.onClick = visible ? openFromPause : null;
+    btnInteract.cursor = visible ? "pointer" : "default";
+  }
+}
+
+// Assigned directly as the pause menu's "Card Directory" button's onClick
+// (see setPauseOverlay above). b.paused stays true across the trip —
+// engine.state.battle survives
+// loadScene() (see RunState.js's header comment), so returning here via
+// carddirectory's Back button lands right back in the still-paused fight.
+export function openFromPause(entity, engine) {
+  engine.state.cardDirectoryReturn = "main";
+  clickThenLoadScene(engine, "carddirectory");
 }
 
 function impact(engine, side) {
@@ -433,17 +544,18 @@ function applyResultVisuals(engine, b, results, actorSide) {
       color = "#fca5a5";
       impact(engine, side);
     } else if (r.type === "shield") {
-      text = `+${r.amount} Shield`; color = "#60a5fa";
+      text = `+${round3(r.amount)} Shield`; color = "#60a5fa";
     } else if (r.type === "maxTime") {
       const amt = Math.round(r.amount * 10) / 10;
       text = `${amt >= 0 ? "+" : ""}${amt} Max`; color = "#facc15";
       if (amt < 0) impact(engine, side);
     } else if (r.type === "regen") {
-      text = `${r.amount >= 0 ? "+" : ""}${r.amount} Regen`; color = r.amount >= 0 ? "#a3e635" : "#fb923c";
+      const amt = round3(r.amount);
+      text = `${amt >= 0 ? "+" : ""}${amt} Regen`; color = amt >= 0 ? "#a3e635" : "#fb923c";
     } else if (r.type === "drainRate") {
       text = "Focused"; color = "#c4b5fd";
     } else if (r.type === "handSize") {
-      text = `+${r.amount} Hand`; color = "#fbbf24";
+      text = `+${round3(r.amount)} Hand`; color = "#fbbf24";
     } else if (r.type === "shieldRetain") {
       text = r.amount >= 0 ? "Warded" : "Corroded"; color = r.amount >= 0 ? "#93c5fd" : "#f97316";
     } else if (r.type === "poison") {
@@ -451,7 +563,9 @@ function applyResultVisuals(engine, b, results, actorSide) {
     } else if (r.type === "timeless") {
       text = "Timeless"; color = "#e2e8f0";
     } else if (r.type === "reflect") {
-      text = `+${r.amount} Reflect`; color = "#38bdf8";
+      text = `+${round3(r.amount)} Reflect`; color = "#38bdf8";
+    } else if (r.type === "cleanse") {
+      text = "Cleansed"; color = "#67e8f9";
     } else if (r.type === "reflectDamage") {
       const amt = Math.round(r.amount * 10) / 10;
       if (amt === 0) continue;
@@ -488,7 +602,7 @@ function tickPoison(engine, b, side) {
   stats.currentTime = Math.max(0, stats.currentTime - stats.poison);
   const vp = engine.getViewportSize();
   const x = side === "player" ? HUD_MARGIN + 46 : vp.width - HUD_MARGIN - 46;
-  spawnFloatText(engine, x, vp.height / 2, `-${stats.poison}s Poison`, "#c026d3");
+  spawnFloatText(engine, x, vp.height / 2, `-${round3(stats.poison)}s Poison`, "#c026d3");
   impact(engine, side);
 }
 
@@ -503,51 +617,6 @@ function tickReflectDecay(b, side) {
 const PILE_SCALE = 0.5; // played cards shrink to this fraction of hand size when they land in the pile
 const PILE_MAX_CARDS = 10; // oldest piled card is removed once the pile would exceed this
 const PILE_CENTER_Y_OFFSET = -50; // moves the pile up from dead-center, away from the hand
-// Every card is a root + these named children (see prefabs/Card.json). Each
-// child has a FIXED zIndex in the prefab (500-505) meant only to keep a
-// card's own parts above its own background — that's fine when cards don't
-// overlap (the hand), but once many card instances overlap in the pile,
-// those shared absolute values interleave between different cards' parts
-// instead of each card layering as one coherent unit. setCardZIndex rebases
-// every instance's children onto that instance's own root zIndex so a whole
-// card — root and children together — moves as a unit in draw order.
-const PILE_CHILD_Z_OFFSETS = { cardArt: -1, descBg: 0, icon: 1, name: 2, desc: 3, badge: 4, badgeText: 5, levelIcon: 4 };
-
-function setCardZIndex(ent, baseZIndex) {
-  const t = ent.getComponent("Transform");
-  if (t) t.zIndex = baseZIndex;
-  for (const [name, offset] of Object.entries(PILE_CHILD_Z_OFFSETS)) {
-    const child = ent.getChild(name);
-    const ct = child && child.getComponent("Transform");
-    if (ct) ct.zIndex = baseZIndex + offset;
-  }
-}
-
-// Shrinks a card entity in place — Transform has no scale field, so this
-// scales the root's own renderer(s) plus every named child's local offset
-// and renderer/font size, proportionally, around the root's origin.
-function scaleCardVisual(ent, scale) {
-  const rootShape = ent.getComponent("ShapeRenderer");
-  const rootSprite = ent.getComponent("SpriteRenderer");
-  if (rootShape) { rootShape.width *= scale; rootShape.height *= scale; }
-  if (rootSprite) { rootSprite.width *= scale; rootSprite.height *= scale; }
-  for (const name of Object.keys(PILE_CHILD_Z_OFFSETS)) {
-    const child = ent.getChild(name);
-    if (!child) continue;
-    const t = child.getComponent("Transform");
-    if (t) { t.x *= scale; t.y *= scale; }
-    const sr = child.getComponent("ShapeRenderer");
-    if (sr) { sr.width *= scale; sr.height *= scale; }
-    const spr = child.getComponent("SpriteRenderer");
-    if (spr) { spr.width *= scale; spr.height *= scale; }
-    const tr = child.getComponent("TextRenderer");
-    if (tr) {
-      tr.fontSize = Math.max(6, tr.fontSize * scale);
-      if (tr.maxWidth) tr.maxWidth *= scale;
-      if (tr.maxHeight) tr.maxHeight *= scale;
-    }
-  }
-}
 
 // Next slot in the center "played cards" pile — small jitter/spin per card
 // (much smaller than the card itself, since these are shrunk down) and an
@@ -585,14 +654,26 @@ function animateCardPlay(engine, b, entityId) {
   // to create a child with an id these still hold, which fails outright
   // (createEntity returns null on a collision) and crashes the prefab build.
   for (const child of e.children) child.id = `${e.id}.${child.childName}`;
-  scaleCardVisual(e, PILE_SCALE);
+  // Playing a card almost always happens mid-hover (the cursor has to be
+  // over it to click it), which leaves it grown by handCardHoverEnter's
+  // animateCardScale — possibly still mid-TWEEN, not yet fully at its
+  // target size, if the click lands within the hover tween's 0.15s. Used to
+  // revert that via a hand-rolled scaleCardVisual() that multiplied
+  // whatever the CURRENT (unreliable, maybe mid-tween) live dimensions were
+  // — same class of bug as the shop's hover-shrink issue (see CardVisuals.js's
+  // baseMetrics comment): landing mid-tween meant the "revert to 1x" step
+  // undershot, so the pile card ended up at the wrong size (occasionally
+  // barely shrunk at all). setCardScaleInstant jumps straight to an
+  // ABSOLUTE target computed from each card's cached true-1x size, so it's
+  // exact regardless of whatever the live in-flight value happens to be.
+  setCardScaleInstant(e, PILE_SCALE);
   const slot = nextPileSlot(engine, b);
   setCardZIndex(e, slot.zIndex);
   anim.animate(t, "x", slot.x, { duration: 0.35, easing: "easeIn" });
   anim.animate(t, "y", slot.y, { duration: 0.35, easing: "easeIn" });
   anim.animate(t, "rotation", slot.rotation, { duration: 0.35, easing: "easeIn" });
   const it = e.getComponent("Interactable");
-  if (it) { it.onClick = null; it.cursor = "default"; }
+  if (it) { it.onClick = null; it.onHoverEnter = null; it.onHoverExit = null; it.cursor = "default"; }
 
   b.pileQueue = b.pileQueue || [];
   b.pileQueue.push(e.id);
@@ -613,7 +694,7 @@ function spawnAiPlayedCardVisual(engine, b, def, level) {
     ShapeRenderer: { color: def.color },
     SpriteRenderer: { frame: borderFrameForTier(def.tier) },
     children: {
-      icon: { ShapeRenderer: { color: def.icon } },
+      icon: cardIconOverride(def.id, def.icon),
       name: { TextRenderer: { text: level > 1 ? `${def.name} +${level - 1}` : def.name } },
       desc: { TextRenderer: { text: formatDescription(def, level) } },
       levelIcon: { SpriteRenderer: { frame: levelIconFrame(level), width: level > 1 ? 22 : 0, height: level > 1 ? 22 : 0 } },
@@ -650,6 +731,29 @@ function animateCardDiscard(engine, entityId) {
 
 // ---------- hand / deck ----------
 
+const HAND_HOVER_SCALE = 1.15;
+const HAND_HOVER_Z_INDEX = 900; // above every other hand card while hovered, so it doesn't get clipped by its neighbors as it grows
+
+// No y-lift here (unlike the shop/perk hover) — hand cards already have a
+// permanent idle-bob tween on (Transform, "y") from startIdleBob, and
+// Animator.animate() cancels whatever tween previously held the same
+// (target, prop) pair, so a competing hover lift would just fight the bob
+// every frame. Growing width/height/fontSize doesn't touch y, so it
+// coexists fine; setCardZIndex (below) brings the whole card forward so
+// the enlarged art isn't clipped under its neighbors' zIndex instead.
+export function handCardHoverEnter(entity, engine) {
+  const t = entity.getComponent("Transform");
+  if (!t) return;
+  entity.state.baseZIndex = entity.state.baseZIndex ?? t.zIndex;
+  setCardZIndex(entity, HAND_HOVER_Z_INDEX);
+  animateCardScale(entity, HAND_HOVER_SCALE);
+}
+
+export function handCardHoverExit(entity, engine) {
+  if (entity.state.baseZIndex != null) setCardZIndex(entity, entity.state.baseZIndex);
+  animateCardScale(entity, 1);
+}
+
 function spawnHandEntities(engine, b) {
   const vp = engine.getViewportSize();
   const entities = [];
@@ -661,9 +765,13 @@ function spawnHandEntities(engine, b) {
       Transform: { x: vp.width / 2, y: vp.height + 160, zIndex: 20 + i },
       ShapeRenderer: { color: def.color },
       SpriteRenderer: { frame: borderFrameForTier(def.tier) },
-      Interactable: { onClick: "engine.callScript('PlayHandCard', entity, engine);" },
+      Interactable: {
+        onClick: "engine.callScript('PlayHandCard', entity, engine);",
+        onHoverEnter: "engine.callScript('HandCardHoverEnter', entity, engine);",
+        onHoverExit: "engine.callScript('HandCardHoverExit', entity, engine);",
+      },
       children: {
-        icon: { ShapeRenderer: { color: def.icon } },
+        icon: cardIconOverride(def.id, def.icon),
         name: { TextRenderer: { text: card.level > 1 ? `${def.name} +${card.level - 1}` : def.name } },
         desc: { TextRenderer: { text: formatDescription(def, card.level) } },
         levelIcon: { SpriteRenderer: { frame: levelIconFrame(card.level), width: card.level > 1 ? 22 : 0, height: card.level > 1 ? 22 : 0 } },
@@ -742,17 +850,20 @@ function drawHand(engine, b, count) {
 }
 
 function drawAiHand(aiLevel) {
-  // Stretched out relative to the old /2 and /3 divisors so tier/level
-  // unlocks land roughly in step with the (also-stretched) accuracy ramp
-  // below, instead of maxing out by round 5-7 while accuracy is still rising.
-  const maxTier = 1 + Math.floor(aiLevel / 3);
+  // Round 4-5 used to take BOTH jumps at once: tier2 unlocked (/3) at the
+  // same aiLevel (3, round 4) the level ramp (/2) also hit level 2, so the
+  // AI's whole hand got meaningfully stronger in a single round, then
+  // stronger again the very next one. Stretched to /4 and /3 respectively
+  // so the two jumps land a round apart instead of stacking.
+  const maxTier = 1 + Math.floor(aiLevel / 4);
   const pool = AI_POOL.filter((id) => CARD_DEFS[id].tier <= maxTier);
   // Was hard-capped at level 3 (a leftover from when MAX_CARD_LEVEL was 3
   // for players too) — now climbs all the way to MAX_CARD_LEVEL, reaching it
-  // around aiLevel 18 (~round 19), similar completion window to the other
-  // AI difficulty ramps above, so long runs don't leave the AI stuck at a
-  // fraction of the power the player's own upgrades can reach.
-  const level = Math.min(MAX_CARD_LEVEL, 1 + Math.floor(aiLevel / 2));
+  // around aiLevel 27 (~round 28) with the /3 divisor above, similar
+  // completion window to the other AI difficulty ramps, so long runs don't
+  // leave the AI stuck at a fraction of the power the player's own upgrades
+  // can reach.
+  const level = Math.min(MAX_CARD_LEVEL, 1 + Math.floor(aiLevel / 3));
   const hand = [];
   for (let i = 0; i < 3; i++) {
     const defId = pool[Math.floor(Math.random() * pool.length)];
@@ -771,10 +882,11 @@ function chooseAiCard(b, aiLevel) {
   // rate for the rest of the run. Stretched to cap around level ~9.6 (round
   // ~10-11) with a slightly higher permanent mistake floor (7%) so accuracy
   // keeps visibly climbing for longer instead of plateauing early.
-  // Starting point lowered from 0.45 (55% mistake rate) to 0.30 (70%) so
-  // round 1 is genuinely soft to learn on; same growth rate/cap as before,
-  // just shifted down so it still climbs to the same ~7% floor a bit later.
-  const smart = Math.min(0.93, 0.3 + aiLevel * 0.05); // gets sharper with level, never perfect
+  // Starting point lowered from 0.45 (55% mistake rate) to 0.30 (70%), then
+  // to 0.25 (75%) plus a gentler growth rate and lower cap (10% permanent
+  // mistake floor instead of 7%) — round 1-5 were still sharpening up too
+  // fast on top of the tier/level jumps above.
+  const smart = Math.min(0.9, 0.25 + aiLevel * 0.045); // gets sharper with level, never perfect
   if (Math.random() > smart) return Math.floor(Math.random() * b.aiHand.length);
   let bestIdx = 0, bestScore = -Infinity;
   b.aiHand.forEach((card, i) => {
@@ -798,7 +910,8 @@ function chooseAiCard(b, aiLevel) {
       } else if (eff.type === "shield") {
         score += amt * (b.ai.currentTime < b.ai.maxTime * 0.5 ? 1.3 : 0.5);
       } else if (eff.type === "maxTime" && eff.target === "opponent") {
-        const newMax = Math.max(1, b.player.maxTime + amt);
+        const floor = Math.max(1, b.player.baseMaxTime * MAX_TIME_REDUCTION_FLOOR_FRACTION);
+        const newMax = Math.max(floor, b.player.maxTime + amt);
         const actualLoss = Math.max(0, b.player.currentTime - newMax);
         score += actualLoss * 1.4 + Math.abs(amt) * 0.3;
         if (b.player.currentTime - actualLoss <= 0) score += 100;
@@ -824,7 +937,7 @@ function chooseAiCard(b, aiLevel) {
       } else if (eff.type === "poison") {
         score -= amt * 3;
       } else if (eff.type === "timeless") {
-        score += 12; // flat — a strong permanent defensive tool, priced/tiered as such
+        score += amt * 0.24; // amt is percentage-points; 0.24 keeps the base (50%) copy at the same score (12) the old flat bonus gave
       } else if (eff.type === "pace") {
         // Reducing pace matters most when the AI itself is under pressure.
         score += Math.abs(amt) * (b.ai.currentTime < b.ai.maxTime * 0.4 ? 1.0 : 0.3);
@@ -894,17 +1007,24 @@ function resolveTurnEnd(engine, run, b) {
   decaying.shield *= decaying.shieldRetain;
   if (decaying.shield < 0.05) decaying.shield = 0;
 
-  // Poison (Borrowed Time) ticks every turn-end too, same cadence as shield
-  // decay — independent of whose turn it was.
-  tickPoison(engine, b, "player");
-  tickPoison(engine, b, "ai");
+  // Poison (Borrowed Time) ticks once per full round (player turn + AI turn),
+  // not once per individual turn-end — resolveTurnEnd itself runs twice a
+  // round (once after the player's card, once after the AI's), so gating
+  // this on `acted === "ai"` (the second of the pair) is what makes it fire
+  // once per round instead of twice. Previously ungated, poison was
+  // silently ticking both sides on both turn-ends — double its intended
+  // rate, which is almost certainly why it felt like instant death.
+  if (acted === "ai") {
+    tickPoison(engine, b, "player");
+    tickPoison(engine, b, "ai");
+  }
   tickReflectDecay(b, "player");
   tickReflectDecay(b, "ai");
 
   b.turn = acted === "player" ? "ai" : "player";
   if (b.turn === "player") {
     b.phase = "playerTurn";
-    const count = 3 + (b.player.nextHandBonus || 0);
+    const count = Math.max(1, Math.min(MAX_HAND_SIZE, BASE_HAND_SIZE + (b.player.nextHandBonus || 0)));
     b.player.nextHandBonus = 0;
     drawHand(engine, b, count); // hand was already discarded the instant the player's last card was played
     showBanner(engine, "Your Turn");
@@ -930,15 +1050,25 @@ function endRound(engine, run, b, winner) {
     // payout — 1.5x here is the "bigger" half of that trade.
     const base = Math.round(Math.max(MIN_ROUND_REWARD, Math.floor(b.player.currentTime)) + run.round * ROUND_REWARD_PER_ROUND);
     const earned = b.isElite ? Math.round(base * 1.5) : base;
-    run.currency += earned;
+    addCurrency(engine, run, earned);
+    // Read by ShopController on arrival to count the currency label up from
+    // (run.currency - lastEarned) to run.currency instead of snapping
+    // straight to the final number — cleared there once consumed.
+    run.lastEarned = earned;
     run.round += 1;
     run.aiLevel += 1;
     engine.state.shop = null; // force ShopController to regenerate fresh offers next visit
     playCoinBurst(engine, earned);
     showBanner(engine, `Round Won! +${earned} coins`);
+    startShake(b, 10, 0.35); // bigger punch than a single hit — this is the whole round paying off
+    flashVignette(engine, "#ffd76a", 0.22, 0.12, 0.5);
     b.transitionTarget = "pathchoice";
     fadeToBlack(engine, 1.2); // 1.8s roundOver window — leaves ~0.6s fully black before the cut
   } else {
+    // Stashed on `run` (not consumed here) since it's the gameover scene's
+    // GameOverController that actually renders the recap — engine.state.run
+    // survives the scene load, only cleared on Retry (GameoverRetry.js).
+    run.newBest = recordRunEnd(engine, run.round);
     showBanner(engine, "Time's Up...");
     b.transitionTarget = "gameover";
   }
@@ -954,12 +1084,18 @@ function initBattle(engine, run) {
   run.eliteNext = false;
   const effectiveAiLevel = run.aiLevel + (isElite ? 2 : 0);
 
-  const aiScale = 1 + effectiveAiLevel * 0.12;
-  const ai = freshStats(Math.round(BASE_MAX_TIME * aiScale), BASE_REGEN);
+  // Flat +0.5s of max time per aiLevel (~1 per round win) — was a 12%-of-base
+  // multiplicative scale (~1.2s/level, and compounding oddly at high Elite
+  // levels since it was BASE_MAX_TIME-relative); a flat rate is both exactly
+  // half that growth, as asked, and simpler to reason about.
+  const AI_MAX_TIME_PER_LEVEL = 0.42; // was 0.5 — small across-the-board trim, part of the general "nerf AI a little" pass
+  const ai = freshStats(BASE_MAX_TIME + effectiveAiLevel * AI_MAX_TIME_PER_LEVEL, BASE_REGEN);
   // Stretched to floor around level ~16-17 (was ~11) so clock-management
   // keeps improving over a longer stretch of rounds, matching the other
-  // ramps above instead of maxing out earlier than they do.
-  ai.drainMult = Math.max(0.5, 1 - effectiveAiLevel * 0.03);
+  // ramps above instead of maxing out earlier than they do. Growth rate
+  // trimmed further (0.03 -> 0.025) so the AI's clock stays closer to full
+  // drain speed for longer, same "little bit" nerf as the rest of this pass.
+  ai.drainMult = Math.max(0.5, 1 - effectiveAiLevel * 0.025);
   return {
     phase: "intro",
     introTimer: 0,
@@ -974,7 +1110,13 @@ function initBattle(engine, run) {
     transitionTarget: null,
     isElite,
     effectiveAiLevel,
-    player: freshStats(BASE_MAX_TIME, BASE_REGEN),
+    // run.maxTimeBonus is a persistent, run-wide bonus (Vitality perk,
+    // PathChoiceController.js) — unlike card effects like Fortify/Overreach
+    // (which only last "for the rest of the fight" since freshStats rebuilds
+    // player stats from scratch every battle), this is meant to carry over
+    // to every future fight this run, so it's added at the BASE_MAX_TIME
+    // level here rather than as a per-battle card effect.
+    player: freshStats(BASE_MAX_TIME + (run.maxTimeBonus || 0), BASE_REGEN),
     ai,
     hand: [],
     aiHand: [],
@@ -992,10 +1134,24 @@ export function BattleController(entity, engine, dt) {
   let b = engine.state.battle;
   if (!b) {
     b = engine.state.battle = initBattle(engine, run);
+    entity.state.hudSynced = true;
     layoutHud(engine, b);
     showBanner(engine, `Round ${run.round} — Fight!`);
     playSound(engine, "shuffle");
     return;
+  }
+
+  // Battle state (b) survives scene reloads (e.g. pause -> card directory ->
+  // back), but the entities themselves don't — loadScene tears down and
+  // rebuilds everything from the JSON's placeholder Transforms, and drops
+  // any dynamically-spawned ones (the hand cards) entirely. Resync both
+  // once against the freshly (re)created entities before anything below
+  // has a chance to skip it (like the paused early-return).
+  if (!entity.state.hudSynced) {
+    entity.state.hudSynced = true;
+    layoutHud(engine, b);
+    setPauseOverlay(engine, b.paused);
+    if (b.hand.length && !engine.getEntity("hand_card_0")) spawnHandEntities(engine, b);
   }
 
   // Not allowed mid-transition (roundOver) — there's nothing to freeze,
@@ -1026,7 +1182,7 @@ export function BattleController(entity, engine, dt) {
     if (b.introTimer > INTRO_DURATION) {
       b.turn = "player";
       b.phase = "playerTurn";
-      drawHand(engine, b, 3);
+      drawHand(engine, b, BASE_HAND_SIZE);
       layoutHud(engine, b);
     }
     return;
@@ -1044,7 +1200,7 @@ export function BattleController(entity, engine, dt) {
   }
 
   if (b.phase === "playerTurn") {
-    const pMult = b.player.timeless ? 1 : intensityMultiplier(b); // Timeless — skip pace entirely
+    const pMult = pacedMultiplier(b, b.player); // Timeless — dampens pace, doesn't skip it
     b.player.currentTime = Math.max(0, b.player.currentTime - DRAIN_RATE * pMult * b.player.drainMult * dt);
     layoutHud(engine, b);
     if (b.player.currentTime <= 0) { endRound(engine, run, b, "ai"); return; }
@@ -1055,7 +1211,7 @@ export function BattleController(entity, engine, dt) {
   }
 
   if (b.phase === "aiTurn") {
-    const aMult = b.ai.timeless ? 1 : intensityMultiplier(b); // Timeless — skip pace entirely
+    const aMult = pacedMultiplier(b, b.ai); // Timeless — dampens pace, doesn't skip it
     b.ai.currentTime = Math.max(0, b.ai.currentTime - DRAIN_RATE * aMult * b.ai.drainMult * dt);
     b.aiThinkTimer += dt;
     layoutHud(engine, b);

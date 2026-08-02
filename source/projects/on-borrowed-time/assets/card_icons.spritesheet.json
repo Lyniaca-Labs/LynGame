@@ -1,0 +1,116 @@
+{
+  "cellWidth": 16,
+  "cellHeight": 16,
+  "columns": 5,
+  "frames": [
+    {
+      "index": 0,
+      "name": "strike"
+    },
+    {
+      "index": 1,
+      "name": "heavy_strike"
+    },
+    {
+      "index": 2,
+      "name": "drain_strike"
+    },
+    {
+      "index": 3,
+      "name": "time_steal"
+    },
+    {
+      "index": 4,
+      "name": "piercing_strike"
+    },
+    {
+      "index": 5,
+      "name": "overclock"
+    },
+    {
+      "index": 6,
+      "name": "blood_pact"
+    },
+    {
+      "index": 7,
+      "name": "second_wind"
+    },
+    {
+      "index": 8,
+      "name": "guard"
+    },
+    {
+      "index": 9,
+      "name": "reinforce"
+    },
+    {
+      "index": 10,
+      "name": "fortify"
+    },
+    {
+      "index": 11,
+      "name": "anchor"
+    },
+    {
+      "index": 12,
+      "name": "all_in"
+    },
+    {
+      "index": 13,
+      "name": "reflect"
+    },
+    {
+      "index": 14,
+      "name": "exhaust"
+    },
+    {
+      "index": 15,
+      "name": "focus"
+    },
+    {
+      "index": 16,
+      "name": "haste"
+    },
+    {
+      "index": 17,
+      "name": "corrode"
+    },
+    {
+      "index": 18,
+      "name": "borrowed_time"
+    },
+    {
+      "index": 19,
+      "name": "timeless"
+    },
+    {
+      "index": 20,
+      "name": "timeout"
+    },
+    {
+      "index": 21,
+      "name": "adrenaline"
+    },
+    {
+      "index": 22,
+      "name": "mend"
+    },
+    {
+      "index": 23,
+      "name": "remove"
+    },
+    {
+      "index": 24,
+      "name": "upgrade"
+    },
+    {
+      "index": 25,
+      "name": "overreach"
+    },
+    {
+      "index": 26,
+      "name": "Up_Down_Arrow___Hand_3"
+    }
+  ],
+  "clips": {}
+}

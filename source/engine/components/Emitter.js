@@ -271,12 +271,13 @@ export class Emitter extends Component {
         t.x = origin.x + ox;
         t.y = origin.y + oy;
         t.zIndex = zIndex;
+        t.fixed = origin.fixed;
       } else {
-        particle.addComponent(Transform, { x: origin.x + ox, y: origin.y + oy, zIndex });
+        particle.addComponent(Transform, { x: origin.x + ox, y: origin.y + oy, zIndex, fixed: origin.fixed });
       }
     } else {
       particle = engine.createEntity();
-      particle.addComponent(Transform, { x: origin.x + ox, y: origin.y + oy, zIndex });
+      particle.addComponent(Transform, { x: origin.x + ox, y: origin.y + oy, zIndex, fixed: origin.fixed });
       if (type.sprite) {
         particle.addComponent(SpriteRenderer, { sprite: type.sprite, frame: type.frame ?? "", width: size, height: size });
       } else {
