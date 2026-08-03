@@ -6,6 +6,14 @@
 
     { "id": "controller", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } }, "scripts": ["GameOverController"] },
 
+    { "id": "fadeOverlay", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true, "zIndex": 9999 },
+      "Anchor": { "anchor": "center" },
+      "ShapeRenderer": { "shape": "rect", "width": 3000, "height": 3000, "color": "#000000" },
+      "Opacity": { "value": 1 },
+      "Animator": {}
+    } },
+
     { "id": "content", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },
     { "id": "newBestBanner", "parentId": "content", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
@@ -34,11 +42,14 @@
       "Anchor": { "anchor": "center", "offsetY": 140 },
       "ShapeRenderer": { "shape": "rect", "width": 220, "height": 52, "color": "#7f2d2d" },
       "TextRenderer": { "text": "Main Menu", "fontFamily": "VT323", "googleFont": true, "fontSize": 24, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
+      "Animator": {},
       "Interactable": {
         "width": 220,
         "height": 52,
         "cursor": "pointer",
-        "onClick": "engine.callScript('GameoverRetry', entity, engine);"
+        "onClick": "engine.callScript('GameoverRetry', entity, engine);",
+        "onHoverEnter": "engine.callScript('ButtonHoverEnter', entity, engine);",
+        "onHoverExit": "engine.callScript('ButtonHoverExit', entity, engine);"
       }
     } }
   ]

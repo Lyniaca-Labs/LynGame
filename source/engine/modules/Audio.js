@@ -84,8 +84,13 @@ export class AudioModule {
    * @param {number} [options.volume=1] - 0..1, multiplied by masterVolume
    * @param {boolean} [options.loop=false]
    * @param {number} [options.playbackRate=1]
-   * @returns {{pause: Function}|HTMLAudioElement|null} the playing instance —
-   *   hang onto it to stop a looping sound early (`instance.pause()`);
+   * @param {Function} [options.onEnded] - fires when playback finishes on its
+   *   own (not called on manual `.pause()`/`stopAll()`) — e.g. to advance a
+   *   music playlist to the next track.
+   * @returns {{pause: Function, setVolume: Function, getVolume: Function}|HTMLAudioElement|null}
+   *   the playing instance — hang onto it to stop a looping sound early
+   *   (`instance.pause()`) or to fade/ramp it (`instance.setVolume(0..1)`,
+   *   multiplied by masterVolume same as the initial `volume` option);
    *   one-shot SFX can discard the return value.
    */
   play(key, options = {}) {
@@ -99,7 +104,7 @@ export class AudioModule {
     return this._playElementFallback(key, options);
   }
 
-  _playBuffer(buffer, { volume = 1, loop = false, playbackRate = 1 } = {}) {
+  _playBuffer(buffer, { volume = 1, loop = false, playbackRate = 1, onEnded } = {}) {
     const ctx = this._context();
     const source = ctx.createBufferSource();
     source.buffer = buffer;
@@ -107,15 +112,20 @@ export class AudioModule {
     source.playbackRate.value = playbackRate;
 
     const gain = ctx.createGain();
-    gain.gain.value = Math.min(1, Math.max(0, volume * this.masterVolume));
+    gain.gain.value = Math.min(1, Math.max(0, volume)) * this.masterVolume;
     source.connect(gain).connect(ctx.destination);
 
     const instance = {
       pause: () => {
         try { source.stop(); } catch { /* already stopped/ended */ }
       },
+      setVolume: (v) => { gain.gain.value = Math.min(1, Math.max(0, v)) * this.masterVolume; },
+      getVolume: () => gain.gain.value,
     };
-    source.onended = () => this._playing.delete(instance);
+    source.onended = () => {
+      this._playing.delete(instance);
+      if (onEnded) onEnded();
+    };
     this._playing.add(instance);
     // See _context() — if a resume() is still in flight, wait for it before
     // actually starting playback instead of racing ahead; once the session's
@@ -129,15 +139,20 @@ export class AudioModule {
     return instance;
   }
 
-  _playElementFallback(key, { volume = 1, loop = false, playbackRate = 1 } = {}) {
+  _playElementFallback(key, { volume = 1, loop = false, playbackRate = 1, onEnded } = {}) {
     const base = this.engine.assets.get(key);
     if (!base) return null;
 
     const instance = base.cloneNode(true);
-    instance.volume = Math.min(1, Math.max(0, volume * this.masterVolume));
+    instance.volume = Math.min(1, Math.max(0, volume)) * this.masterVolume;
     instance.loop = loop;
     instance.playbackRate = playbackRate;
-    instance.addEventListener("ended", () => this._playing.delete(instance));
+    instance.setVolume = (v) => { instance.volume = Math.min(1, Math.max(0, v)) * this.masterVolume; };
+    instance.getVolume = () => instance.volume;
+    instance.addEventListener("ended", () => {
+      this._playing.delete(instance);
+      if (onEnded) onEnded();
+    });
 
     this._playing.add(instance);
     instance.play().catch(() => {});

@@ -98,7 +98,7 @@ export default class ProjectHandler {
     if (!fs.existsSync(assetsDir)) return manifest;
 
     const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
-    const AUDIO_EXT = new Set([".mp3", ".wav", ".ogg", ".m4a"]);
+    const AUDIO_EXT = new Set([".mp3", ".wav", ".ogg", ".m4a", ".flac"]);
 
     function walk(dir, relPrefix) {
       const entries = fs.readdirSync(dir, { withFileTypes: true });

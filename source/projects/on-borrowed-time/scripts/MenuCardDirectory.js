@@ -7,5 +7,5 @@ import { clickThenLoadScene } from "./SoundEffects.js";
 
 export function MenuCardDirectory(entity, engine) {
   engine.state.cardDirectoryReturn = "menu";
-  clickThenLoadScene(engine, "carddirectory");
+  clickThenLoadScene(engine, "carddirectory", 450);
 }

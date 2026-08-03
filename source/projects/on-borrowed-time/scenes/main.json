@@ -3,6 +3,7 @@
   "entities": [
     { "id": "cam", "components": { "Transform": { "x": 0, "y": 0, "fixed": false }, "Camera": { "zoom": 1, "offset": { "x": 0, "y": 0 } } } },
     { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#1a1b22" } } },
+    { "id": "floor", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -50 }, "SpriteRenderer": { "sprite": "floor", "width": 4000, "height": 4000, "repeat": true } } },
     { "id": "table", "components": { "Transform": { "x": 0, "y": 0, "fixed": true, "zIndex": 0 }, "SpriteRenderer": { "sprite": "table", "width": 520, "height": 520 } } },
 
     { "id": "controller", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } }, "scripts": ["BattleController"] },

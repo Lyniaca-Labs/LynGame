@@ -4,6 +4,16 @@
     { "id": "cam", "components": { "Transform": { "x": 0, "y": 0, "fixed": false }, "Camera": { "zoom": 1, "offset": { "x": 0, "y": 0 } } } },
     { "id": "bg", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -100 }, "ShapeRenderer": { "shape": "rect", "width": 4000, "height": 4000, "color": "#1a1b22" } } },
 
+    { "id": "controller", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } }, "scripts": ["MenuController"] },
+
+    { "id": "fadeOverlay", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true, "zIndex": 9999 },
+      "Anchor": { "anchor": "center" },
+      "ShapeRenderer": { "shape": "rect", "width": 3000, "height": 3000, "color": "#000000" },
+      "Opacity": { "value": 1 },
+      "Animator": {}
+    } },
+
     { "id": "content", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },
     { "id": "menuTitle", "parentId": "content", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
@@ -22,11 +32,14 @@
       "Anchor": { "anchor": "center", "offsetY": 62 },
       "ShapeRenderer": { "shape": "rect", "width": 220, "height": 52, "color": "#2f6f4e" },
       "TextRenderer": { "text": "Play", "fontFamily": "VT323", "googleFont": true, "fontSize": 24, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
+      "Animator": {},
       "Interactable": {
         "width": 220,
         "height": 52,
         "cursor": "pointer",
-        "onClick": "engine.callScript('MenuPlay', entity, engine);"
+        "onClick": "engine.callScript('MenuPlay', entity, engine);",
+        "onHoverEnter": "engine.callScript('ButtonHoverEnter', entity, engine);",
+        "onHoverExit": "engine.callScript('ButtonHoverExit', entity, engine);"
       }
     } },
     { "id": "tutorialBtn", "parentId": "content", "components": {
@@ -34,11 +47,14 @@
       "Anchor": { "anchor": "center", "offsetY": 132 },
       "ShapeRenderer": { "shape": "rect", "width": 220, "height": 52, "color": "#3a4a6b" },
       "TextRenderer": { "text": "Tutorial", "fontFamily": "VT323", "googleFont": true, "fontSize": 24, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
+      "Animator": {},
       "Interactable": {
         "width": 220,
         "height": 52,
         "cursor": "pointer",
-        "onClick": "engine.callScript('MenuTutorial', entity, engine);"
+        "onClick": "engine.callScript('MenuTutorial', entity, engine);",
+        "onHoverEnter": "engine.callScript('ButtonHoverEnter', entity, engine);",
+        "onHoverExit": "engine.callScript('ButtonHoverExit', entity, engine);"
       }
     } },
     { "id": "directoryBtn", "components": {
@@ -46,11 +62,14 @@
       "Anchor": { "anchor": "top-right", "offsetX": -110, "offsetY": 40 },
       "ShapeRenderer": { "shape": "rect", "width": 180, "height": 44, "color": "#4a3a6b" },
       "TextRenderer": { "text": "Card Directory", "fontFamily": "VT323", "googleFont": true, "fontSize": 18, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
+      "Animator": {},
       "Interactable": {
         "width": 180,
         "height": 44,
         "cursor": "pointer",
-        "onClick": "engine.callScript('MenuCardDirectory', entity, engine);"
+        "onClick": "engine.callScript('MenuCardDirectory', entity, engine);",
+        "onHoverEnter": "engine.callScript('ButtonHoverEnter', entity, engine);",
+        "onHoverExit": "engine.callScript('ButtonHoverExit', entity, engine);"
       }
     } }
   ]

@@ -6,5 +6,5 @@
 import { clickThenLoadScene } from "./SoundEffects.js";
 
 export function MenuPlay(entity, engine) {
-  clickThenLoadScene(engine, "main");
+  clickThenLoadScene(engine, "main", 450);
 }

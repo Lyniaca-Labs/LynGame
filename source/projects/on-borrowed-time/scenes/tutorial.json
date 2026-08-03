@@ -36,13 +36,25 @@
       "Anchor": { "anchor": "center", "offsetX": 160, "offsetY": 150 },
       "ShapeRenderer": { "shape": "rect", "width": 180, "height": 48, "color": "#2f6f4e" },
       "TextRenderer": { "text": "Next", "fontFamily": "VT323", "googleFont": true, "fontSize": 20, "color": "#ffffff", "align": "center", "verticalAlign": "middle" },
-      "Interactable": { "width": 180, "height": 48, "cursor": "pointer", "onClick": "engine.callScript('TutorialNext', entity, engine);" }
+      "Animator": {},
+      "Interactable": {
+        "width": 180, "height": 48, "cursor": "pointer",
+        "onClick": "engine.callScript('TutorialNext', entity, engine);",
+        "onHoverEnter": "engine.callScript('ButtonHoverEnter', entity, engine);",
+        "onHoverExit": "engine.callScript('ButtonHoverExit', entity, engine);"
+      }
     } },
     { "id": "tutorialSkipBtn", "parentId": "content", "components": {
       "Transform": { "x": 0, "y": 0, "fixed": true },
       "Anchor": { "anchor": "top-right", "offsetX": -20, "offsetY": 18 },
       "TextRenderer": { "text": "Skip Tutorial", "fontFamily": "VT323", "googleFont": true, "fontSize": 18, "color": "#7d8399", "align": "right" },
-      "Interactable": { "width": 120, "height": 26, "cursor": "pointer", "onClick": "engine.callScript('TutorialSkip', entity, engine);" }
+      "Animator": {},
+      "Interactable": {
+        "width": 120, "height": 26, "cursor": "pointer",
+        "onClick": "engine.callScript('TutorialSkip', entity, engine);",
+        "onHoverEnter": "engine.callScript('ButtonHoverEnter', entity, engine);",
+        "onHoverExit": "engine.callScript('ButtonHoverExit', entity, engine);"
+      }
     } }
   ]
 }

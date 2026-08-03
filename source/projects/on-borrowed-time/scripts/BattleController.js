@@ -11,6 +11,7 @@ import { recordRunEnd } from "./MetaState.js";
 import { resolveEffects, MAX_TIME_REDUCTION_FLOOR_FRACTION } from "./CardEffects.js";
 import { playSound, playCoinBurst, clickThenLoadScene } from "./SoundEffects.js";
 import { animateCardScale, setCardScaleInstant, setCardZIndex } from "./CardVisuals.js";
+import { restartBattleMusic, setActiveMusic, approachVolume, BATTLE_MUSIC_MIN_VOLUME, BATTLE_MUSIC_MAX_VOLUME } from "./MusicController.js";
 
 const BASE_MAX_TIME = 10;
 const BASE_HAND_SIZE = 3;
@@ -1071,6 +1072,7 @@ function endRound(engine, run, b, winner) {
     run.newBest = recordRunEnd(engine, run.round);
     showBanner(engine, "Time's Up...");
     b.transitionTarget = "gameover";
+    fadeToBlack(engine, 1.2); // same crossfade the win path uses into pathchoice — gameover.json fades back in from black on arrival (GameOverController.js)
   }
   layoutHud(engine, b);
 }
@@ -1138,6 +1140,7 @@ export function BattleController(entity, engine, dt) {
     layoutHud(engine, b);
     showBanner(engine, `Round ${run.round} — Fight!`);
     playSound(engine, "shuffle");
+    restartBattleMusic(engine, b);
     return;
   }
 
@@ -1152,6 +1155,11 @@ export function BattleController(entity, engine, dt) {
     layoutHud(engine, b);
     setPauseOverlay(engine, b.paused);
     if (b.hand.length && !engine.getEntity("hand_card_0")) spawnHandEntities(engine, b);
+    // The scene's entities (and engine.audio's playing instances, via
+    // loadScene()'s stopAll()) just got torn down and rebuilt — e.g. a trip
+    // to the card directory and back mid-fight — so the previous music
+    // instance is dead. b itself (and its playlist order) survived though.
+    restartBattleMusic(engine, b);
   }
 
   // Not allowed mid-transition (roundOver) — there's nothing to freeze,
@@ -1163,11 +1171,26 @@ export function BattleController(entity, engine, dt) {
     b.paused = !b.paused;
     setPauseOverlay(engine, b.paused);
   }
+
+  // Pace-driven volume ramp (b.music.volume approaches this every non-
+  // roundOver tick below) — same tensionT shape layoutHud uses for the HUD
+  // zoom/pulse, "how tense is this fight right now" 0..1. Ducks toward
+  // silence while paused instead of freezing at whatever it last was.
+  // roundOver skips this block (its own fade-out below takes over) since
+  // b.roundElapsed — and so tensionT — is frozen by then anyway.
+  if (b.music && b.music.instance && b.phase !== "roundOver") {
+    const tensionT = clamp01((intensityMultiplier(b) - 1) / TENSION_RAMP_FOR_MAX);
+    const target = b.paused ? 0 : BATTLE_MUSIC_MIN_VOLUME + (BATTLE_MUSIC_MAX_VOLUME - BATTLE_MUSIC_MIN_VOLUME) * tensionT;
+    approachVolume(b.music.instance, b.music, target, dt, b.paused ? 3 : 1.2);
+    setActiveMusic(engine, b.music.instance, b.music.volume);
+  }
   if (b.paused) return;
 
   if (b.phase === "roundOver") {
     b.transitionTimer += dt;
+    const musicFadeT = clamp01(1 - b.transitionTimer / 1.8);
     updateClockTick(engine, b, dt, clamp01(1 - b.transitionTimer / TICK_FADE_DURATION));
+    if (b.music && b.music.instance) b.music.instance.setVolume(b.music.volume * musicFadeT);
     if (b.transitionTimer > 1.8) engine.loadScene(b.transitionTarget);
     return;
   }

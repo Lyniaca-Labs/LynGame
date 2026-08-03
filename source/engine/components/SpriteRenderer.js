@@ -6,12 +6,15 @@ export class SpriteRenderer extends Component {
     frame: { type: "string", default: "", description: "Frame name to draw when `sprite` is a spritesheet asset. Ignored for plain image assets; empty selects the sheet's first frame." },
     width: { type: "number", default: 32, description: "Render width in pixels. The sprite is centered on the entity's Transform." },
     height: { type: "number", default: 32, description: "Render height in pixels. The sprite is centered on the entity's Transform." },
+    repeat: { type: "boolean", default: false, description: "Tile the sprite across width/height (via a canvas pattern) instead of stretching one copy to fit — for small seamless textures used as a floor/background fill. Ignored for spritesheet assets." },
   };
 
   constructor(overrides = {}) {
-    super(overrides); // assigns sprite, frame, width, height
+    super(overrides); // assigns sprite, frame, width, height, repeat
     this.color = "#fff";
     this._resolved = null; // cached engine.assets.get(sprite) lookup — an Image, or { image, meta } for a spritesheet
+    this._pattern = null; // cached CanvasPattern for repeat mode, invalidated if _resolved changes
+    this._patternSource = null;
   }
 
   render(ctx, transform, entity, engine) {
@@ -42,6 +45,15 @@ export class SpriteRenderer extends Component {
           col * meta.cellWidth, row * meta.cellHeight, meta.cellWidth, meta.cellHeight,
           -this.width / 2, -this.height / 2, this.width, this.height
         );
+      }
+    } else if (this._resolved && this.repeat) {
+      if (this._patternSource !== this._resolved) {
+        this._pattern = ctx.createPattern(this._resolved, "repeat");
+        this._patternSource = this._resolved;
+      }
+      if (this._pattern) {
+        ctx.fillStyle = this._pattern;
+        ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
       }
     } else if (this._resolved) {
       ctx.drawImage(this._resolved, -this.width / 2, -this.height / 2, this.width, this.height);

@@ -13,5 +13,5 @@ import { clickThenLoadScene } from "./SoundEffects.js";
 export function GameoverRetry(entity, engine) {
   engine.state.run = null;
   engine.state.battle = null;
-  clickThenLoadScene(engine, "menu");
+  clickThenLoadScene(engine, "menu", 450);
 }

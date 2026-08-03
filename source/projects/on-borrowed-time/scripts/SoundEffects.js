@@ -5,6 +5,8 @@
 // this file live in scripts/ and be imported by name (see
 // PROJECT_STRUCTURE.md#scripts-folder).
 
+import { fadeOutActiveMusic } from "./MusicController.js";
+
 const SOUND_SETS = {
   // Menu navigation, shop offer selection, perk selection.
   click: ["sfx/click1", "sfx/click2", "sfx/click3"],
@@ -33,9 +35,13 @@ export function playSound(engine, setName, options) {
 // (source/engine/index.js) — which would silence a click sound started in
 // the same tick as the scene swap before it's even audible. This plays the
 // click immediately, then delays the actual scene swap just long enough for
-// it to be heard.
+// it to be heard. Also fades out whatever's registered as the scene's
+// ambient music (see MusicController.js's engine.state.music) over the same
+// window — a no-op if nothing's playing — so leaving menu/gameover/battle
+// doesn't just cut the music dead on the swap.
 export function clickThenLoadScene(engine, sceneName, delayMs = 150) {
   playSound(engine, "click");
+  fadeOutActiveMusic(engine, delayMs);
   setTimeout(() => engine.loadScene(sceneName), delayMs);
 }
 

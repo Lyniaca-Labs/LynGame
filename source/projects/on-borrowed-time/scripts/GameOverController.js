@@ -8,8 +8,29 @@
 // folded into bestRound/totalRuns/lifetimeCurrency, not the prior run's).
 
 import { ensureMeta } from "./MetaState.js";
+import { setActiveMusic, approachVolume, GAMEOVER_MUSIC_VOLUME } from "./MusicController.js";
 
 export function GameOverController(entity, engine, dt) {
+  if (!entity.state.musicStarted) {
+    entity.state.musicStarted = true;
+    entity.state.volume = 0;
+    entity.state.music = engine.audio.play("music/gameover", { loop: true, volume: 0 });
+    if (entity.state.music) setActiveMusic(engine, entity.state.music, 0);
+
+    // The battle scene already faded to black before cutting here
+    // (BattleController.js's endRound -> fadeToBlack) — fade the matching
+    // black "fadeOverlay" back out so the transition reads as one
+    // continuous crossfade across the scene swap, same as pathchoice.json.
+    const overlay = engine.getEntity("fadeOverlay");
+    const overlayOp = overlay && overlay.getComponent("Opacity");
+    const overlayAnim = overlay && overlay.getComponent("Animator");
+    if (overlayOp && overlayAnim) overlayAnim.animate(overlayOp, "value", 0, { duration: 0.7, easing: "easeOut" });
+  }
+  if (entity.state.music) {
+    approachVolume(entity.state.music, entity.state, GAMEOVER_MUSIC_VOLUME, dt, 0.5);
+    setActiveMusic(engine, entity.state.music, entity.state.volume);
+  }
+
   if (entity.state.initialized) return;
   entity.state.initialized = true;
   const run = engine.state.run;
