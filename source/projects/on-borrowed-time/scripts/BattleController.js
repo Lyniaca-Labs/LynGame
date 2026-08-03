@@ -108,6 +108,44 @@ function updateClockTick(engine, b, dt, fadeT = 1) {
   }
 }
 
+// Wind-blown dust/ember particles drifting across the battle background
+// (main.json's "windEmitter") — a constant faint ambient drift at rest,
+// picking up into a much heavier gust as tensionT (same signal driving the
+// battle music volume ramp, see BattleController's main tick) climbs toward
+// 1. No smoothing needed: tensionT itself already only moves gradually
+// (it's roundElapsed-driven), and the abrupt-drop cases (pause, roundOver)
+// just stop new particles from spawning — existing ones keep drifting and
+// fading out on their own lifetime instead of visibly snapping away.
+const WIND_MIN_RATE = 4;
+const WIND_MAX_RATE = 34;
+const WIND_MIN_SPEED_RANGE = [180, 260];
+const WIND_MAX_SPEED_RANGE = [420, 620];
+const WIND_COOL_RGB = [200, 215, 255]; // resting: faint cool dust
+const WIND_HOT_RGB = [255, 110, 60]; // max tension: ember/danger orange
+
+function windColor(t, alpha) {
+  const [r0, g0, b0] = WIND_COOL_RGB, [r1, g1, b1] = WIND_HOT_RGB;
+  const r = Math.round(r0 + (r1 - r0) * t), g = Math.round(g0 + (g1 - g0) * t), b = Math.round(b0 + (b1 - b0) * t);
+  return `rgba(${r},${g},${b},${(alpha + 0.15 * t).toFixed(2)})`;
+}
+
+function updateWindIntensity(engine, tensionT, dt) {
+  const emitter = engine.getEntity("windEmitter")?.getComponent("Emitter");
+  if (!emitter) return;
+  const t = clamp01(tensionT);
+  emitter.rate = WIND_MIN_RATE + (WIND_MAX_RATE - WIND_MIN_RATE) * t;
+  emitter.speedMin = WIND_MIN_SPEED_RANGE[0] + (WIND_MAX_SPEED_RANGE[0] - WIND_MIN_SPEED_RANGE[0]) * t;
+  emitter.speedMax = WIND_MIN_SPEED_RANGE[1] + (WIND_MAX_SPEED_RANGE[1] - WIND_MIN_SPEED_RANGE[1]) * t;
+  // Shifts from faint cool dust at rest to hotter ember streaks under
+  // pressure — same 0..1 tensionT as the density/speed ramp above, just
+  // read as color instead. Reassigned each tick (cheap: two small objects)
+  // rather than only at spawn time, so already-idle color stays in sync.
+  emitter.particleTypes = [
+    { weight: 1, shape: "rect", color: [windColor(t, 0.4), windColor(t, 0.28)], size: [1, 2] },
+    { weight: 0.5, shape: "rect", color: windColor(t, 0.24), size: [1, 3] },
+  ];
+}
+
 function barColor(ratio) {
   if (ratio > 0.5) return "#33d17a";
   if (ratio > 0.25) return "#e8b339";
@@ -1172,17 +1210,22 @@ export function BattleController(entity, engine, dt) {
     setPauseOverlay(engine, b.paused);
   }
 
-  // Pace-driven volume ramp (b.music.volume approaches this every non-
-  // roundOver tick below) — same tensionT shape layoutHud uses for the HUD
-  // zoom/pulse, "how tense is this fight right now" 0..1. Ducks toward
+  // Same tensionT shape layoutHud uses for the HUD zoom/pulse — "how tense
+  // is this fight right now", 0..1 — driving both the music volume ramp
+  // (b.music.volume approaches this every non-roundOver tick below) and the
+  // wind emitter's rate/speed (updateWindIntensity). Ducks/calms toward
   // silence while paused instead of freezing at whatever it last was.
-  // roundOver skips this block (its own fade-out below takes over) since
-  // b.roundElapsed — and so tensionT — is frozen by then anyway.
-  if (b.music && b.music.instance && b.phase !== "roundOver") {
+  // roundOver skips this block (its own fade-out below takes over for
+  // music; wind is just left to coast/decay on its own) since b.roundElapsed
+  // — and so tensionT — is frozen by then anyway.
+  if (b.phase !== "roundOver") {
     const tensionT = clamp01((intensityMultiplier(b) - 1) / TENSION_RAMP_FOR_MAX);
-    const target = b.paused ? 0 : BATTLE_MUSIC_MIN_VOLUME + (BATTLE_MUSIC_MAX_VOLUME - BATTLE_MUSIC_MIN_VOLUME) * tensionT;
-    approachVolume(b.music.instance, b.music, target, dt, b.paused ? 3 : 1.2);
-    setActiveMusic(engine, b.music.instance, b.music.volume);
+    if (b.music && b.music.instance) {
+      const target = b.paused ? 0 : BATTLE_MUSIC_MIN_VOLUME + (BATTLE_MUSIC_MAX_VOLUME - BATTLE_MUSIC_MIN_VOLUME) * tensionT;
+      approachVolume(b.music.instance, b.music, target, dt, b.paused ? 3 : 1.2);
+      setActiveMusic(engine, b.music.instance, b.music.volume);
+    }
+    updateWindIntensity(engine, b.paused ? 0 : tensionT, dt);
   }
   if (b.paused) return;
 
@@ -1191,6 +1234,7 @@ export function BattleController(entity, engine, dt) {
     const musicFadeT = clamp01(1 - b.transitionTimer / 1.8);
     updateClockTick(engine, b, dt, clamp01(1 - b.transitionTimer / TICK_FADE_DURATION));
     if (b.music && b.music.instance) b.music.instance.setVolume(b.music.volume * musicFadeT);
+    updateWindIntensity(engine, 0, dt); // let the wind die down during the transition instead of freezing mid-gust
     if (b.transitionTimer > 1.8) engine.loadScene(b.transitionTarget);
     return;
   }

@@ -19,6 +19,7 @@ import { spawn } from "child_process";
 import { compileGraphToProject, scriptNodeMetadata } from "./compiler/graphScripts.js";
 import { compileTextureGraph, compileTextureToProject, getTextureNodeMetadata } from "./compiler/textureCompiler.js";
 import { killPort } from "./utils/killPort.js";
+import { ZipArchive } from "archiver";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -212,6 +213,38 @@ app.post("/api/build/:project", (req, res) => {
 
 app.get("/output/*splat", (_req, res) => {
   res.status(404).send("Build not found — run the build first.");
+});
+
+// Rebuilds (so the export always reflects the latest saved state, same
+// guarantee the "Run" button gives) then zips the standalone output/<project>
+// folder straight into the response — no temp file written server-side.
+app.get("/api/projects/:project/export/zip", (req, res) => {
+  const projectName = req.params.project;
+
+  try {
+    buildProject(projectName);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+    return;
+  }
+
+  const outputDir = path.join(sourceRoot, "output", projectName);
+  if (!fs.existsSync(outputDir)) {
+    res.status(404).json({ success: false, error: "Build not found" });
+    return;
+  }
+
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${projectName}.zip"`);
+
+  const archive = new ZipArchive({ zlib: { level: 9 } });
+  archive.on("error", (err) => {
+    console.error("Zip export failed:", err);
+    res.destroy(err);
+  });
+  archive.pipe(res);
+  archive.directory(outputDir, false); // false = contents at zip root, not nested under a folder
+  archive.finalize();
 });
 
 // --- Generic project file editing (scenes / components / scripts) ---

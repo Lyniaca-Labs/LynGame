@@ -396,6 +396,42 @@ export const projectsApi = {
   remove: (name: string) => api.del<ApiResult>(`api/projects/${enc(name)}`),
   build: (name: string) => api.post<BuildResponse>(`api/build/${enc(name)}`),
 
+  // Rebuilds server-side then streams a zip of the standalone output/
+  // folder back — binary, so this can't go through the json()-only
+  // `request()` helper above. Mirrors its error-surfacing (alert the
+  // server's { error } message, then throw) but downloads the blob via a
+  // detached <a download> instead of parsing json on success.
+  exportZip: async (name: string): Promise<void> => {
+    let response: Response;
+    try {
+      response = await fetch(`${BASE_URL}/api/projects/${enc(name)}/export/zip`);
+    } catch (error) {
+      throw new Error(`Request failed: ${error}`);
+    }
+
+    if (!response.ok) {
+      let message = `Export failed with status ${response.status}`;
+      try {
+        const body = await response.clone().json();
+        if (body?.error) message = body.error;
+      } catch {
+        // not JSON, fall back to the generic message
+      }
+      alert(message);
+      throw new Error(message);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${name}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+
   get: (name: string) => api.get<ProjectEditorData>(`api/projects/${enc(name)}/editor`),
 
   setStartScene: (name: string, sceneId: string) =>

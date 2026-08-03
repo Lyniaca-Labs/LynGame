@@ -6,6 +6,32 @@
     { "id": "floor", "components": { "Transform": { "x": 2000, "y": 2000, "fixed": true, "zIndex": -50 }, "SpriteRenderer": { "sprite": "floor", "width": 4000, "height": 4000, "repeat": true } } },
     { "id": "table", "components": { "Transform": { "x": 0, "y": 0, "fixed": true, "zIndex": 0 }, "SpriteRenderer": { "sprite": "table", "width": 520, "height": 520 } } },
 
+    { "id": "windEmitter", "components": {
+      "Transform": { "x": 0, "y": 0, "fixed": true, "zIndex": 3 },
+      "Anchor": { "anchor": "center-left", "offsetX": -60 },
+      "Emitter": {
+        "enabled": true,
+        "mode": "continuous",
+        "rate": 4,
+        "maxParticles": 160,
+        "angle": 2,
+        "spread": 10,
+        "speedMin": 180,
+        "speedMax": 260,
+        "lifetimeMin": 3,
+        "lifetimeMax": 5,
+        "spawnRadius": 450,
+        "gravity": 0,
+        "drag": 0,
+        "fadeOut": true,
+        "particleTypes": [
+          { "weight": 1, "shape": "rect", "color": ["rgba(200,215,255,0.5)", "rgba(180,195,235,0.35)"], "size": [1, 2] },
+          { "weight": 0.5, "shape": "rect", "color": "rgba(225,230,255,0.3)", "size": [1, 3] }
+        ],
+        "onParticleSpawn": "const sr = particle.getComponent('ShapeRenderer'); if (sr) sr.width = sr.width * 6;"
+      }
+    } },
+
     { "id": "controller", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } }, "scripts": ["BattleController"] },
 
     { "id": "playerPanel", "components": { "Transform": { "x": 0, "y": 0, "fixed": true } } },

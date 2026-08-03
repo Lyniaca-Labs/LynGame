@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   Gamepad2,
   Puzzle,
+  Download,
 } from "lucide-react";
 
 import { useProject } from "../context/ProjectContext";
@@ -77,6 +78,7 @@ function EditorLayoutContent() {
   const [isBuilding, setIsBuilding] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // "Editor" = the scene canvas (lay out entities, no build/run required).
   // "Game" = the actual running build. Keeping them as separate views
@@ -142,6 +144,23 @@ function EditorLayoutContent() {
       }
     } finally {
       setIsBuilding(false);
+    }
+  };
+
+  // Rebuilds server-side (so the zip always reflects the latest saved
+  // state, same guarantee "Run" gives) then downloads the standalone
+  // output/<project> folder as a zip — projectsApi.exportZip does the
+  // actual fetch/blob/download and already alert()s + throws on failure,
+  // same convention as the generic api.ts request() helper.
+  const exportZip = async () => {
+    if (!currentProject) return;
+    setIsExporting(true);
+    try {
+      await projectsApi.exportZip(currentProject);
+    } catch {
+      // already surfaced to the user via alert() inside exportZip
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -268,6 +287,11 @@ function EditorLayoutContent() {
             <Button onClick={handleSave} disabled={!dirty || sceneSaving}>
               <SaveIcon size={16} />
               {sceneSaving ? "Saving..." : dirty ? "Save" : "Saved"}
+            </Button>
+
+            <Button title="Export a zip of the built game" onClick={exportZip} disabled={!currentProject || isExporting}>
+              <Download size={16} />
+              {isExporting ? "Exporting..." : "Export ZIP"}
             </Button>
 
             <Button disabled={!currentProject} onClick={() => setProjectSettingsOpen(true)}>
